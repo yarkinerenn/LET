@@ -7,10 +7,12 @@ from bson.objectid import ObjectId
 from datetime import datetime
 from transformers import pipeline
 from dotenv import load_dotenv
-import openai
+from openai import OpenAI
 import os
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")  # Store API key in .env
+# Store API key in .env
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
@@ -162,12 +164,11 @@ def generate_explanation():
         Keep explanation under 3 sentences.
         """
 
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}]
-        )
+        response = client.chat.completions.create(model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": prompt}])
 
-        explanation = response["choices"][0]["message"]["content"] if "choices" in response else "No explanation generated."
+        explanation = response.choices[0].message.content
+        print(response)
 
         return jsonify({"explanation": explanation})
 
