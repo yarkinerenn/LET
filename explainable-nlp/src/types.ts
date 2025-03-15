@@ -8,3 +8,10 @@ export interface AuthContextType {
     login: (user: User) => void;
     logout: () => void;
 }
+export interface Classification {
+    id: string;
+    text: string;
+    label: string;
+    score: number;
+    timestamp: string;
+}
