@@ -76,8 +76,12 @@ const Dashboard = () => {
                 explainer_type: explainerType
             });
 
-            setExplanation(response.data.explanation);
-            console.log(response.data.explanation);
+            if (explainerType === 'shap') {
+                setExplanation(response.data.explanation);
+                console.log(response.data.explanation,'yo')// HTML içeriği geldiği için doğrudan kaydediyoruz.
+            } else {
+                setExplanation(response.data.explanation); // Normal metin geldiğinde kaydet.
+            }
         } catch (err) {
             setError('Failed to generate explanation');
         }
@@ -254,11 +258,21 @@ const Dashboard = () => {
                                             </Card.Title>
                                             <div className="text-muted">
                                                 {explainerType === 'shap' ? (
-                                                    <pre style={{whiteSpace: 'pre-wrap', fontFamily: 'inherit'}}>
-                                                        {explanation}
-                                                    </pre>
+                                                    // SHAP HTML görselleştirmesi
+                                                    <div
+                                                        dangerouslySetInnerHTML={{__html: explanation}}
+                                                        style={{
+                                                            fontFamily: 'monospace',
+                                                            fontSize: '14px',
+                                                            lineHeight: '1.5',
+                                                            overflowX: 'auto',
+                                                            minHeight: '100px'  // Boş görünmesin diye minimum yükseklik ekle
+                                                        }}
+                                                        className="shap-html-container"
+                                                    />
                                                 ) : (
-                                                    <p>{explanation}</p>
+                                                    // LLM text explanation
+                                                    <p style={{whiteSpace: 'pre-wrap'}}>{explanation}</p>
                                                 )}
                                             </div>
                                         </Card.Body>

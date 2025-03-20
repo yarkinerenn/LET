@@ -13,6 +13,8 @@ import datasets
 import os
 import numpy as np
 import shap
+import io
+
 import torch
 load_dotenv()
 # Store API key in .env
@@ -160,10 +162,10 @@ def explain_prediction():
 
         if explainer_type == 'shap':
             explanation_data = generate_shap_explanation(text, prediction['label'])
-            return jsonify(explanation_data)
+            return jsonify({'explanation': explanation_data,'explainer_type': explainer_type})
         else:
             explanation_text = generate_llm_explanation(text, prediction['label'], prediction['score'])
-            return jsonify({"explanation": explanation_text})
+            return jsonify({"explanation": explanation_text,'explainer_type': explainer_type})
 
     except Exception as e:
         print(f"Error generating explanation: {str(e)}")
@@ -203,11 +205,12 @@ def generate_shap_explanation(input_text, label):
         pmodel([input_text])
         explainer2 = shap.Explainer(pmodel)
         shap_values2 = explainer2([input_text])
-        shap.plots.text(shap_values2[:, :, 1])
-        output_str = get_top_phrases(shap_values2, top_n=3)
 
-        print(output_str)
-        return output_str
+        output_str = get_top_phrases(shap_values2, top_n=10)
+
+        plot=shap.plots.text(shap_values2[:, :, 1],display=False)
+
+        return plot
     except Exception as e:
         print(f"Error: {e}")
         print(f"Error in SHAP explanation: {str(e)}")
