@@ -9,6 +9,8 @@ const Register: React.FC = () => {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const navigate = useNavigate();
+    const [openaiApi, setOpenaiApi] = useState(""); // State for OpenAI API Key
+    const [grokApi, setGrokApi] = useState("");
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -18,6 +20,8 @@ const Register: React.FC = () => {
                 username,
                 email,
                 password,
+                openai_api: openaiApi, // Send OpenAI API Key
+                grok_api: grokApi,
             });
 
             if (response.status === 201) {
@@ -71,7 +75,28 @@ const Register: React.FC = () => {
                                     placeholder="Password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
+                                />
+                            </Form.Group>
+
+                            <Form.Group className="mb-3">
+                                <Form.Label>OpenAI API Key</Form.Label>
+                                <Form.Control
+                                    type="text"
+                                    placeholder="Enter your OpenAI API key"
+                                    value={openaiApi}
+                                    onChange={(e) => setOpenaiApi(e.target.value)}
                                     required
+                                />
+                            </Form.Group>
+
+                            {/* Grok API Key Input */}
+                            <Form.Group className="mb-3">
+                                <Form.Label>Grok API Key</Form.Label>
+                                <Form.Control
+                                    type="text"
+                                    placeholder="Enter your Grok API key"
+                                    value={grokApi}
+                                    onChange={(e) => setGrokApi(e.target.value)}
                                 />
                             </Form.Group>
 

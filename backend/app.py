@@ -1,5 +1,5 @@
 from flask import Flask, jsonify, request
-from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user
+from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
 from flask_cors import CORS
 from flask_pymongo import PyMongo
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -14,12 +14,15 @@ import os
 import numpy as np
 import shap
 import io
+from cryptography.fernet import Fernet
+
 
 import torch
 load_dotenv()
 # Store API key in .env
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
+secret_key = os.getenv("SECRET_KEY")
+secret_key = secret_key.encode()
+cipher = Fernet(secret_key)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
@@ -37,6 +40,9 @@ class User(UserMixin):
         self.username = user_data['username']
         self.email = user_data['email']
         self.password_hash = user_data['password_hash']
+        self.role = user_data.get('role', 'user')  # Default to 'user'
+        self.openai_api = user_data.get('openai_api', '')  # Ensure openai_api is loaded
+        self.grok_api = user_data.get('grok_api', '')  # Ensure grok_api is loaded
 
     @staticmethod
     def get(user_id):
@@ -59,20 +65,49 @@ def load_user(user_id):
 @app.route('/api/register', methods=['POST'])
 def register():
     data = request.json
+
+    # Check if email already exists
     if mongo.db.users.find_one({'email': data['email']}):
         return jsonify({"error": "Email already exists"}), 400
 
+    # Hash the password
     password_hash = generate_password_hash(data['password'])
+
+    # Encrypt the API keys entered by the user
+    openai_api_key = data.get("openai_api", "")
+    grok_api_key = data.get("grok_api", "")
+
+    # Encrypt the user-entered API keys
+    encrypted_openai_api = encrypt_api_key(openai_api_key) if openai_api_key else ""
+    encrypted_grok_api = encrypt_api_key(grok_api_key) if grok_api_key else ""
+
     user_data = {
         'username': data['username'],
         'email': data['email'],
-        'password_hash': password_hash
+        'password_hash': password_hash,
+        'role': 'user',  # Default role
+        'openai_api': encrypted_openai_api,  # Encrypted API key
+        'grok_api': encrypted_grok_api       # Encrypted API key
     }
+
     result = mongo.db.users.insert_one(user_data)
+
     return jsonify({
         "message": "User created successfully",
         "id": str(result.inserted_id)
     }), 201
+def get_user_api_key():
+    """Retrieve the user's OpenAI API key securely."""
+    if not current_user.is_authenticated:
+        return None
+
+    # Fetch the OpenAI API key from MongoDB to avoid issues with Flask-Login session
+    user_data = mongo.db.users.find_one({'_id': ObjectId(current_user.id)}, {'openai_api': 1})
+    print(current_user.username,'this is the user')
+
+    if user_data and "openai_api" in user_data:
+        return decrypt_api_key(user_data['openai_api'])  # Return decrypted API key
+    return None
 
 @app.route('/api/login', methods=['POST'])
 def login():
@@ -90,6 +125,23 @@ def login():
             "username": user_data['username']
         }
     })
+@app.route('/api/settings/update_api_keys', methods=['POST'])
+def update_api_keys():
+    data = request.json
+    openai_api_key = data.get("openai_api", "")
+    grok_api_key = data.get("grok_api", "")
+
+    # Encrypt the new API keys before storing them
+    encrypted_openai_api = encrypt_api_key(openai_api_key) if openai_api_key else ""
+    encrypted_grok_api = encrypt_api_key(grok_api_key) if grok_api_key else ""
+
+    # Update the user's API keys in the database
+    mongo.db.users.update_one(
+        {"_id": ObjectId(current_user.id)},
+        {"$set": {"openai_api": encrypted_openai_api, "grok_api": encrypted_grok_api}}
+    )
+
+    return jsonify({"message": "API keys updated successfully"})
 
 @app.route('/api/logout', methods=['POST'])
 def logout():
@@ -150,7 +202,7 @@ def explain_prediction():
     try:
         data = request.json
         prediction_id = data.get('prediction_id')
-        text = data.get('text')
+        text = data.get('text'  )
         explainer_type = data.get('explainer_type', 'llm')
 
         if not prediction_id or not text:
@@ -171,32 +223,37 @@ def explain_prediction():
         print(f"Error generating explanation: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-def generate_llm_explanation(text, label,score):
+def generate_llm_explanation(text, label, score):
     try:
+        openai_api_key = get_user_api_key()
+        print(openai_api_key)# Use the helper function
 
+        if not openai_api_key:
+            return "Error: No OpenAI API key found for this user."
 
+        client = OpenAI(api_key=openai_api_key)
 
         prompt = f"""
-        Explain this sentiment analysis result in simple terms:
-        
-        Text: {text}
-        Sentiment: {label} ({score}% confidence)
-        
-        Focus on key words and overall tone.
-        Keep explanation under 3 sentences.
+            Explain this sentiment analysis result in simple terms:
+            
+            Text: {text}
+            Sentiment: {label} ({score}% confidence)
+            
+            Focus on key words and overall tone.
+            Keep explanation under 3 sentences.
         """
 
-        response = client.chat.completions.create(model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}])
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}]
+        )
 
         explanation = response.choices[0].message.content
-        print(response)
-
         return explanation
 
     except Exception as e:
-        print(f"Error: {e}")  # Debugging
-        return jsonify({"error": str(e)}), 500
+        print(f"Error: {e}")
+        return f"Error: {str(e)}"
 
 def generate_shap_explanation(input_text, label):
     """Generate an explanation using SHAP values"""
@@ -207,7 +264,10 @@ def generate_shap_explanation(input_text, label):
         shap_values2 = explainer2([input_text])
 
         output_str = get_top_phrases(shap_values2, top_n=10)
+        # Generate an encryption key
+        secret_key = Fernet.generate_key()
 
+        print("Secret Key Generated! Store this securely:", secret_key)
         plot=shap.plots.text(shap_values2[:, :, 1],display=False)
 
         return plot
@@ -265,6 +325,13 @@ def get_top_phrases(shap_values_obj, instance_idx=0, class_idx=1, top_n=5):
         result.append(f"({val:+.2f}) {text.strip()}")
 
     return "\n".join(result)
+
+def encrypt_api_key(api_key: str) -> str:
+    """Encrypts the API key before storing it in the database."""
+    return cipher.encrypt(api_key.encode()).decode()
+def decrypt_api_key(encrypted_api_key: str) -> str:
+    """Decrypts an API key when retrieving from the database."""
+    return cipher.decrypt(encrypted_api_key.encode()).decode()
 
 if __name__ == '__main__':
     app.run(port=5000, debug=True)
