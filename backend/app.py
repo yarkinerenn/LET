@@ -126,6 +126,7 @@ def login():
         }
     })
 @app.route('/api/settings/update_api_keys', methods=['POST'])
+@login_required
 def update_api_keys():
     data = request.json
     openai_api_key = data.get("openai_api", "")
@@ -167,6 +168,7 @@ classifier = pipeline(
     model="distilbert-base-uncased-finetuned-sst-2-english"
 )
 @app.route('/api/analyze', methods=['POST'])
+@login_required
 def analyze_text():
     try:
         data = request.json
@@ -198,8 +200,10 @@ def analyze_text():
 
 
 @app.route('/api/explain', methods=['POST'])
+@login_required
 def explain_prediction():
     try:
+        print("Current User:", current_user)  # Log the current user
         data = request.json
         prediction_id = data.get('prediction_id')
         text = data.get('text'  )
@@ -277,6 +281,7 @@ def generate_shap_explanation(input_text, label):
         return f"Could not generate SHAP explanation: {str(e)}"
 
 @app.route('/api/classifications', methods=['GET'])
+@login_required
 def get_classifications():
     try:
         # Retrieve last 10 classifications (modify limit as needed)

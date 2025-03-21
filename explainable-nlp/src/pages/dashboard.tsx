@@ -50,9 +50,11 @@ const Dashboard = () => {
         setIsLoading(true);
         setError('');
         try {
-            const response = await axios.post('http://localhost:5000/api/analyze', {
-                text
-            });
+            const response = await axios.post(
+                'http://localhost:5000/api/analyze',
+                { text },  // Request body
+                { withCredentials: true }  // Include credentials
+            );
 
             setPrediction(response.data);
             setExplanation('');
@@ -62,6 +64,7 @@ const Dashboard = () => {
             fetchClassifications();
         } catch (err) {
             setError('Failed to analyze text');
+            console.error('Error analyzing text:', err);
         }
         setIsLoading(false);
     };
@@ -73,8 +76,9 @@ const Dashboard = () => {
             const response = await axios.post('http://localhost:5000/api/explain', {
                 prediction_id: prediction?.id,
                 text: text,
-                explainer_type: explainerType
-            });
+                explainer_type: explainerType,
+
+            }, { withCredentials: true } );
 
             if (explainerType === 'shap') {
                 setExplanation(response.data.explanation);

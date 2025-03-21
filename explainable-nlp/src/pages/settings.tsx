@@ -7,33 +7,56 @@ const Settings = () => {
     const [error, setError] = useState("");         // For error messages
     const [success, setSuccess] = useState("");     // For success message
 
-    const handleSubmit = async (e: { preventDefault: () => void; }) => {
+    const handleSubmit = async (e: { preventDefault: () => void }) => {
         e.preventDefault();
 
-        // Make sure both fields are filled
-        if (!openaiApi || !grokApi) {
-            setError("Please fill in both API keys.");
+        console.log("Submit button clicked!");
+
+        // Ensure at least one API key is filled
+        if (!openaiApi && !grokApi) {
+            setError("Please enter at least one API key.");
+            console.log("Error: Both API fields are empty.");
             return;
         }
 
-        // Send the new API keys to the backend
-        const response = await fetch("/api/settings/update_api_keys", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                openai_api: openaiApi,
-                grok_api: grokApi,
-            }),
-        });
+        console.log("API keys provided:", { openaiApi, grokApi });
 
-        const result = await response.json();
+        setError(""); // Clear previous errors
+        setSuccess(""); // Clear previous success messages
 
-        if (response.ok) {
-            setSuccess(result.message);
-        } else {
-            setError(result.error || "An error occurred.");
+        // Prepare the request payload (only include non-empty values)
+        const payload: { openai_api?: string; grok_api?: string } = {};
+        if (openaiApi) payload.openai_api = openaiApi;
+        if (grokApi) payload.grok_api = grokApi;
+
+        console.log("Sending request with payload:", payload);
+
+        try {
+            const response = await fetch("http://localhost:5000/api/settings/update_api_keys", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                credentials: 'include',
+                body: JSON.stringify(payload), // Send only the keys that are filled
+            });
+
+            console.log("Response received:", response);
+
+            const result = await response.json();
+
+            if (response.ok) {
+                console.log("API keys updated successfully:", result);
+                setSuccess(result.message);
+                setOpenaiApi(""); // Clear input fields on success
+                setGrokApi("");
+            } else {
+                console.error("Error updating API keys:", result);
+                setError(result.error || "An error occurred.");
+            }
+        } catch (error) {
+            console.error("Fetch error:", error);
+            setError("Failed to connect to the server.");
         }
     };
 
@@ -51,10 +74,9 @@ const Settings = () => {
                                 <Form.Label>OpenAI API Key</Form.Label>
                                 <Form.Control
                                     type="text"
-                                    placeholder="Enter your OpenAI API key"
+                                    placeholder="Enter your OpenAI API key (optional)"
                                     value={openaiApi}
                                     onChange={(e) => setOpenaiApi(e.target.value)}
-                                    required
                                 />
                             </Form.Group>
 
@@ -62,10 +84,9 @@ const Settings = () => {
                                 <Form.Label>Grok API Key</Form.Label>
                                 <Form.Control
                                     type="text"
-                                    placeholder="Enter your Grok API key"
+                                    placeholder="Enter your Grok API key (optional)"
                                     value={grokApi}
                                     onChange={(e) => setGrokApi(e.target.value)}
-                                    required
                                 />
                             </Form.Group>
 
