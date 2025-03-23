@@ -12,6 +12,8 @@ const Dashboard = () => {
         label: string;
         score: number;
     } | null>(null);
+    const [provider, setProvider] = useState(""); // 'openai' or 'groq'
+    const [model, setModel] = useState("");
     const [classifications, setClassifications] = useState<Classification[]>([]);
     const [explanation, setExplanation] = useState('');
     const [error, setError] = useState('');
@@ -19,7 +21,26 @@ const Dashboard = () => {
     const [isExplaining, setIsExplaining] = useState(false);
     const [selectedClassification, setSelectedClassification] = useState<string | null>(null);
     const [explainerType, setExplainerType] = useState('llm');
-
+    const groqModels = [
+        { name: "allam-2-7b" },
+        { name: "deepseek-r1-distill-llama-70b" },
+        { name: "deepseek-r1-distill-qwen-32b" },
+        { name: "gemma2-9b-it" },
+        { name: "llama-3.1-8b-instant" },
+        { name: "llama-3.2-11b-vision-preview" },
+        { name: "llama-3.2-1b-preview" },
+        { name: "llama-3.2-3b-preview" },
+        { name: "llama-3.2-90b-vision-preview" },
+        { name: "llama-3.3-70b-specdec" },
+        { name: "llama-3.3-70b-versatile" },
+        { name: "llama-guard-3-8b" },
+        { name: "llama3-70b-8192" },
+        { name: "llama3-8b-8192" },
+        { name: "mistral-saba-24b" },
+        { name: "qwen-2.5-32b" },
+        { name: "qwen-2.5-coder-32b" },
+        { name: "qwen-qwq-32b" }
+    ];
     // Function to fetch classifications
     const fetchClassifications = async () => {
         try {
@@ -77,12 +98,13 @@ const Dashboard = () => {
                 prediction_id: prediction?.id,
                 text: text,
                 explainer_type: explainerType,
+                provider: provider ,
+                model: model,
 
             }, { withCredentials: true } );
 
             if (explainerType === 'shap') {
                 setExplanation(response.data.explanation);
-                console.log(response.data.explanation,'yo')// HTML içeriği geldiği için doğrudan kaydediyoruz.
             } else {
                 setExplanation(response.data.explanation); // Normal metin geldiğinde kaydet.
             }
@@ -229,6 +251,52 @@ const Dashboard = () => {
                                                         </ToggleButton>
                                                     </ButtonGroup>
                                                 </div>
+
+                                                {/* Show provider options if LLM is selected */}
+                                                {explainerType === 'llm' && (
+                                                    <div className="mb-3">
+                                                        <span className="me-3">Select Provider:</span>
+                                                        <ButtonGroup>
+                                                            <ToggleButton
+                                                                id="provider-openai"
+                                                                type="radio"
+                                                                variant={provider === 'openai' ? 'primary' : 'outline-primary'}
+                                                                name="provider"
+                                                                value="openai"
+                                                                checked={provider === 'openai'}
+                                                                onChange={(e) => setProvider(e.currentTarget.value)}
+                                                            >
+                                                                OpenAI
+                                                            </ToggleButton>
+                                                            <ToggleButton
+                                                                id="provider-groq"
+                                                                type="radio"
+                                                                variant={provider === 'groq' ? 'primary' : 'outline-primary'}
+                                                                name="provider"
+                                                                value="groq"
+                                                                checked={provider === 'groq'}
+                                                                onChange={(e) => setProvider(e.currentTarget.value)}
+                                                            >
+                                                                Groq
+                                                            </ToggleButton>
+                                                        </ButtonGroup>
+                                                    </div>
+                                                )}
+
+                                                {/* Show model selection only if Groq is chosen */}
+                                                {provider === 'groq' && (
+                                                    <div className="mb-3">
+                                                        <span className="me-3">Select Model:</span>
+                                                        <Form.Select value={model} onChange={(e) => setModel(e.target.value)}>
+                                                            <option value="">-- Select a Model --</option>
+                                                            {groqModels.map((m) => (
+                                                                <option key={m.name} value={m.name}>
+                                                                    {m.name}
+                                                                </option>
+                                                            ))}
+                                                        </Form.Select>
+                                                    </div>
+                                                )}
 
                                                 <Button
                                                     variant="info"

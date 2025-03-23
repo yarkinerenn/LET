@@ -8,14 +8,12 @@ from datetime import datetime
 from transformers import pipeline,AutoModelForSequenceClassification,AutoTokenizer
 from dotenv import load_dotenv
 from openai import OpenAI
-from collections import Counter
-import datasets
 import os
 import numpy as np
 import shap
 import io
 from cryptography.fernet import Fernet
-
+from groq import Groq
 
 import torch
 load_dotenv()
@@ -96,7 +94,7 @@ def register():
         "message": "User created successfully",
         "id": str(result.inserted_id)
     }), 201
-def get_user_api_key():
+def get_user_api_key_openai():
     """Retrieve the user's OpenAI API key securely."""
     if not current_user.is_authenticated:
         return None
@@ -107,6 +105,18 @@ def get_user_api_key():
 
     if user_data and "openai_api" in user_data:
         return decrypt_api_key(user_data['openai_api'])  # Return decrypted API key
+    return None
+def get_user_api_key_groq():
+    """Retrieve the user's Groq API key securely."""
+    if not current_user.is_authenticated:
+        return None
+
+    # Fetch the OpenAI API key from MongoDB to avoid issues with Flask-Login session
+    user_data = mongo.db.users.find_one({'_id': ObjectId(current_user.id)}, {'grok_api': 1})
+    print(current_user.username,'this is the user')
+
+    if user_data and "grok_api" in user_data:
+        return decrypt_api_key(user_data['grok_api'])  # Return decrypted API key
     return None
 
 @app.route('/api/login', methods=['POST'])
@@ -129,18 +139,24 @@ def login():
 @login_required
 def update_api_keys():
     data = request.json
-    openai_api_key = data.get("openai_api", "")
-    grok_api_key = data.get("grok_api", "")
+    openai_api_key = data.get("openai_api")
+    grok_api_key = data.get("grok_api")
 
-    # Encrypt the new API keys before storing them
-    encrypted_openai_api = encrypt_api_key(openai_api_key) if openai_api_key else ""
-    encrypted_grok_api = encrypt_api_key(grok_api_key) if grok_api_key else ""
+    update_fields = {}
 
-    # Update the user's API keys in the database
-    mongo.db.users.update_one(
-        {"_id": ObjectId(current_user.id)},
-        {"$set": {"openai_api": encrypted_openai_api, "grok_api": encrypted_grok_api}}
-    )
+    # Encrypt and update only if the user provided a new key
+    if openai_api_key:
+        update_fields["openai_api"] = encrypt_api_key(openai_api_key)
+
+    if grok_api_key:
+        update_fields["grok_api"] = encrypt_api_key(grok_api_key)
+
+    # Only update if there's something to change
+    if update_fields:
+        mongo.db.users.update_one(
+            {"_id": ObjectId(current_user.id)},
+            {"$set": update_fields}
+        )
 
     return jsonify({"message": "API keys updated successfully"})
 
@@ -207,6 +223,8 @@ def explain_prediction():
         data = request.json
         prediction_id = data.get('prediction_id')
         text = data.get('text'  )
+        provider=data.get('provider')
+        model=data.get('model')
         explainer_type = data.get('explainer_type', 'llm')
 
         if not prediction_id or not text:
@@ -220,44 +238,72 @@ def explain_prediction():
             explanation_data = generate_shap_explanation(text, prediction['label'])
             return jsonify({'explanation': explanation_data,'explainer_type': explainer_type})
         else:
-            explanation_text = generate_llm_explanation(text, prediction['label'], prediction['score'])
+            explanation_text = generate_llm_explanation(text, prediction['label'], prediction['score'],provider,model)
             return jsonify({"explanation": explanation_text,'explainer_type': explainer_type})
 
     except Exception as e:
         print(f"Error generating explanation: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-def generate_llm_explanation(text, label, score):
+def generate_llm_explanation(text, label, score,provider,model):
     try:
-        openai_api_key = get_user_api_key()
-        print(openai_api_key)# Use the helper function
+        if provider == 'openai':
 
-        if not openai_api_key:
-            return "Error: No OpenAI API key found for this user."
+            openai_api_key = get_user_api_key_openai()
 
-        client = OpenAI(api_key=openai_api_key)
+            if not openai_api_key:
+                return "Error: No OpenAI API key found for this user."
 
-        prompt = f"""
-            Explain this sentiment analysis result in simple terms:
-            
-            Text: {text}
-            Sentiment: {label} ({score}% confidence)
-            
-            Focus on key words and overall tone.
-            Keep explanation under 3 sentences.
-        """
+            client = OpenAI(api_key=openai_api_key)
 
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}]
-        )
+            prompt = f"""
+                Explain this sentiment analysis result in simple terms:
+                
+                Text: {text}
+                Sentiment: {label} ({score}% confidence)
+                
+                Focus on key words and overall tone.
+                Keep explanation under 3 sentences.
+            """
 
-        explanation = response.choices[0].message.content
-        return explanation
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": prompt}]
+            )
+
+            explanation = response.choices[0].message.content
+            return explanation
+        else:
+            api= get_user_api_key_groq()
+
+            client = Groq(
+                api_key=api,
+            )
+
+            chat_completion = client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "user",
+                        "content":f"""
+                Explain this sentiment analysis result in simple terms:
+                
+                Text: {text}
+                Sentiment: {label} ({score}% confidence)
+                
+                Focus on key words and overall tone.
+                Keep explanation under 3 sentences.
+            """,
+                    }
+                ],
+                model=model,
+            )
+            return chat_completion.choices[0].message.content
+
+
 
     except Exception as e:
-        print(f"Error: {e}")
-        return f"Error: {str(e)}"
+            print(f"Error: {e}")
+            return f"Error: {str(e)}"
 
 def generate_shap_explanation(input_text, label):
     """Generate an explanation using SHAP values"""
@@ -268,10 +314,7 @@ def generate_shap_explanation(input_text, label):
         shap_values2 = explainer2([input_text])
 
         output_str = get_top_phrases(shap_values2, top_n=10)
-        # Generate an encryption key
-        secret_key = Fernet.generate_key()
-
-        print("Secret Key Generated! Store this securely:", secret_key)
+        print(output_str)
         plot=shap.plots.text(shap_values2[:, :, 1],display=False)
 
         return plot
