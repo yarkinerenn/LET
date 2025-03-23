@@ -235,8 +235,8 @@ def explain_prediction():
             return jsonify({"error": "Prediction not found"}), 404
 
         if explainer_type == 'shap':
-            explanation_data = generate_shap_explanation(text, prediction['label'])
-            return jsonify({'explanation': explanation_data,'explainer_type': explainer_type})
+            explanation_data,top_words = generate_shap_explanation(text, prediction['label'])
+            return jsonify({'explanation': explanation_data,'explainer_type': explainer_type , 'top_words': top_words})
         else:
             explanation_text = generate_llm_explanation(text, prediction['label'], prediction['score'],provider,model)
             return jsonify({"explanation": explanation_text,'explainer_type': explainer_type})
@@ -308,7 +308,7 @@ def generate_llm_explanation(text, label, score,provider,model):
 def generate_shap_explanation(input_text, label):
     """Generate an explanation using SHAP values"""
     try:
-        pmodel = shap.models.TransformersPipeline(classifier, rescale_to_logits=False)
+        pmodel = shap.models.TransformersPipeline(classifier, rescale_to_logits=True)
         pmodel([input_text])
         explainer2 = shap.Explainer(pmodel)
         shap_values2 = explainer2([input_text])
@@ -317,7 +317,7 @@ def generate_shap_explanation(input_text, label):
         print(output_str)
         plot=shap.plots.text(shap_values2[:, :, 1],display=False)
 
-        return plot
+        return plot,output_str
     except Exception as e:
         print(f"Error: {e}")
         print(f"Error in SHAP explanation: {str(e)}")

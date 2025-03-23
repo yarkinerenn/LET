@@ -16,6 +16,8 @@ const Dashboard = () => {
     const [model, setModel] = useState("");
     const [classifications, setClassifications] = useState<Classification[]>([]);
     const [explanation, setExplanation] = useState('');
+    const [plot, setPlot] = useState('');
+
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isExplaining, setIsExplaining] = useState(false);
@@ -104,7 +106,8 @@ const Dashboard = () => {
             }, { withCredentials: true } );
 
             if (explainerType === 'shap') {
-                setExplanation(response.data.explanation);
+                setPlot(response.data.explanation);
+                console.log(plot,'ohye');
             } else {
                 setExplanation(response.data.explanation); // Normal metin geldiğinde kaydet.
             }
@@ -284,10 +287,11 @@ const Dashboard = () => {
                                                 )}
 
                                                 {/* Show model selection only if Groq is chosen */}
-                                                {provider === 'groq' && (
+                                                {(provider === 'groq' && explainerType !== 'shap') && (
                                                     <div className="mb-3">
                                                         <span className="me-3">Select Model:</span>
-                                                        <Form.Select value={model} onChange={(e) => setModel(e.target.value)}>
+                                                        <Form.Select value={model}
+                                                                     onChange={(e) => setModel(e.target.value)}>
                                                             <option value="">-- Select a Model --</option>
                                                             {groqModels.map((m) => (
                                                                 <option key={m.name} value={m.name}>
@@ -322,50 +326,16 @@ const Dashboard = () => {
                                     </div>
                                 )}
 
-                                {explanation && (
-                                    <Card className="mt-3 border-info">
-                                        <Card.Body>
-                                            <Card.Title>
-                                                {explainerType === 'shap' ? 'SHAP Explanation' : 'Explanation'}
-                                            </Card.Title>
-                                            <div className="text-muted">
-                                                {explainerType === 'shap' ? (
-                                                    // SHAP HTML görselleştirmesi
-                                                    <div
-                                                        dangerouslySetInnerHTML={{__html: explanation}}
-                                                        style={{
-                                                            fontFamily: 'monospace',
-                                                            fontSize: '14px',
-                                                            lineHeight: '1.5',
-                                                            overflowX: 'auto',
-                                                            minHeight: '100px'  // Boş görünmesin diye minimum yükseklik ekle
-                                                        }}
-                                                        className="shap-html-container"
-                                                    />
-                                                ) : (
-                                                    // LLM text explanation
-                                                    <p style={{whiteSpace: 'pre-wrap'}}>{explanation}</p>
-                                                )}
-                                            </div>
-                                        </Card.Body>
-                                    </Card>
-                                )}
 
-                                {error && (
-                                    <Alert variant="danger" className="mt-3">
-                                        {error}
-                                    </Alert>
-                                )}
                             </Card.Body>
                         </Card>
                     </div>
-
                     <div className="col-lg-5">
                         <Card className="shadow">
                             <Card.Header className="bg-primary text-white">
                                 <h4 className="mb-0">Previous Classifications</h4>
                             </Card.Header>
-                            <Card.Body className="p-0" style={{maxHeight: "630px", overflowY: "auto"}}>
+                            <Card.Body className="p-0" style={{maxHeight: "437px", overflowY: "auto"}}>
                                 {classifications.length > 0 ? (
                                     <ListGroup variant="flush">
                                         {classifications.map(classification => (
@@ -400,6 +370,43 @@ const Dashboard = () => {
                             </Card.Body>
                         </Card>
                     </div>
+                    {(explanation || plot)  && (
+                        <Card className="mt-3 border-info">
+                            <Card.Body>
+                                <Card.Title>
+                                    {explainerType === 'shap' ? 'SHAP Explanation' : 'Explanation'}
+                                </Card.Title>
+                                <div className="text-muted">
+                                    {explainerType === 'shap' ? (
+                                        // SHAP HTML görselleştirmesi
+
+                                        <div
+                                            dangerouslySetInnerHTML={{__html: plot}}
+                                            style={{
+                                                fontFamily: 'monospace',
+                                                fontSize: '14px',
+                                                lineHeight: '1.5',
+                                                overflowX: 'auto',
+                                                minHeight: '100px'  // Boş görünmesin diye minimum yükseklik ekle
+                                            }}
+                                            className="shap-html-container"
+                                        />
+                                    ) : (
+                                        // LLM text explanation
+                                        <p style={{whiteSpace: 'pre-wrap'}}>{explanation}</p>
+                                    )}
+                                </div>
+                            </Card.Body>
+                        </Card>
+                    )}
+
+                    {error && (
+                        <Alert variant="danger" className="mt-3">
+                            {error}
+                        </Alert>
+                    )}
+
+
                 </div>
             </div>
         </div>
