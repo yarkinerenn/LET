@@ -323,6 +323,92 @@ def generate_shap_explanation(input_text, label):
         print(f"Error in SHAP explanation: {str(e)}")
         return f"Could not generate SHAP explanation: {str(e)}"
 
+@app.route('/api/explain_withshap', methods=['POST'])
+def generate_llm_explanation_of_shap():
+    try:
+        data = request.json
+        text = data.get('text')
+        prediction_id = data.get('prediction_id')
+        model=data.get('model')
+        provider=data.get('provider')
+        explainer_type = data.get('explainer_type', 'llm')
+
+        if not prediction_id or not text:
+            return jsonify({"error": "Missing prediction_id or text"}), 400
+
+        prediction = mongo.db.predictions.find_one({"_id": ObjectId(prediction_id)})
+        if not prediction:
+            return jsonify({"error": "Prediction not found"}), 404
+
+        label=prediction['label']
+        score=prediction['score']
+        shapwords=data.get('shapstring')
+        if provider == 'openai':
+
+            openai_api_key = get_user_api_key_openai()
+
+            if not openai_api_key:
+                return "Error: No OpenAI API key found for this user."
+
+            client = OpenAI(api_key=openai_api_key)
+
+            prompt = f"""
+                Explain this sentiment analysis result in simple terms with most affecting words provided by SHAP:
+                
+                Text: {text}
+                Sentiment: {label} ({score}% confidence)
+                
+                shap: 
+                
+                {shapwords}
+                
+                Focus on key words and overall tone.
+                Keep explanation under 3 sentences.
+            """
+
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": prompt}]
+            )
+
+            explanation = response.choices[0].message.content
+            return explanation
+        else:
+            api= get_user_api_key_groq()
+
+            client = Groq(
+                api_key=api,
+            )
+
+            chat_completion = client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "user",
+                        "content":f"""
+                Explain this sentiment analysis result in simple terms with most affecting words provided by SHAP:
+                
+                Text: {text}
+                Sentiment: {label} ({score}% confidence)
+                
+                shap: 
+
+                {shapwords}
+                
+                Focus on key words and overall tone.
+                Keep explanation under 3 sentences.
+            """,
+                    }
+                ],
+                model=model,
+            )
+            return chat_completion.choices[0].message.content
+
+
+
+    except Exception as e:
+        print(f"Error: {e}")
+        return f"Error: {str(e)}"
+
 @app.route('/api/classifications', methods=['GET'])
 @login_required
 def get_classifications():
@@ -337,7 +423,7 @@ def get_classifications():
                 "id": str(prediction["_id"]),
                 "text": prediction["text"],
                 "label": prediction["label"],
-                "score": round(prediction["score"] * 100, 1),  # Convert score to percentage
+                "score": prediction["score"],  # Convert score to percentage
                 "timestamp": prediction["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
             })
 

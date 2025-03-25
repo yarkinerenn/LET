@@ -16,7 +16,10 @@ const Dashboard = () => {
     const [model, setModel] = useState("");
     const [classifications, setClassifications] = useState<Classification[]>([]);
     const [explanation, setExplanation] = useState('');
+    const [shap_explanation, setShap_Explanation] = useState('');
     const [plot, setPlot] = useState('');
+    const [shapstring, setShapstring] = useState('');
+
 
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -91,6 +94,28 @@ const Dashboard = () => {
         }
         setIsLoading(false);
     };
+    const generateExplanationfromshap = async () => {
+        setIsExplaining(true);
+        setExplanation('');
+        try {
+            console.log('shapstr',shapstring);
+            const response = await axios.post('http://localhost:5000/api/explain_withshap', {
+                prediction_id: prediction?.id,
+                text: text,
+                explainer_type: explainerType,
+                provider: provider ,
+                model: model,
+                shapwords: shapstring
+
+            }, { withCredentials: true } );
+            setShap_Explanation(response.data);
+
+
+        } catch (err) {
+            setError('Failed to generate explanation');
+        }
+        setIsExplaining(false);
+    };
 
     const generateExplanation = async () => {
         setIsExplaining(true);
@@ -107,7 +132,7 @@ const Dashboard = () => {
 
             if (explainerType === 'shap') {
                 setPlot(response.data.explanation);
-                console.log(plot,'ohye');
+                setShapstring(response.data.top_words);
             } else {
                 setExplanation(response.data.explanation); // Normal metin geldiğinde kaydet.
             }
@@ -144,9 +169,9 @@ const Dashboard = () => {
     // Get sentiment badge color
     const getSentimentBadge = (label: string, score: number) => {
         if (label === 'POSITIVE') {
-            return <Badge bg="success">Positive ({(score).toFixed(1)}%)</Badge>;
+            return <Badge bg="success">Positive ({(score).toFixed(3)})</Badge>;
         } else {
-            return <Badge bg="danger">Negative ({(score).toFixed(1)}%)</Badge>;
+            return <Badge bg="danger">Negative ({(score).toFixed(3)})</Badge>;
         }
     };
 
@@ -225,7 +250,7 @@ const Dashboard = () => {
                                                     <span className="text-danger">Negative</span>
                                                 )}
                                                 </p>
-                                                <p>Confidence: {(prediction.score).toFixed(1)}%</p>
+                                                <p>Confidence: {(prediction.score)}</p>
 
                                                 <div className="d-flex align-items-center mb-3">
                                                     <span className="me-3">Explainer Type:</span>
@@ -256,7 +281,7 @@ const Dashboard = () => {
                                                 </div>
 
                                                 {/* Show provider options if LLM is selected */}
-                                                {explainerType === 'llm' && (
+                                                { (
                                                     <div className="mb-3">
                                                         <span className="me-3">Select Provider:</span>
                                                         <ButtonGroup>
@@ -287,7 +312,7 @@ const Dashboard = () => {
                                                 )}
 
                                                 {/* Show model selection only if Groq is chosen */}
-                                                {(provider === 'groq' && explainerType !== 'shap') && (
+                                                {(provider === 'groq') && (
                                                     <div className="mb-3">
                                                         <span className="me-3">Select Model:</span>
                                                         <Form.Select value={model}
@@ -398,6 +423,28 @@ const Dashboard = () => {
                                 </div>
                             </Card.Body>
                         </Card>
+                    )}
+                    {/* Show "Explain SHAP with LLM" button only if SHAP explanation exists */}
+                    {plot && (
+                        <Button
+                            variant="secondary"
+                            className="mt-3"
+                            onClick={generateExplanationfromshap}
+                            disabled={isExplaining}
+                        >
+                            {isExplaining ? (
+                                <>
+                                    <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" />
+                                    <span className="ms-2">Explaining SHAP with LLM...</span>
+                                </>
+                            ) : "Explain SHAP with LLM"}
+                        </Button>
+                    )}
+                    {shap_explanation && (
+                        <div className="mt-3 p-3 border rounded bg-light">
+                            <h6>SHAP LLM Explanation</h6>
+                            <p style={{ whiteSpace: "pre-wrap" }}>{shap_explanation}</p>
+                        </div>
                     )}
 
                     {error && (
