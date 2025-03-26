@@ -254,34 +254,27 @@ const Dashboard = () => {
 
                                                 <div className="d-flex align-items-center mb-3">
                                                     <span className="me-3">Explainer Type:</span>
-                                                    <ButtonGroup>
-                                                        <ToggleButton
-                                                            id="explainer-llm"
-                                                            type="radio"
-                                                            variant={explainerType === 'llm' ? 'primary' : 'outline-primary'}
-                                                            name="explainer"
-                                                            value="llm"
-                                                            checked={explainerType === 'llm'}
-                                                            onChange={(e) => setExplainerType(e.currentTarget.value)}
-                                                        >
-                                                            LLM
-                                                        </ToggleButton>
-                                                        <ToggleButton
-                                                            id="explainer-shap"
-                                                            type="radio"
-                                                            variant={explainerType === 'shap' ? 'primary' : 'outline-primary'}
-                                                            name="explainer"
-                                                            value="shap"
-                                                            checked={explainerType === 'shap'}
-                                                            onChange={(e) => setExplainerType(e.currentTarget.value)}
-                                                        >
-                                                            SHAP
-                                                        </ToggleButton>
-                                                    </ButtonGroup>
+
+                                                    {/* LLM Button */}
+                                                    <Button
+                                                        variant={explainerType === 'llm' ? 'primary' : 'outline-primary'}
+                                                        onClick={() => setExplainerType('llm')}
+                                                        className="me-2"
+                                                    >
+                                                        LLM
+                                                    </Button>
+
+                                                    {/* SHAP Button */}
+                                                    <Button
+                                                        variant={explainerType === 'shap' ? 'primary' : 'outline-primary'}
+                                                        onClick={() => setExplainerType('shap')}
+                                                    >
+                                                        SHAP
+                                                    </Button>
                                                 </div>
 
                                                 {/* Show provider options if LLM is selected */}
-                                                { (
+                                                {(
                                                     <div className="mb-3">
                                                         <span className="me-3">Select Provider:</span>
                                                         <ButtonGroup>

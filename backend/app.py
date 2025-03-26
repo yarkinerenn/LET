@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request,send_file
 from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
 from flask_cors import CORS
 from flask_pymongo import PyMongo
@@ -14,6 +14,7 @@ import shap
 import io
 from cryptography.fernet import Fernet
 from groq import Groq
+import pandas as pd
 
 import torch
 load_dotenv()
@@ -31,6 +32,72 @@ CORS(app, origins=["http://localhost:3000"], supports_credentials=True)
 mongo = PyMongo(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
+app.config["UPLOAD_FOLDER"] = "uploads"
+CORS(app, supports_credentials=True)
+
+# Ensure upload folder exists
+if not os.path.exists(app.config["UPLOAD_FOLDER"]):
+    os.makedirs(app.config["UPLOAD_FOLDER"])
+
+@app.route("/api/dataset/<dataset_id>", methods=["GET"])
+def get_dataset(dataset_id):
+    dataset = mongo.db.datasets.find_one({"_id": ObjectId(dataset_id)})
+
+    if not dataset:
+        return jsonify({"error": "Dataset not found"}), 404
+
+    filepath = dataset["filepath"]
+
+    try:
+        df = pd.read_csv(filepath)
+        data_preview = df.head(20).to_dict(orient="records")  # Return first 20 rows
+        return jsonify({"filename": dataset["filename"], "data": data_preview})
+    except Exception as e:
+        print(e)
+        return jsonify({"error": str(e)}), 500
+
+# 📌 Delete Dataset by ID
+@app.route("/api/delete_dataset/<dataset_id>", methods=["DELETE"])
+def delete_dataset(dataset_id):
+    result = mongo.db.datasets.delete_one({"_id": ObjectId(dataset_id)})
+
+    if result.deleted_count == 0:
+        return jsonify({"error": "Dataset not found"}), 404
+
+    return jsonify({"message": "Dataset deleted successfully"}), 200
+# 📌 Upload Dataset
+@app.route("/api/upload_dataset", methods=["POST"])
+def upload_dataset():
+    if "file" not in request.files:
+        return jsonify({"error": "No file part"}), 400
+
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"error": "No selected file"}), 400
+
+    filename = file.filename
+    filepath = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+    file.save(filepath)
+
+    # Save dataset metadata in MongoDB
+    dataset_entry = {
+        "filename": filename,
+        "filepath": filepath,
+        "uploaded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    mongo.db.datasets.insert_one(dataset_entry)
+
+    return jsonify({"message": "Dataset uploaded successfully"}), 201
+
+
+# 📌 Retrieve Uploaded Datasets
+@app.route("/api/datasets", methods=["GET"])
+def get_datasets():
+    datasets = list(mongo.db.datasets.find({}, {"_id": 1, "filename": 1, "uploaded_at": 1}))
+    for dataset in datasets:
+        dataset["_id"] = str(dataset["_id"])
+    return jsonify({"datasets": datasets})
+
 
 class User(UserMixin):
     def __init__(self, user_data):
@@ -365,6 +432,7 @@ def generate_llm_explanation_of_shap():
                 Focus on key words and overall tone.
                 Keep explanation under 3 sentences.
             """
+            print(shapwords,'these are the values')
 
             response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
@@ -401,6 +469,8 @@ def generate_llm_explanation_of_shap():
                 ],
                 model=model,
             )
+            print(shapwords,'these are the values')
+
             return chat_completion.choices[0].message.content
 
 
@@ -414,7 +484,7 @@ def generate_llm_explanation_of_shap():
 def get_classifications():
     try:
         # Retrieve last 10 classifications (modify limit as needed)
-        predictions = mongo.db.predictions.find().sort("timestamp", -1).limit(10)
+        predictions = mongo.db.predictions.find().sort("timestamp", -1).limit(50)
 
         # Convert ObjectId to string and prepare JSON response
         results = []
