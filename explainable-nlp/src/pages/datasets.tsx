@@ -57,21 +57,6 @@ const Datasets = () => {
         }
     };
 
-    // Delete dataset from backend
-    const handleDelete = async (datasetId: string) => {
-        try {
-            await axios.delete(`http://localhost:5000/api/delete_dataset/${datasetId}`, {
-                withCredentials: true,
-            });
-
-            setSuccess("Dataset deleted successfully.");
-            setError(null);
-            fetchDatasets(); // Refresh dataset list after deletion
-        } catch (err) {
-            setError("Failed to delete dataset.");
-            setSuccess(null);
-        }
-    };
 
     useEffect(() => {
         fetchDatasets();

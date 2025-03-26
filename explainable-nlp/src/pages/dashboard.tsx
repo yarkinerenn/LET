@@ -1,8 +1,9 @@
-import { Button, Form, Card, Alert, Spinner, Badge, ListGroup, ToggleButton, ButtonGroup } from 'react-bootstrap';
+import {Button, Form, Card, Alert, Spinner, Badge, ListGroup, ToggleButton, ButtonGroup, Table} from 'react-bootstrap';
 import { useAuth } from "../modules/auth";
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Classification } from "../types";
+import {useNavigate} from "react-router-dom";
 
 const Dashboard = () => {
     const { user, logout } = useAuth();
@@ -12,6 +13,7 @@ const Dashboard = () => {
         label: string;
         score: number;
     } | null>(null);
+    const navigate = useNavigate(); // Define useNavigate correctly
     const [provider, setProvider] = useState(""); // 'openai' or 'groq'
     const [model, setModel] = useState("");
     const [classifications, setClassifications] = useState<Classification[]>([]);
@@ -20,6 +22,7 @@ const Dashboard = () => {
     const [plot, setPlot] = useState('');
     const [shapstring, setShapstring] = useState('');
 
+    const [datasets, setDatasets] = useState<any[]>([]);
 
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -46,6 +49,19 @@ const Dashboard = () => {
         { name: "qwen-2.5-coder-32b" },
         { name: "qwen-qwq-32b" }
     ];
+    const fetchDatasets = async () => {
+        try {
+            const response = await axios.get("http://localhost:5000/api/datasets", {
+                withCredentials: true,
+            });
+            setDatasets(response.data.datasets);
+        } catch (err) {
+            setError("Failed to load datasets.");
+        }
+    };
+    const handleViewDataset = (datasetId: string) => {
+        navigate(`/dataset/${datasetId}`);
+    };
     // Function to fetch classifications
     const fetchClassifications = async () => {
         try {
@@ -79,6 +95,30 @@ const Dashboard = () => {
             const response = await axios.post(
                 'http://localhost:5000/api/analyze',
                 { text },  // Request body
+                { withCredentials: true }  // Include credentials
+            );
+
+            setPrediction(response.data);
+            setExplanation('');
+            setSelectedClassification(null);
+
+            // Refresh classifications after analyzing
+            fetchClassifications();
+        } catch (err) {
+            setError('Failed to analyze text');
+            console.error('Error analyzing text:', err);
+        }
+        setIsLoading(false);
+    };
+    const analyzeTextwithLLM = async () => {
+        setIsLoading(true);
+        setError('');
+        try {
+            const response = await axios.post(
+                'http://localhost:5000/api/analyzewithllm',
+                { text:text,
+                    provider: provider ,
+                    model: model,},  // Request body
                 { withCredentials: true }  // Include credentials
             );
 
@@ -157,6 +197,8 @@ const Dashboard = () => {
     // Initial fetch of classifications
     useEffect(() => {
         fetchClassifications();
+        fetchDatasets();
+
     }, []);
 
     // Format the timestamp in a readable way
@@ -202,6 +244,44 @@ const Dashboard = () => {
             <div className="container">
                 <div className="row">
                     <div className="col-lg-7">
+                        <h3 className="text-center mb-3">My Datasets</h3>
+                        <Table striped bordered hover>
+                            <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Filename</th>
+                                <th>Uploaded At</th>
+                                <th>Actions</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            {datasets.map((dataset, index) => (
+                                <tr key={dataset._id}>
+                                    <td>{index + 1}</td>
+                                    <td>
+                                        <Button variant="link" onClick={() => handleViewDataset(dataset._id)}>
+                                            {dataset.filename}
+                                        </Button>
+                                    </td>
+                                    <td>{new Date(dataset.uploaded_at).toLocaleString()}</td>
+                                    <td>
+                                        <Button
+                                            variant="danger"
+                                            size="sm"
+                                            onClick={async () => {
+                                                await axios.delete(`http://localhost:5000/api/delete_dataset/${dataset._id}`, {
+                                                    withCredentials: true,
+                                                });
+                                                fetchDatasets();
+                                            }}
+                                        >
+                                            Delete
+                                        </Button>
+                                    </td>
+                                </tr>
+                            ))}
+                            </tbody>
+                        </Table>
                         <Card className="shadow mb-4">
                             <Card.Body>
                                 <Card.Title className="mb-4">Sentiment Analyzer</Card.Title>
@@ -217,11 +297,13 @@ const Dashboard = () => {
                                     />
                                 </Form.Group>
 
-                                <div className="d-grid gap-2">
+                                <div className="d-grid gap-2 d-md-flex justify-content-md-start">
+                                    {/* Sentiment Analyze Button */}
                                     <Button
                                         variant="primary"
                                         onClick={analyzeText}
                                         disabled={isLoading}
+                                        className="me-md-2 mb-2 mb-md-0"
                                     >
                                         {isLoading ? (
                                             <>
@@ -234,7 +316,19 @@ const Dashboard = () => {
                                                 />
                                                 <span className="ms-2">Analyzing...</span>
                                             </>
-                                        ) : 'Analyze Sentiment'}
+                                        ) : (
+                                            'Analyze Sentiment'
+                                        )}
+                                    </Button>
+
+                                    {/* LLM Analyze Button */}
+                                    <Button
+                                        variant="secondary"
+                                        onClick={analyzeTextwithLLM}
+                                        disabled={isLoading}
+                                        className="mb-2 mb-md-0"
+                                    >
+                                        Analyze with LLM
                                     </Button>
                                 </div>
 
@@ -251,6 +345,8 @@ const Dashboard = () => {
                                                 )}
                                                 </p>
                                                 <p>Confidence: {(prediction.score)}</p>
+
+
 
                                                 <div className="d-flex align-items-center mb-3">
                                                     <span className="me-3">Explainer Type:</span>
@@ -273,52 +369,8 @@ const Dashboard = () => {
                                                     </Button>
                                                 </div>
 
-                                                {/* Show provider options if LLM is selected */}
-                                                {(
-                                                    <div className="mb-3">
-                                                        <span className="me-3">Select Provider:</span>
-                                                        <ButtonGroup>
-                                                            <ToggleButton
-                                                                id="provider-openai"
-                                                                type="radio"
-                                                                variant={provider === 'openai' ? 'primary' : 'outline-primary'}
-                                                                name="provider"
-                                                                value="openai"
-                                                                checked={provider === 'openai'}
-                                                                onChange={(e) => setProvider(e.currentTarget.value)}
-                                                            >
-                                                                OpenAI
-                                                            </ToggleButton>
-                                                            <ToggleButton
-                                                                id="provider-groq"
-                                                                type="radio"
-                                                                variant={provider === 'groq' ? 'primary' : 'outline-primary'}
-                                                                name="provider"
-                                                                value="groq"
-                                                                checked={provider === 'groq'}
-                                                                onChange={(e) => setProvider(e.currentTarget.value)}
-                                                            >
-                                                                Groq
-                                                            </ToggleButton>
-                                                        </ButtonGroup>
-                                                    </div>
-                                                )}
 
-                                                {/* Show model selection only if Groq is chosen */}
-                                                {(provider === 'groq') && (
-                                                    <div className="mb-3">
-                                                        <span className="me-3">Select Model:</span>
-                                                        <Form.Select value={model}
-                                                                     onChange={(e) => setModel(e.target.value)}>
-                                                            <option value="">-- Select a Model --</option>
-                                                            {groqModels.map((m) => (
-                                                                <option key={m.name} value={m.name}>
-                                                                    {m.name}
-                                                                </option>
-                                                            ))}
-                                                        </Form.Select>
-                                                    </div>
-                                                )}
+
 
                                                 <Button
                                                     variant="info"
@@ -356,7 +408,7 @@ const Dashboard = () => {
                             <Card.Body className="p-0" style={{maxHeight: "437px", overflowY: "auto"}}>
                                 {classifications.length > 0 ? (
                                     <ListGroup variant="flush">
-                                        {classifications.map(classification => (
+                                        {classifications.map((classification) => (
                                             <ListGroup.Item
                                                 key={classification.id}
                                                 className={`border-bottom py-3 ${selectedClassification === classification.id ? 'bg-light' : ''}`}
@@ -387,8 +439,56 @@ const Dashboard = () => {
                                 )}
                             </Card.Body>
                         </Card>
+
+                        {/* AI Provider Settings */}
+                        <div className="mt-4 p-4 rounded bg-light">
+                            <h5 className="mb-3">AI Settings</h5>
+                            <p className="text-muted mb-3">Select the AI provider for classification and explanation:</p>
+
+                            <ButtonGroup className="d-flex justify-content-start">
+                                <ToggleButton
+                                    id="provider-openai"
+                                    type="radio"
+                                    variant={provider === 'openai' ? 'primary' : 'outline-primary'}
+                                    name="provider"
+                                    value="openai"
+                                    checked={provider === 'openai'}
+                                    onChange={(e) => setProvider(e.currentTarget.value)}
+                                    className="me-3 mb-2"
+                                >
+                                    OpenAI
+                                </ToggleButton>
+                                <ToggleButton
+                                    id="provider-groq"
+                                    type="radio"
+                                    variant={provider === 'groq' ? 'primary' : 'outline-primary'}
+                                    name="provider"
+                                    value="groq"
+                                    checked={provider === 'groq'}
+                                    onChange={(e) => setProvider(e.currentTarget.value)}
+                                    className="mb-2"
+                                >
+                                    Groq
+                                </ToggleButton>
+                            </ButtonGroup>
+                            {/* Show model selection only if Groq is chosen */}
+                            {(provider === 'groq') && (
+                                <div className="mb-3">
+                                    <span className="me-3">Select Model:</span>
+                                    <Form.Select value={model}
+                                                 onChange={(e) => setModel(e.target.value)}>
+                                        <option value="">-- Select a Model --</option>
+                                        {groqModels.map((m) => (
+                                            <option key={m.name} value={m.name}>
+                                                {m.name}
+                                            </option>
+                                        ))}
+                                    </Form.Select>
+                                </div>
+                            )}
+                        </div>
                     </div>
-                    {(explanation || plot)  && (
+                    {(explanation || plot) && (
                         <Card className="mt-3 border-info">
                             <Card.Body>
                                 <Card.Title>
@@ -427,7 +527,7 @@ const Dashboard = () => {
                         >
                             {isExplaining ? (
                                 <>
-                                    <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" />
+                                    <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true"/>
                                     <span className="ms-2">Explaining SHAP with LLM...</span>
                                 </>
                             ) : "Explain SHAP with LLM"}
@@ -436,7 +536,7 @@ const Dashboard = () => {
                     {shap_explanation && (
                         <div className="mt-3 p-3 border rounded bg-light">
                             <h6>SHAP LLM Explanation</h6>
-                            <p style={{ whiteSpace: "pre-wrap" }}>{shap_explanation}</p>
+                            <p style={{whiteSpace: "pre-wrap"}}>{shap_explanation}</p>
                         </div>
                     )}
 

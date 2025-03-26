@@ -271,6 +271,7 @@ def analyze_text():
             "score": result['score'],
             "timestamp": datetime.now()
         })
+        print(result['label'])
 
         return jsonify({
             "id": str(prediction.inserted_id),
@@ -281,7 +282,84 @@ def analyze_text():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/analyzewithllm', methods=['POST'])
+@login_required
+def analyze_text_with_llm():
+    try:
+        # Get the text from the request
+        data = request.json
+        text = data.get('text', '')
+        print("Text received:", text)
+        provider=data.get('provider')
+        model=data.get('model')
 
+        if provider=='openai':
+            openai_api_key = get_user_api_key_openai()
+            client = OpenAI(api_key=openai_api_key)
+
+
+            if len(text) < 3:
+                    return jsonify({"error": "Text must be at least 3 characters"}), 400
+
+            # Send the text to OpenAI for sentiment analysis
+            prompt = f"Classify the sentiment of the following text as either positive or negative:\n{text}"
+
+            # Call OpenAI GPT-3/4 model to analyze the sentiment
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": prompt}]
+            )
+
+            # Extract the sentiment result (positive or negative)
+            sentiment =  response.choices[0].message.content
+
+            # Ensure the sentiment is either positive or negative
+            if sentiment not in ["positive", "negative"]:
+                return jsonify({"error": "Invalid sentiment response from LLM."}), 400
+        else:
+            api= get_user_api_key_groq()
+
+            client = Groq(
+                api_key=api,
+            )
+
+            chat_completion = client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "user",
+                        "content":f"Classify the sentiment of the following text as either positive or negative only one word:\n{text}",
+                    }
+                ],
+                model=model,
+            )
+
+            sentiment= chat_completion.choices[0].message.content
+            print(sentiment)
+
+            if 'positive' in sentiment.lower():
+                sentiment = "POSITIVE"
+            else:
+                sentiment = "NEGATIVE"
+
+            if sentiment not in ["POSITIVE", "NEGATIVE"]:
+                return jsonify({"error": "Invalid sentiment response from LLM."}), 400
+
+        # Store in MongoDB
+        prediction = mongo.db.predictions.insert_one({
+            "text": text,
+            "label": sentiment,
+            "score": 1,  # Assuming the LLM is fully confident here (optional)
+            "timestamp": datetime.now()
+        })
+
+        return jsonify({
+            "id": str(prediction.inserted_id),
+            "label": sentiment,
+            "score": 1  # Use actual model score if available
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 @app.route('/api/explain', methods=['POST'])
 @login_required
 def explain_prediction():
