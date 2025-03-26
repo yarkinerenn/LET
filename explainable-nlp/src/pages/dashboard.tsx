@@ -181,6 +181,25 @@ const Dashboard = () => {
         }
         setIsExplaining(false);
     };
+    const handleDeleteClassification = async (classificationId: string) => {
+        try {
+            // Send delete request to the backend
+            const response = await axios.delete(`http://localhost:5000/api/delete_classification/${classificationId}`, {
+                withCredentials: true
+            });
+
+            if (response.status === 200) {
+                // If deletion is successful, filter out the deleted classification from the state
+                setClassifications((prevClassifications) =>
+                    prevClassifications.filter((classification) => classification.id !== classificationId)
+                );
+            } else {
+            }
+        } catch (err) {
+            console.error("Error deleting classification:", err);
+            alert("An error occurred while deleting the classification.");
+        }
+    };
 
     // View a previous classification (without explanation)
     const viewPreviousClassification = (classification: Classification) => {
@@ -405,7 +424,7 @@ const Dashboard = () => {
                             <Card.Header className="bg-primary text-white">
                                 <h4 className="mb-0">Previous Classifications</h4>
                             </Card.Header>
-                            <Card.Body className="p-0" style={{maxHeight: "437px", overflowY: "auto"}}>
+                            <Card.Body className="p-0" style={{ maxHeight: "437px", overflowY: "auto" }}>
                                 {classifications.length > 0 ? (
                                     <ListGroup variant="flush">
                                         {classifications.map((classification) => (
@@ -415,20 +434,29 @@ const Dashboard = () => {
                                             >
                                                 <div className="d-flex justify-content-between align-items-center mb-2">
                                                     {getSentimentBadge(classification.label, classification.score)}
-                                                    <small
-                                                        className="text-muted">{formatDate(classification.timestamp)}</small>
+                                                    <small className="text-muted">{formatDate(classification.timestamp)}</small>
                                                 </div>
                                                 <p className="mb-2" title={classification.text}>
                                                     {truncateText(classification.text)}
                                                 </p>
-                                                <Button
-                                                    variant="outline-secondary"
-                                                    size="sm"
-                                                    onClick={() => viewPreviousClassification(classification)}
-                                                    className="me-2"
-                                                >
-                                                    View
-                                                </Button>
+                                                <div className="d-flex justify-content-between">
+                                                    <Button
+                                                        variant="outline-secondary"
+                                                        size="sm"
+                                                        onClick={() => viewPreviousClassification(classification)}
+                                                        className="me-2"
+                                                    >
+                                                        View
+                                                    </Button>
+                                                    {/* Delete Button */}
+                                                    <Button
+                                                        variant="outline-danger"
+                                                        size="sm"
+                                                        onClick={() => handleDeleteClassification(classification.id)}  // Call delete function
+                                                    >
+                                                        Delete
+                                                    </Button>
+                                                </div>
                                             </ListGroup.Item>
                                         ))}
                                     </ListGroup>

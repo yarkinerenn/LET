@@ -55,7 +55,18 @@ def get_dataset(dataset_id):
     except Exception as e:
         print(e)
         return jsonify({"error": str(e)}), 500
+@app.route('/api/delete_classification/<classification_id>', methods=['DELETE'])
+def delete_classification(classification_id):
+    try:
+        # Delete classification from the database
+        result = mongo.db.predictions.delete_one({'_id': ObjectId(classification_id)})
 
+        if result.deleted_count == 0:
+            return jsonify({"error": "Classification not found"}), 404
+
+        return jsonify({"message": "Classification deleted successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 # 📌 Delete Dataset by ID
 @app.route("/api/delete_dataset/<dataset_id>", methods=["DELETE"])
 def delete_dataset(dataset_id):
