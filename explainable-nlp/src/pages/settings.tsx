@@ -1,11 +1,33 @@
-import { useState } from "react";
-import { Container, Row, Col, Form, Button, Alert } from "react-bootstrap";
+import React, { useState } from "react";
+import {Container, Row, Col, Form, Button, Alert, ButtonGroup, ToggleButton} from "react-bootstrap";
+import {useProvider} from "../modules/provider";
 
 const Settings = () => {
     const [openaiApi, setOpenaiApi] = useState(""); // Current OpenAI API Key
     const [grokApi, setGrokApi] = useState("");     // Current Grok API Key
     const [error, setError] = useState("");         // For error messages
     const [success, setSuccess] = useState("");     // For success message
+    const groqModels = [
+        { name: "allam-2-7b" },
+        { name: "deepseek-r1-distill-llama-70b" },
+        { name: "deepseek-r1-distill-qwen-32b" },
+        { name: "gemma2-9b-it" },
+        { name: "llama-3.1-8b-instant" },
+        { name: "llama-3.2-11b-vision-preview" },
+        { name: "llama-3.2-1b-preview" },
+        { name: "llama-3.2-3b-preview" },
+        { name: "llama-3.2-90b-vision-preview" },
+        { name: "llama-3.3-70b-specdec" },
+        { name: "llama-3.3-70b-versatile" },
+        { name: "llama-guard-3-8b" },
+        { name: "llama3-70b-8192" },
+        { name: "llama3-8b-8192" },
+        { name: "mistral-saba-24b" },
+        { name: "qwen-2.5-32b" },
+        { name: "qwen-2.5-coder-32b" },
+        { name: "qwen-qwq-32b" }
+    ];
+    const { provider, setProvider, model, setModel } = useProvider();
 
     const handleSubmit = async (e: { preventDefault: () => void }) => {
         e.preventDefault();
@@ -90,13 +112,59 @@ const Settings = () => {
                                 />
                             </Form.Group>
 
-                            <Button variant="primary" className="w-100 mb-3" type="submit">
+                            <Button variant="dark" className="w-100 mb-3" type="submit">
                                 Update API Keys
                             </Button>
                         </Form>
                     </div>
                 </Col>
             </Row>
+            <div className="mt-4 p-4 rounded bg-light">
+                <h5 className="mb-3">AI Settings</h5>
+                <p className="text-muted mb-3">Select the AI provider for classification and explanation:</p>
+
+                <ButtonGroup className="d-flex justify-content-start">
+                    <ToggleButton
+                        id="provider-openai"
+                        type="radio"
+                        variant={provider === 'openai' ? 'dark' : 'outline-primary'}
+                        name="provider"
+                        value="openai"
+                        checked={provider === 'openai'}
+                        onChange={(e) => setProvider(e.currentTarget.value)}
+                        className="me-3 mb-2"
+                    >
+                        OpenAI
+                    </ToggleButton>
+                    <ToggleButton
+                        id="provider-groq"
+                        type="radio"
+                        variant={provider === 'groq' ? 'dark' : 'outline-primary'}
+                        name="provider"
+                        value="groq"
+                        checked={provider === 'groq'}
+                        onChange={(e) => setProvider(e.currentTarget.value)}
+                        className="mb-2"
+                    >
+                        Groq
+                    </ToggleButton>
+                </ButtonGroup>
+                {/* Show model selection only if Groq is chosen */}
+                {(provider === 'groq') && (
+                    <div className="mb-3">
+                        <span className="me-3">Select Model:</span>
+                        <Form.Select value={model}
+                                     onChange={(e) => setModel(e.target.value)}>
+                            <option value="">-- Select a Model --</option>
+                            {groqModels.map((m) => (
+                                <option key={m.name} value={m.name}>
+                                    {m.name}
+                                </option>
+                            ))}
+                        </Form.Select>
+                    </div>
+                )}
+            </div>
         </Container>
     );
 };

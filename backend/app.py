@@ -27,8 +27,8 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
 app.config['MONGO_URI'] = 'mongodb://localhost:27017/auth_app'
 app.config['CORS_SUPPORTS_CREDENTIALS'] = True
-
-CORS(app, origins=["http://localhost:3000"], supports_credentials=True)
+app.config['SESSION_COOKIE_NAME'] = 'your_session_cookie_name'  # Optional, you can change the cookie name
+CORS(app, origins=["http://localhost:3001"], supports_credentials=True)
 mongo = PyMongo(app)
 login_manager = LoginManager()
 login_manager.init_app(app)

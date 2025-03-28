@@ -5,6 +5,7 @@ const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
+    const [loading, setLoading] = useState(true);
 
     const checkAuth = async () => {
         try {
@@ -17,6 +18,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
         } catch (error) {
             console.error('Auth check failed:', error);
+        }finally {
+            setLoading(false);
         }
     };
 
@@ -28,8 +31,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const logout = () => setUser(null);
 
     return (
-        <AuthContext.Provider value={{ user, login, logout }}>
-            {children}
+        <AuthContext.Provider value={{ user, login, logout, loading }}>
+            {!loading && children}
         </AuthContext.Provider>
     );
 }

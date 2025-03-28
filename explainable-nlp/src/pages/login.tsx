@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Form, Button, Alert, Container, Row, Col } from 'react-bootstrap';
 import { useAuth } from '../modules/auth';
-
+import {ProviderContextProvider} from "../modules/provider";
 export function Login() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -34,6 +34,8 @@ export function Login() {
     };
 
     return (
+        <ProviderContextProvider>
+
         <Container className="py-5">
             <Row className="justify-content-center">
                 <Col md={6} lg={4}>
@@ -80,5 +82,7 @@ export function Login() {
                 </Col>
             </Row>
         </Container>
+        </ProviderContextProvider>
+
     );
 }

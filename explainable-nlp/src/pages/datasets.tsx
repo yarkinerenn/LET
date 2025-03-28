@@ -83,7 +83,7 @@ const Datasets = () => {
                         <Form.Control type="file" accept=".csv" onChange={handleFileChange} />
                     </Form.Group>
 
-                    <Button variant="primary" className="w-100 mb-4" onClick={handleUpload}>
+                    <Button variant="dark" className="w-100 mb-4" onClick={handleUpload}>
                         Upload Dataset
                     </Button>
 

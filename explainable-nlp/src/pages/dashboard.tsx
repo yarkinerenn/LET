@@ -4,9 +4,11 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Classification } from "../types";
 import {useNavigate} from "react-router-dom";
+import {useProvider} from "../modules/provider";
 
 const Dashboard = () => {
-    const { user, logout } = useAuth();
+    const { provider, model } = useProvider();
+    const { user } = useAuth();
     const [text, setText] = useState('');
     const [prediction, setPrediction] = useState<{
         id: string;
@@ -14,8 +16,12 @@ const Dashboard = () => {
         score: number;
     } | null>(null);
     const navigate = useNavigate(); // Define useNavigate correctly
-    const [provider, setProvider] = useState(""); // 'openai' or 'groq'
-    const [model, setModel] = useState("");
+    useEffect(() => {
+        console.log(user)
+        if (!user) {
+            navigate('/login');
+        }
+    }, [user, navigate]);
     const [classifications, setClassifications] = useState<Classification[]>([]);
     const [explanation, setExplanation] = useState('');
     const [shap_explanation, setShap_Explanation] = useState('');
@@ -29,26 +35,7 @@ const Dashboard = () => {
     const [isExplaining, setIsExplaining] = useState(false);
     const [selectedClassification, setSelectedClassification] = useState<string | null>(null);
     const [explainerType, setExplainerType] = useState('llm');
-    const groqModels = [
-        { name: "allam-2-7b" },
-        { name: "deepseek-r1-distill-llama-70b" },
-        { name: "deepseek-r1-distill-qwen-32b" },
-        { name: "gemma2-9b-it" },
-        { name: "llama-3.1-8b-instant" },
-        { name: "llama-3.2-11b-vision-preview" },
-        { name: "llama-3.2-1b-preview" },
-        { name: "llama-3.2-3b-preview" },
-        { name: "llama-3.2-90b-vision-preview" },
-        { name: "llama-3.3-70b-specdec" },
-        { name: "llama-3.3-70b-versatile" },
-        { name: "llama-guard-3-8b" },
-        { name: "llama3-70b-8192" },
-        { name: "llama3-8b-8192" },
-        { name: "mistral-saba-24b" },
-        { name: "qwen-2.5-32b" },
-        { name: "qwen-2.5-coder-32b" },
-        { name: "qwen-qwq-32b" }
-    ];
+
     const fetchDatasets = async () => {
         try {
             const response = await axios.get("http://localhost:5000/api/datasets", {
@@ -243,22 +230,6 @@ const Dashboard = () => {
 
     return (
         <div className="py-5">
-            <div className="hero-section mb-5 text-center">
-                {user ? (
-                    <h1 className="display-4 mb-3">
-                        Welcome {user?.username || 'to Auth App'}
-                    </h1>
-                ) : (
-                    <div className="mt-4">
-                        <a href="/login" className="btn btn-primary mx-2">
-                            Login
-                        </a>
-                        <a href="/register" className="btn btn-outline-primary mx-2">
-                            Register
-                        </a>
-                    </div>
-                )}
-            </div>
 
             <div className="container">
                 <div className="row">
@@ -319,7 +290,7 @@ const Dashboard = () => {
                                 <div className="d-grid gap-2 d-md-flex justify-content-md-start">
                                     {/* Sentiment Analyze Button */}
                                     <Button
-                                        variant="primary"
+                                        variant="dark"
                                         onClick={analyzeText}
                                         disabled={isLoading}
                                         className="me-md-2 mb-2 mb-md-0"
@@ -336,13 +307,13 @@ const Dashboard = () => {
                                                 <span className="ms-2">Analyzing...</span>
                                             </>
                                         ) : (
-                                            'Analyze Sentiment'
+                                            'Analyze with BERT'
                                         )}
                                     </Button>
 
                                     {/* LLM Analyze Button */}
                                     <Button
-                                        variant="secondary"
+                                        variant="dark"
                                         onClick={analyzeTextwithLLM}
                                         disabled={isLoading}
                                         className="mb-2 mb-md-0"
@@ -353,7 +324,7 @@ const Dashboard = () => {
 
                                 {prediction && (
                                     <div className="mt-4">
-                                        <Card className="mb-3 border-primary">
+                                        <Card className="mb-3 border-dark-subtle">
                                             <Card.Body>
                                                 <h5>Analysis Result</h5>
                                                 <p className="mb-0">
@@ -372,7 +343,7 @@ const Dashboard = () => {
 
                                                     {/* LLM Button */}
                                                     <Button
-                                                        variant={explainerType === 'llm' ? 'primary' : 'outline-primary'}
+                                                        variant={explainerType === 'llm' ? 'dark' : 'outline-dark'}
                                                         onClick={() => setExplainerType('llm')}
                                                         className="me-2"
                                                     >
@@ -381,7 +352,7 @@ const Dashboard = () => {
 
                                                     {/* SHAP Button */}
                                                     <Button
-                                                        variant={explainerType === 'shap' ? 'primary' : 'outline-primary'}
+                                                        variant={explainerType === 'shap' ? 'dark' : 'outline-dark'}
                                                         onClick={() => setExplainerType('shap')}
                                                     >
                                                         SHAP
@@ -392,7 +363,7 @@ const Dashboard = () => {
 
 
                                                 <Button
-                                                    variant="info"
+                                                    variant="dark"
                                                     onClick={generateExplanation}
                                                     disabled={isExplaining}
                                                 >
@@ -421,10 +392,11 @@ const Dashboard = () => {
                     </div>
                     <div className="col-lg-5">
                         <Card className="shadow">
-                            <Card.Header className="bg-primary text-white">
+                            <Card.Header className="bg-dark
+                             text-white">
                                 <h4 className="mb-0">Previous Classifications</h4>
                             </Card.Header>
-                            <Card.Body className="p-0" style={{ maxHeight: "437px", overflowY: "auto" }}>
+                            <Card.Body className="p-0" style={{ maxHeight: "600px", overflowY: "auto" }}>
                                 {classifications.length > 0 ? (
                                     <ListGroup variant="flush">
                                         {classifications.map((classification) => (
@@ -469,55 +441,10 @@ const Dashboard = () => {
                         </Card>
 
                         {/* AI Provider Settings */}
-                        <div className="mt-4 p-4 rounded bg-light">
-                            <h5 className="mb-3">AI Settings</h5>
-                            <p className="text-muted mb-3">Select the AI provider for classification and explanation:</p>
 
-                            <ButtonGroup className="d-flex justify-content-start">
-                                <ToggleButton
-                                    id="provider-openai"
-                                    type="radio"
-                                    variant={provider === 'openai' ? 'primary' : 'outline-primary'}
-                                    name="provider"
-                                    value="openai"
-                                    checked={provider === 'openai'}
-                                    onChange={(e) => setProvider(e.currentTarget.value)}
-                                    className="me-3 mb-2"
-                                >
-                                    OpenAI
-                                </ToggleButton>
-                                <ToggleButton
-                                    id="provider-groq"
-                                    type="radio"
-                                    variant={provider === 'groq' ? 'primary' : 'outline-primary'}
-                                    name="provider"
-                                    value="groq"
-                                    checked={provider === 'groq'}
-                                    onChange={(e) => setProvider(e.currentTarget.value)}
-                                    className="mb-2"
-                                >
-                                    Groq
-                                </ToggleButton>
-                            </ButtonGroup>
-                            {/* Show model selection only if Groq is chosen */}
-                            {(provider === 'groq') && (
-                                <div className="mb-3">
-                                    <span className="me-3">Select Model:</span>
-                                    <Form.Select value={model}
-                                                 onChange={(e) => setModel(e.target.value)}>
-                                        <option value="">-- Select a Model --</option>
-                                        {groqModels.map((m) => (
-                                            <option key={m.name} value={m.name}>
-                                                {m.name}
-                                            </option>
-                                        ))}
-                                    </Form.Select>
-                                </div>
-                            )}
-                        </div>
                     </div>
-                    {(explanation || plot) && (
-                        <Card className="mt-3 border-info">
+                    {(explanation!=='' || plot) && (
+                        <Card className="mt-3 border-dark-subtle">
                             <Card.Body>
                                 <Card.Title>
                                     {explainerType === 'shap' ? 'SHAP Explanation' : 'Explanation'}
@@ -546,7 +473,7 @@ const Dashboard = () => {
                         </Card>
                     )}
                     {/* Show "Explain SHAP with LLM" button only if SHAP explanation exists */}
-                    {plot && (
+                    {plot && explainerType === 'shap' &&(
                         <Button
                             variant="secondary"
                             className="mt-3"
@@ -561,7 +488,7 @@ const Dashboard = () => {
                             ) : "Explain SHAP with LLM"}
                         </Button>
                     )}
-                    {shap_explanation && (
+                    {shap_explanation && explainerType === 'shap' && (
                         <div className="mt-3 p-3 border rounded bg-light">
                             <h6>SHAP LLM Explanation</h6>
                             <p style={{whiteSpace: "pre-wrap"}}>{shap_explanation}</p>
