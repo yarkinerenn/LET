@@ -7,7 +7,7 @@ import {useNavigate} from "react-router-dom";
 import {useProvider} from "../modules/provider";
 
 const Dashboard = () => {
-    const { provider, model } = useProvider();
+    const { provider, model,providerex,modelex } = useProvider();
     const { user } = useAuth();
     const [text, setText] = useState('');
     const [prediction, setPrediction] = useState<{
@@ -130,8 +130,8 @@ const Dashboard = () => {
                 prediction_id: prediction?.id,
                 text: text,
                 explainer_type: explainerType,
-                provider: provider ,
-                model: model,
+                provider: providerex ,
+                model: modelex,
                 shapwords: shapstring
 
             }, { withCredentials: true } );
@@ -152,8 +152,8 @@ const Dashboard = () => {
                 prediction_id: prediction?.id,
                 text: text,
                 explainer_type: explainerType,
-                provider: provider ,
-                model: model,
+                provider: providerex ,
+                model: modelex,
 
             }, { withCredentials: true } );
 

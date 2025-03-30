@@ -27,7 +27,7 @@ const Settings = () => {
         { name: "qwen-2.5-coder-32b" },
         { name: "qwen-qwq-32b" }
     ];
-    const { provider, setProvider, model, setModel } = useProvider();
+    const{ provider, setProvider,providerex, setProviderex, model, setModel, modelex, setModelex } = useProvider();
 
     const handleSubmit = async (e: { preventDefault: () => void }) => {
         e.preventDefault();
@@ -121,7 +121,7 @@ const Settings = () => {
             </Row>
             <div className="mt-4 p-4 rounded bg-light">
                 <h5 className="mb-3">AI Settings</h5>
-                <p className="text-muted mb-3">Select the AI provider for classification and explanation:</p>
+                <p className="text-muted mb-3">Select the AI provider for classification:</p>
 
                 <ButtonGroup className="d-flex justify-content-start">
                     <ToggleButton
@@ -155,6 +155,52 @@ const Settings = () => {
                         <span className="me-3">Select Model:</span>
                         <Form.Select value={model}
                                      onChange={(e) => setModel(e.target.value)}>
+                            <option value="">-- Select a Model --</option>
+                            {groqModels.map((m) => (
+                                <option key={m.name} value={m.name}>
+                                    {m.name}
+                                </option>
+                            ))}
+                        </Form.Select>
+                    </div>
+                )}
+            </div>
+            <div className="mt-4 p-4 rounded bg-light">
+                <h5 className="mb-3">AI Settings</h5>
+                <p className="text-muted mb-3">Select the AI provider for explanation</p>
+
+                <ButtonGroup className="d-flex justify-content-start">
+                    <ToggleButton
+                        id="provider-openai"
+                        type="radio"
+                        variant={providerex === 'openai' ? 'dark' : 'outline-primary'}
+                        name="provider"
+                        value="openai"
+                        checked={providerex === 'openai'}
+                        onChange={(e) => setProviderex(e.currentTarget.value)}
+                        className="me-3 mb-2"
+                    >
+                        OpenAI
+                    </ToggleButton>
+                    <ToggleButton
+                        id="provider-groq"
+                        type="radio"
+                        variant={providerex === 'groq' ? 'dark' : 'outline-primary'}
+                        name="provider"
+                        value="groq"
+                        checked={providerex === 'groq'}
+                        onChange={(e) => setProviderex(e.currentTarget.value)}
+                        className="mb-2"
+                    >
+                        Groq
+                    </ToggleButton>
+                </ButtonGroup>
+                {/* Show model selection only if Groq is chosen */}
+                {(providerex === 'groq') && (
+                    <div className="mb-3">
+                        <span className="me-3">Select Model:</span>
+                        <Form.Select value={modelex}
+                                     onChange={(e) => setModelex(e.target.value)}>
                             <option value="">-- Select a Model --</option>
                             {groqModels.map((m) => (
                                 <option key={m.name} value={m.name}>
