@@ -15,7 +15,8 @@ import io
 from cryptography.fernet import Fernet
 from groq import Groq
 import pandas as pd
-
+import tempfile
+from datasets import load_dataset
 import torch
 load_dotenv()
 # Store API key in .env
@@ -38,7 +39,6 @@ CORS(app, supports_credentials=True)
 # Ensure upload folder exists
 if not os.path.exists(app.config["UPLOAD_FOLDER"]):
     os.makedirs(app.config["UPLOAD_FOLDER"])
-
 @app.route("/api/dataset/<dataset_id>", methods=["GET"])
 def get_dataset(dataset_id):
     dataset = mongo.db.datasets.find_one({"_id": ObjectId(dataset_id)})
@@ -47,7 +47,6 @@ def get_dataset(dataset_id):
         return jsonify({"error": "Dataset not found"}), 404
 
     filepath = dataset["filepath"]
-
     try:
         df = pd.read_csv(filepath)
         data_preview = df.head(20).to_dict(orient="records")  # Return first 20 rows
@@ -67,17 +66,92 @@ def delete_classification(classification_id):
         return jsonify({"message": "Classification deleted successfully"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-# 📌 Delete Dataset by ID
+@app.route("/api/import_hf_dataset", methods=["POST"])
+@login_required
+def import_hf_dataset():
+    data = request.json
+    hf_dataset_name = data.get("dataset_name")
+    file_name = data.get("file_name", "dataset.csv")
+
+    if not hf_dataset_name:
+        return jsonify({"error": "Dataset name is required"}), 400
+
+    try:
+        # Load dataset from Hugging Face
+        dataset = load_dataset(hf_dataset_name)
+        df = dataset["train"].to_pandas()
+
+        # Create file path within upload directory
+        filepath = os.path.join(app.config["UPLOAD_FOLDER"], file_name)
+
+        # Clean up existing file if needed
+        if os.path.exists(filepath):
+            os.remove(filepath)
+
+        df.to_csv(filepath, index=False)
+
+        # Save dataset metadata
+        dataset_entry = {
+            "filename": file_name,
+            "filepath": filepath,
+            "uploaded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "source": f"HuggingFace: {hf_dataset_name}",
+            "user_id": ObjectId(current_user.id)
+        }
+        mongo.db.datasets.insert_one(dataset_entry)
+
+        return jsonify({"message": "Dataset imported successfully"}), 201
+
+    except Exception as e:
+        # Clean up any temporary files on error
+        if 'filepath' in locals() and os.path.exists(filepath):
+            os.remove(filepath)
+        print(f"Error importing HF dataset: {str(e)}")
+        return jsonify({"error": f"Failed to import dataset: {str(e)}"}), 500
+
+# Updated delete endpoint with proper temp handling
 @app.route("/api/delete_dataset/<dataset_id>", methods=["DELETE"])
+@login_required
 def delete_dataset(dataset_id):
-    result = mongo.db.datasets.delete_one({"_id": ObjectId(dataset_id)})
+    try:
+        dataset = mongo.db.datasets.find_one({
+            "_id": ObjectId(dataset_id),
+        })
 
-    if result.deleted_count == 0:
-        return jsonify({"error": "Dataset not found"}), 404
+        if not dataset:
+            return jsonify({"error": "Dataset not found or unauthorized"}), 404
 
-    return jsonify({"message": "Dataset deleted successfully"}), 200
+        file_path = dataset.get("filepath")
+
+        # Delete from MongoDB first
+        result = mongo.db.datasets.delete_one({"_id": ObjectId(dataset_id)})
+
+        if result.deleted_count == 0:
+            return jsonify({"error": "Dataset not found"}), 404
+
+        # File deletion logic
+        if file_path and os.path.exists(file_path):
+            upload_dir = os.path.abspath(app.config["UPLOAD_FOLDER"])
+            file_abs_path = os.path.abspath(file_path)
+
+            if not file_abs_path.startswith(upload_dir):
+                app.logger.warning(f"Blocked attempt to delete file outside upload directory: {file_path}")
+                return jsonify({
+                    "message": "Dataset record deleted but file was preserved for security",
+                    "warning": "File was outside protected directory"
+                }), 200
+
+            os.remove(file_path)
+            app.logger.info(f"Deleted dataset file: {file_path}")
+
+        return jsonify({"message": "Dataset and file deleted successfully"}), 200
+
+    except Exception as e:
+        app.logger.error(f"Delete error: {str(e)}")
+        return jsonify({"error": f"Failed to delete dataset: {str(e)}"}), 500
 # 📌 Upload Dataset
 @app.route("/api/upload_dataset", methods=["POST"])
+@login_required
 def upload_dataset():
     if "file" not in request.files:
         return jsonify({"error": "No file part"}), 400
@@ -95,6 +169,8 @@ def upload_dataset():
         "filename": filename,
         "filepath": filepath,
         "uploaded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "source": f"Local Upload",
+        "user_id": ObjectId(current_user.id)
     }
     mongo.db.datasets.insert_one(dataset_entry)
 
