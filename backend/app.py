@@ -119,7 +119,7 @@ class User(UserMixin):
         self.role = user_data.get('role', 'user')  # Default to 'user'
         self.openai_api = user_data.get('openai_api', '')  # Ensure openai_api is loaded
         self.grok_api = user_data.get('grok_api', '')  # Ensure grok_api is loaded
-
+        self.deepseek_api = user_data.get('deepseek_api', '')
     @staticmethod
     def get(user_id):
         user_data = mongo.db.users.find_one({'_id': ObjectId(user_id)})
@@ -152,19 +152,24 @@ def register():
     # Encrypt the API keys entered by the user
     openai_api_key = data.get("openai_api", "")
     grok_api_key = data.get("grok_api", "")
+    deepseek_api_key = data.get("deepseek_api", "")
+
 
     # Encrypt the user-entered API keys
     encrypted_openai_api = encrypt_api_key(openai_api_key) if openai_api_key else ""
     encrypted_grok_api = encrypt_api_key(grok_api_key) if grok_api_key else ""
+    encrypted_deepseek_api = encrypt_api_key(deepseek_api_key) if deepseek_api_key else ""
+
 
     user_data = {
-        'username': data['username'],
-        'email': data['email'],
-        'password_hash': password_hash,
-        'role': 'user',  # Default role
-        'openai_api': encrypted_openai_api,  # Encrypted API key
-        'grok_api': encrypted_grok_api       # Encrypted API key
-    }
+            'username': data['username'],
+            'email': data['email'],
+            'password_hash': password_hash,
+            'role': 'user',  # Default role
+            'openai_api': encrypted_openai_api,  # Encrypted API key
+            'grok_api': encrypted_grok_api,
+            'deepseel_api': encrypted_deepseek_api# Encrypted API key
+        }
 
     result = mongo.db.users.insert_one(user_data)
 
@@ -183,6 +188,18 @@ def get_user_api_key_openai():
 
     if user_data and "openai_api" in user_data:
         return decrypt_api_key(user_data['openai_api'])  # Return decrypted API key
+    return None
+def get_user_api_key_deepseek_api():
+    """Retrieve the user's OpenAI API key securely."""
+    if not current_user.is_authenticated:
+        return None
+
+    # Fetch the OpenAI API key from MongoDB to avoid issues with Flask-Login session
+    user_data = mongo.db.users.find_one({'_id': ObjectId(current_user.id)}, {'deepseek_api': 1})
+    print(current_user.username,'this is the user')
+
+    if user_data and "deepseek_api" in user_data:
+        return decrypt_api_key(user_data['deepseek_api'])  # Return decrypted API key
     return None
 def get_user_api_key_groq():
     """Retrieve the user's Groq API key securely."""
@@ -219,6 +236,7 @@ def update_api_keys():
     data = request.json
     openai_api_key = data.get("openai_api")
     grok_api_key = data.get("grok_api")
+    deepseek_api_key = data.get("deepseek_api")
 
     update_fields = {}
 
@@ -228,6 +246,9 @@ def update_api_keys():
 
     if grok_api_key:
         update_fields["grok_api"] = encrypt_api_key(grok_api_key)
+
+    if deepseek_api_key:
+        update_fields["deepseek_api"] = encrypt_api_key(deepseek_api_key)
 
     # Only update if there's something to change
     if update_fields:
@@ -327,7 +348,7 @@ def analyze_text_with_llm():
             # Ensure the sentiment is either positive or negative
             if sentiment not in ["positive", "negative"]:
                 return jsonify({"error": "Invalid sentiment response from LLM."}), 400
-        else:
+        elif provider=='groq':
             api= get_user_api_key_groq()
 
             client = Groq(
@@ -354,6 +375,31 @@ def analyze_text_with_llm():
 
             if sentiment not in ["POSITIVE", "NEGATIVE"]:
                 return jsonify({"error": "Invalid sentiment response from LLM."}), 400
+        elif provider=='deepseek':
+            deepseek_api_key = get_user_api_key_deepseek_api()
+            client = OpenAI(api_key=deepseek_api_key)
+
+
+            if len(text) < 3:
+                return jsonify({"error": "Text must be at least 3 characters"}), 400
+
+            # Send the text to OpenAI for sentiment analysis
+            prompt = f"Classify the sentiment of the following text as either positive or negative:\n{text}"
+
+            # Call OpenAI GPT-3/4 model to analyze the sentiment
+            response = client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[{"role": "user", "content": prompt}],
+                stream=False
+            )
+
+            # Extract the sentiment result (positive or negative)
+            sentiment =  response.choices[0].message.content
+
+            # Ensure the sentiment is either positive or negative
+            if sentiment not in ["positive", "negative"]:
+                return jsonify({"error": "Invalid sentiment response from LLM."}), 400
+
 
         # Store in MongoDB
         prediction = mongo.db.predictions.insert_one({
