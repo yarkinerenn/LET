@@ -9,6 +9,7 @@ from transformers import pipeline,AutoModelForSequenceClassification,AutoTokeniz
 from dotenv import load_dotenv
 from openai import OpenAI
 import os
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 from tqdm import tqdm
 import numpy as np
 import shap
@@ -59,90 +60,162 @@ def get_dataset(dataset_id):
 @app.route('/api/classify/<dataset_id>', methods=['POST'])
 @login_required
 def classify_dataset(dataset_id):
-    try:
-        data = request.json
-        method = data.get('method')
-        provider = data.get('provider', 'openai')  # Default to OpenAI
-        model_name = data.get('model', 'gpt-3.5-turbo')  # Default model
-        text_column = data.get('text_column', 'text')  # Default column name
+    # Validate request data
+    data = request.json
+    if not data:
+        return jsonify({"error": "No JSON data provided"}), 400
 
-        if not method or method not in CLASSIFICATION_METHODS:
-            return jsonify({"error": "Invalid classification method"}), 400
+    try:
+        # Extract and validate parameters
+        method = data.get('method')
+        if method not in CLASSIFICATION_METHODS:
+            return jsonify({"error": f"Invalid method. Must be one of: {CLASSIFICATION_METHODS}"}), 400
+
+        provider = data.get('provider', 'openai')
+        model_name = data.get('model', 'gpt-3.5-turbo')
+        text_column = data.get('text_column', 'text')
+        label_column = data.get('label_column','label')
+        print(text_column)
 
         # Get dataset metadata
         dataset = mongo.db.datasets.find_one({"_id": ObjectId(dataset_id)})
         if not dataset:
             return jsonify({"error": "Dataset not found"}), 404
 
-        # Load dataset file
-        df = pd.read_csv(dataset['filepath'])
-        if text_column not in df.columns:
-            return jsonify({"error": f"Text column '{text_column}' not found in dataset"}), 400
+        # Load dataset with error handling
+        try:
+            df = pd.read_csv(dataset['filepath'])
 
-        # Prepare classification function
-        if method == 'bert':
-            classifier_fn = lambda text: classifier(text)[0]
-        else:
-            # LLM classification setup
+            if text_column not in df.columns:
+                return jsonify({"error": f"Text column '{text_column}' not found in dataset"}), 400
+            if label_column and label_column not in df.columns:
+                return jsonify({"error": f"Label column '{label_column}' not found in dataset"}), 400
+        except Exception as e:
+            return jsonify({"error": f"Failed to load dataset: {str(e)}"}), 500
+
+        # Initialize classification client
+        client = None
+        if method == 'llm':
             if provider == 'openai':
                 api_key = get_user_api_key_openai()
+                if not api_key:
+                    return jsonify({"error": "OpenAI API key not configured"}), 400
                 client = OpenAI(api_key=api_key)
             elif provider == 'groq':
                 api_key = get_user_api_key_groq()
+                if not api_key:
+                    return jsonify({"error": "Groq API key not configured"}), 400
                 client = Groq(api_key=api_key)
             elif provider == 'deepseek':
                 api_key = get_user_api_key_deepseek_api()
+                if not api_key:
+                    return jsonify({"error": "Deepseek API key not configured"}), 400
                 client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com/v1")
             else:
                 return jsonify({"error": "Invalid LLM provider"}), 400
 
         results = []
-        batch = []
+        stats = {
+            "total": 0,
+            "positive": 0,
+            "negative": 0
+        }
 
-        # Classify each row
-        for _, row in tqdm(df.head(10).iterrows(), total=10):
-            text = str(row[text_column])[:500]
-            if method == 'bert':
-                result = classifier(text)[0]
-                label = result['label'].upper()
-                score = result['score']
-            else:
-                try:
-                    if provider == 'openai' or provider == 'deepseek':
+        # Process samples (limiting to first 100 for demo)
+        df.head(100)
+        df = df.sample(frac=1, random_state=42).reset_index(drop=True)
+        df.head(100)
+        samples = df.head(100).iterrows()
+        for _, row in tqdm(samples, total=min(100, len(df)), desc="Classifying"):
+            try:
+                text = str(row[text_column])[:500]  # Truncate long texts
+
+                if method == 'bert':
+                    result = classifier(text)[0]
+                    label = result['label'].upper()
+                    score = result['score']
+                else:
+                    # LLM classification
+                    if provider in ['openai', 'deepseek']:
                         response = client.chat.completions.create(
                             model=model_name,
                             messages=[{
                                 "role": "user",
-                                "content": f"Classify this text's sentiment as POSITIVE or NEGATIVE: {text}"
-                            }]
+                                "content": f"Classify this text's sentiment as only POSITIVE or NEGATIVE: {text}"
+                            }],
+                            max_tokens=10
                         )
                         label = response.choices[0].message.content.strip().upper()
-                    elif provider == 'groq':
+                    else:  # groq
                         response = client.chat.completions.create(
                             messages=[{
                                 "role": "user",
-                                "content": f"Classify sentiment as POSITIVE or NEGATIVE: {text}"
+                                "content": f"Respond with only POSITIVE or NEGATIVE for this text: {text}"
                             }],
-                            model=model_name
+                            model=model_name,
+                            max_tokens=10
                         )
                         label = response.choices[0].message.content.strip().upper()
 
                     # Normalize label
                     label = "POSITIVE" if "POS" in label else "NEGATIVE"
-                    score = 1.0  # LLMs don't provide confidence scores
-                except Exception as e:
-                    print(f"Error classifying text: {str(e)}")
-                    continue
+                    score = 1.0
 
-            results.append({
-                "text": text,
-                "label": label,
-                "score": score,
-                "original_data": row.to_dict()
-            })
+                # Store result
+                result_data = {
+                    "text": text,
+                    "label": label,
+                    "score": score,
+                    "original_data": row.to_dict()
+                }
 
-        # Store classification results
-        classification_id = mongo.db.classifications.insert_one({
+                if label_column:
+                    result_data["actualLabel"] = str(row[label_column]).strip().upper()
+
+                results.append(result_data)
+
+                # Update stats
+                stats["total"] += 1
+                if label == "POSITIVE":
+                    stats["positive"] += 1
+                else:
+                    stats["negative"] += 1
+
+            except Exception as e:
+                print(f"Error processing row: {str(e)}")
+                continue
+
+        # Calculate metrics if ground truth available
+        if label_column:
+            try:
+                # Convert labels to integers (0/1)
+                y_true = df[label_column].head(len(results)).astype(int)
+                y_pred = [1 if r['label'] == 'POSITIVE' else 0 for r in results]
+
+                # Calculate binary metrics
+                stats["accuracy"] = accuracy_score(y_true, y_pred)
+                stats["precision"] = precision_score(y_true, y_pred, pos_label=1, zero_division=0)
+                stats["recall"] = recall_score(y_true, y_pred, pos_label=1, zero_division=0)
+                stats["f1_score"] = f1_score(y_true, y_pred, pos_label=1, zero_division=0)
+
+                # Confusion matrix
+                tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+                stats["confusion_matrix"] = {
+                    "true_negative": int(tn),
+                    "false_positive": int(fp),
+                    "false_negative": int(fn),
+                    "true_positive": int(tp)
+                }
+
+                # Add to results for frontend display
+                for i, result in enumerate(results):
+                    result["actualLabel"] = int(y_true.iloc[i]) if i < len(y_true) else None
+
+            except Exception as e:
+                print(f"Error calculating metrics: {str(e)}")
+
+        # Store results
+        classification_data = {
             "dataset_id": ObjectId(dataset_id),
             "user_id": ObjectId(current_user.id),
             "method": method,
@@ -150,26 +223,24 @@ def classify_dataset(dataset_id):
             "model": model_name if method == 'llm' else None,
             "results": results,
             "created_at": datetime.now(),
-            "stats": {
-                "total": len(results),
-                "positive": sum(1 for r in results if r['label'] == "POSITIVE"),
-                "negative": sum(1 for r in results if r['label'] == "NEGATIVE")
-            }
-        }).inserted_id
+            "stats": stats
+        }
+
+        classification_id = mongo.db.classifications.insert_one(classification_data).inserted_id
 
         return jsonify({
             "message": "Classification completed",
             "classification_id": str(classification_id),
-            "stats": {
-                "total": len(results),
-                "positive": sum(1 for r in results if r['label'] == "POSITIVE"),
-                "negative": sum(1 for r in results if r['label'] == "NEGATIVE")
-            }
+            "stats": stats,
+            "sample_count": len(results)
         }), 200
 
     except Exception as e:
         print(f"Classification error: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({
+            "error": "Classification failed",
+            "details": str(e)
+        }), 500
 @app.route('/api/classification/<classification_id>', methods=['GET'])
 @login_required
 def get_classification_details(classification_id):
