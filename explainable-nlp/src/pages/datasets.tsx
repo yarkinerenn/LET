@@ -2,15 +2,6 @@ import { useState, useEffect } from "react";
 import {Container, Row, Col, Form, Button, Alert, Table, Card, Spinner, ButtonGroup} from "react-bootstrap";
 import axios from "axios";
 import {useNavigate } from "react-router-dom"; // For navigation
-import {
-    FaUpload,
-    FaHdd,
-    FaCloudUploadAlt,
-    FaDownload,
-    FaDatabase,
-    FaFileCsv,
-    FaTrash
-} from "react-icons/fa";
 const Datasets = () => {
     const [activeTab, setActiveTab] = useState<'upload' | 'huggingface'>('upload');
 
@@ -101,6 +92,7 @@ const Datasets = () => {
                 withCredentials: true,
             });
             setDatasets(response.data.datasets);
+            console.log(response.data.datasets);
         } catch (err) {
             setError("Failed to load datasets.");
         }
@@ -242,7 +234,7 @@ const Datasets = () => {
                                                 {dataset.filename}
                                             </Button>
                                         </td>
-                                        <td>{dataset.source || 'Local Upload'}</td>
+                                        <td>{dataset.source}</td>
                                         <td>{new Date(dataset.uploaded_at).toLocaleString()}</td>
                                         <td>
                                             <Button

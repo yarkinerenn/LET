@@ -9,6 +9,7 @@ from transformers import pipeline,AutoModelForSequenceClassification,AutoTokeniz
 from dotenv import load_dotenv
 from openai import OpenAI
 import os
+from tqdm import tqdm
 import numpy as np
 import shap
 import io
@@ -23,7 +24,7 @@ load_dotenv()
 secret_key = os.getenv("SECRET_KEY")
 secret_key = secret_key.encode()
 cipher = Fernet(secret_key)
-
+CLASSIFICATION_METHODS = ['llm', 'bert']
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
 app.config['MONGO_URI'] = 'mongodb://localhost:27017/auth_app'
@@ -50,10 +51,200 @@ def get_dataset(dataset_id):
     try:
         df = pd.read_csv(filepath)
         data_preview = df.head(20).to_dict(orient="records")  # Return first 20 rows
+        print(data_preview)
         return jsonify({"filename": dataset["filename"], "data": data_preview})
     except Exception as e:
         print(e)
         return jsonify({"error": str(e)}), 500
+@app.route('/api/classify/<dataset_id>', methods=['POST'])
+@login_required
+def classify_dataset(dataset_id):
+    try:
+        data = request.json
+        method = data.get('method')
+        provider = data.get('provider', 'openai')  # Default to OpenAI
+        model_name = data.get('model', 'gpt-3.5-turbo')  # Default model
+        text_column = data.get('text_column', 'text')  # Default column name
+
+        if not method or method not in CLASSIFICATION_METHODS:
+            return jsonify({"error": "Invalid classification method"}), 400
+
+        # Get dataset metadata
+        dataset = mongo.db.datasets.find_one({"_id": ObjectId(dataset_id)})
+        if not dataset:
+            return jsonify({"error": "Dataset not found"}), 404
+
+        # Load dataset file
+        df = pd.read_csv(dataset['filepath'])
+        if text_column not in df.columns:
+            return jsonify({"error": f"Text column '{text_column}' not found in dataset"}), 400
+
+        # Prepare classification function
+        if method == 'bert':
+            classifier_fn = lambda text: classifier(text)[0]
+        else:
+            # LLM classification setup
+            if provider == 'openai':
+                api_key = get_user_api_key_openai()
+                client = OpenAI(api_key=api_key)
+            elif provider == 'groq':
+                api_key = get_user_api_key_groq()
+                client = Groq(api_key=api_key)
+            elif provider == 'deepseek':
+                api_key = get_user_api_key_deepseek_api()
+                client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com/v1")
+            else:
+                return jsonify({"error": "Invalid LLM provider"}), 400
+
+        results = []
+        batch = []
+
+        # Classify each row
+        for _, row in tqdm(df.head(10).iterrows(), total=10):
+            text = str(row[text_column])[:500]
+            if method == 'bert':
+                result = classifier(text)[0]
+                label = result['label'].upper()
+                score = result['score']
+            else:
+                try:
+                    if provider == 'openai' or provider == 'deepseek':
+                        response = client.chat.completions.create(
+                            model=model_name,
+                            messages=[{
+                                "role": "user",
+                                "content": f"Classify this text's sentiment as POSITIVE or NEGATIVE: {text}"
+                            }]
+                        )
+                        label = response.choices[0].message.content.strip().upper()
+                    elif provider == 'groq':
+                        response = client.chat.completions.create(
+                            messages=[{
+                                "role": "user",
+                                "content": f"Classify sentiment as POSITIVE or NEGATIVE: {text}"
+                            }],
+                            model=model_name
+                        )
+                        label = response.choices[0].message.content.strip().upper()
+
+                    # Normalize label
+                    label = "POSITIVE" if "POS" in label else "NEGATIVE"
+                    score = 1.0  # LLMs don't provide confidence scores
+                except Exception as e:
+                    print(f"Error classifying text: {str(e)}")
+                    continue
+
+            results.append({
+                "text": text,
+                "label": label,
+                "score": score,
+                "original_data": row.to_dict()
+            })
+
+        # Store classification results
+        classification_id = mongo.db.classifications.insert_one({
+            "dataset_id": ObjectId(dataset_id),
+            "user_id": ObjectId(current_user.id),
+            "method": method,
+            "provider": provider if method == 'llm' else None,
+            "model": model_name if method == 'llm' else None,
+            "results": results,
+            "created_at": datetime.now(),
+            "stats": {
+                "total": len(results),
+                "positive": sum(1 for r in results if r['label'] == "POSITIVE"),
+                "negative": sum(1 for r in results if r['label'] == "NEGATIVE")
+            }
+        }).inserted_id
+
+        return jsonify({
+            "message": "Classification completed",
+            "classification_id": str(classification_id),
+            "stats": {
+                "total": len(results),
+                "positive": sum(1 for r in results if r['label'] == "POSITIVE"),
+                "negative": sum(1 for r in results if r['label'] == "NEGATIVE")
+            }
+        }), 200
+
+    except Exception as e:
+        print(f"Classification error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+@app.route('/api/classification/<classification_id>', methods=['GET'])
+@login_required
+def get_classification_details(classification_id):
+    try:
+        classification = mongo.db.classifications.find_one({
+            "_id": ObjectId(classification_id),
+            "user_id": ObjectId(current_user.id)
+        })
+
+        if not classification:
+            return jsonify({"error": "Classification not found"}), 404
+
+        # Convert ObjectId and datetime
+        classification["_id"] = str(classification["_id"])
+        classification["dataset_id"] = str(classification["dataset_id"])
+        classification["created_at"] = classification["created_at"].strftime("%Y-%m-%d %H:%M:%S")
+
+        return jsonify(classification), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+@app.route('/api/classification/stats/<classification_id>', methods=['GET'])
+@login_required
+def get_classification_stats(classification_id):
+    try:
+        classification = mongo.db.classifications.find_one({
+            "_id": ObjectId(classification_id),
+            "user_id": ObjectId(current_user.id)
+        }, {"stats": 1, "method": 1, "model": 1, "provider": 1})
+
+        if not classification:
+            return jsonify({"error": "Classification not found"}), 404
+
+        # Calculate additional metrics
+        stats = classification.get("stats", {})
+        stats.update({
+            "accuracy": stats.get("accuracy", 0),
+            "precision": stats.get("precision", 0),
+            "recall": stats.get("recall", 0),
+            "f1_score": stats.get("f1_score", 0)
+        })
+
+        return jsonify({
+            "method": classification.get("method"),
+            "model": classification.get("model"),
+            "provider": classification.get("provider"),
+            "stats": stats
+        }), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+@app.route('/api/classifications/<dataset_id>', methods=['GET'])
+@login_required
+def get_dataset_classifications(dataset_id):
+    try:
+        classifications = list(mongo.db.classifications.find({
+            "dataset_id": ObjectId(dataset_id),
+            "user_id": ObjectId(current_user.id)
+        }, {
+            "method": 1,
+            "provider": 1,
+            "model": 1,
+            "created_at": 1,
+            "stats": 1
+        }))
+
+        for cls in classifications:
+            cls['_id'] = str(cls['_id'])
+            cls['created_at'] = cls['created_at'].strftime("%Y-%m-%d %H:%M:%S")
+
+        return jsonify({"classifications": classifications}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/delete_classification/<classification_id>', methods=['DELETE'])
 def delete_classification(classification_id):
     try:
@@ -71,7 +262,7 @@ def delete_classification(classification_id):
 def import_hf_dataset():
     data = request.json
     hf_dataset_name = data.get("dataset_name")
-    file_name = data.get("file_name", "dataset.csv")
+    file_name = data.get("file_name", hf_dataset_name + ".csv")
 
     if not hf_dataset_name:
         return jsonify({"error": "Dataset name is required"}), 400
@@ -95,7 +286,7 @@ def import_hf_dataset():
             "filename": file_name,
             "filepath": filepath,
             "uploaded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "source": f"HuggingFace: {hf_dataset_name}",
+            "source": "HuggingFace",
             "user_id": ObjectId(current_user.id)
         }
         mongo.db.datasets.insert_one(dataset_entry)
@@ -169,7 +360,7 @@ def upload_dataset():
         "filename": filename,
         "filepath": filepath,
         "uploaded_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "source": f"Local Upload",
+        "source": "Local Upload",
         "user_id": ObjectId(current_user.id)
     }
     mongo.db.datasets.insert_one(dataset_entry)
@@ -180,7 +371,7 @@ def upload_dataset():
 # 📌 Retrieve Uploaded Datasets
 @app.route("/api/datasets", methods=["GET"])
 def get_datasets():
-    datasets = list(mongo.db.datasets.find({}, {"_id": 1, "filename": 1, "uploaded_at": 1}))
+    datasets = list(mongo.db.datasets.find({}, {"_id": 1, "filename": 1, "uploaded_at": 1,'source':1}))
     for dataset in datasets:
         dataset["_id"] = str(dataset["_id"])
     return jsonify({"datasets": datasets})
