@@ -68,9 +68,17 @@ const ClassificationDashboard = () => {
                         withCredentials: true,
                     })
                 ]);
+                const normalizedResults = detailRes.data.results.map((result: { actualLabel: number; }) => ({
+                    ...result,
+                    actualLabel: result.actualLabel === 1 ? 'POSITIVE' :
+                        result.actualLabel === 0 ? 'NEGATIVE' :
+                            result.actualLabel
+                }));
 
-                setClassification(detailRes.data);
-                setStats(statsRes.data.stats);
+                setClassification({
+                    ...detailRes.data,
+                    results: normalizedResults
+                });                setStats(statsRes.data.stats);
                 setLoading(false);
             } catch (err) {
                 setError("Failed to load classification data");
@@ -301,9 +309,7 @@ const ClassificationDashboard = () => {
                                                 </td>
                                                 {result.actualLabel && (
                                                     <td>
-                                                        <Badge
-                                                            bg={result.actualLabel === 'POSITIVE' ? 'success' : 'danger'}
-                                                        >
+                                                        <Badge bg={result.actualLabel === 'POSITIVE' ? 'success' : 'danger'}>
                                                             {result.actualLabel}
                                                         </Badge>
                                                     </td>

@@ -316,14 +316,29 @@ def get_dataset_classifications(dataset_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/delete_classification/<classification_id>', methods=['DELETE'])
-def delete_classification(classification_id):
+@app.route('/api/delete_prediction/<classification_id>', methods=['DELETE'])
+def delete_prediction(classification_id):
     try:
         # Delete classification from the database
         result = mongo.db.predictions.delete_one({'_id': ObjectId(classification_id)})
 
         if result.deleted_count == 0:
             return jsonify({"error": "Classification not found"}), 404
+
+        return jsonify({"message": "Classification deleted successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+@app.route('/api/delete_classification/<classification_id>', methods=['DELETE'])
+@login_required
+def delete_classification(classification_id):
+    try:
+        result = mongo.db.classifications.delete_one({
+            '_id': ObjectId(classification_id),
+            'user_id': ObjectId(current_user.id)  # Ensure user can only delete their own
+        })
+
+        if result.deleted_count == 0:
+            return jsonify({"error": "Classification not found or unauthorized"}), 404
 
         return jsonify({"message": "Classification deleted successfully"}), 200
     except Exception as e:
@@ -515,6 +530,7 @@ def register():
         "message": "User created successfully",
         "id": str(result.inserted_id)
     }), 201
+
 def get_user_api_key_openai():
     """Retrieve the user's OpenAI API key securely."""
     if not current_user.is_authenticated:

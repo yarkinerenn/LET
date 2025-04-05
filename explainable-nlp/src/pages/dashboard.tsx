@@ -171,7 +171,7 @@ const Dashboard = () => {
     const handleDeleteClassification = async (classificationId: string) => {
         try {
             // Send delete request to the backend
-            const response = await axios.delete(`http://localhost:5000/api/delete_classification/${classificationId}`, {
+            const response = await axios.delete(`http://localhost:5000/api/delete_prediction/${classificationId}`, {
                 withCredentials: true
             });
 

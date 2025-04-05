@@ -171,7 +171,7 @@ const Settings = () => {
 
                 <ButtonGroup className="d-flex justify-content-start">
                     <ToggleButton
-                        id="provider-openai"
+                        id="providerex-openai"
                         type="radio"
                         variant={providerex === 'openai' ? 'dark' : 'outline-primary'}
                         name="provider"
@@ -183,7 +183,7 @@ const Settings = () => {
                         OpenAI
                     </ToggleButton>
                     <ToggleButton
-                        id="provider-groq"
+                        id="providerex-groq"
                         type="radio"
                         variant={providerex === 'groq' ? 'dark' : 'outline-primary'}
                         name="provider"
