@@ -52,7 +52,6 @@ def get_dataset(dataset_id):
     try:
         df = pd.read_csv(filepath)
         data_preview = df.head(20).to_dict(orient="records")  # Return first 20 rows
-        print(data_preview)
         return jsonify({"filename": dataset["filename"], "data": data_preview})
     except Exception as e:
         print(e)
@@ -75,8 +74,7 @@ def classify_dataset(dataset_id):
         model_name = data.get('model', 'gpt-3.5-turbo')
         text_column = data.get('text_column', 'text')
         label_column = data.get('label_column','label')
-        print(text_column)
-
+        print(provider)
         # Get dataset metadata
         dataset = mongo.db.datasets.find_one({"_id": ObjectId(dataset_id)})
         if not dataset:
@@ -125,7 +123,7 @@ def classify_dataset(dataset_id):
         df.head(100)
         df = df.sample(frac=1, random_state=42).reset_index(drop=True)
         df.head(100)
-        samples = df.head(100).iterrows()
+        samples = df.head(10).iterrows()
         for _, row in tqdm(samples, total=min(100, len(df)), desc="Classifying"):
             try:
                 text = str(row[text_column])[:500]  # Truncate long texts
@@ -305,7 +303,7 @@ def get_dataset_classifications(dataset_id):
             "model": 1,
             "created_at": 1,
             "stats": 1
-        }))
+        }).sort("created_at", -1))
 
         for cls in classifications:
             cls['_id'] = str(cls['_id'])
@@ -621,6 +619,7 @@ def logout():
 @app.route('/api/check_auth', methods=['GET'])
 def check_auth():
     if current_user.is_authenticated:
+        print('very true')
         return jsonify({
             "authenticated": True,
             "user": {
@@ -628,6 +627,7 @@ def check_auth():
                 "username": current_user.username
             }
         })
+    print('very false')
     return jsonify({"authenticated": False})
 # Load DistilBERT model
 tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased-finetuned-sst-2-english")
@@ -675,7 +675,6 @@ def analyze_text_with_llm():
         # Get the text from the request
         data = request.json
         text = data.get('text', '')
-        print("Text received:", text)
         provider=data.get('provider')
         model=data.get('model')
 
@@ -720,7 +719,6 @@ def analyze_text_with_llm():
             )
 
             sentiment= chat_completion.choices[0].message.content
-            print(sentiment)
 
             if 'positive' in sentiment.lower():
                 sentiment = "POSITIVE"
@@ -775,7 +773,6 @@ def analyze_text_with_llm():
 @login_required
 def explain_prediction():
     try:
-        print("Current User:", current_user)  # Log the current user
         data = request.json
         prediction_id = data.get('prediction_id')
         text = data.get('text'  )
@@ -870,7 +867,6 @@ def generate_shap_explanation(input_text, label):
         shap_values2 = explainer2([input_text])
 
         output_str = get_top_phrases(shap_values2, top_n=10)
-        print(output_str)
         plot=shap.plots.text(shap_values2[:, :, 1],display=False)
 
         return plot,output_str
@@ -921,7 +917,6 @@ def generate_llm_explanation_of_shap():
                 Focus on key words and overall tone.
                 Keep explanation under 3 sentences.
             """
-            print(shapwords,'these are the values')
 
             response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
@@ -958,7 +953,6 @@ def generate_llm_explanation_of_shap():
                 ],
                 model=model,
             )
-            print(shapwords,'these are the values')
 
             return chat_completion.choices[0].message.content
 

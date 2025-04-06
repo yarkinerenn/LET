@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link,useNavigate } from 'react-router-dom';
 import { Container, Row, Col, Card, Table, Alert, Spinner, Button, Badge } from 'react-bootstrap';
 import axios from 'axios';
 import {
@@ -56,6 +56,7 @@ const ClassificationDashboard = () => {
     const [error, setError] = useState<string | null>(null);
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
+    const navigate = useNavigate();
 
     useEffect(() => {
         const fetchData = async () => {
@@ -123,14 +124,6 @@ const ClassificationDashboard = () => {
 
     return (
         <Container fluid className="py-4">
-            <Row className="mb-4">
-                <Col>
-                    <Link to={`/datasets/${datasetId}`}>
-                        <Button variant="outline-secondary">← Back to Dataset</Button>
-                    </Link>
-                </Col>
-            </Row>
-
             {loading ? (
                 <div className="text-center">
                     <Spinner animation="border" />

@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useParams, Link,useNavigate } from "react-router-dom";
 import { Container, Row, Col, Table, Button, Alert, Spinner, Card,Badge } from "react-bootstrap";
 import axios from "axios";
+
+import {useProvider} from "../modules/provider";
 interface ClassificationItem {
     _id: string;
     method: string;
@@ -27,6 +29,8 @@ const DatasetView = () => {
     const navigate = useNavigate();
     const [loadingClassifications, setLoadingClassifications] = useState(false);
     const [classifications, setClassifications] = useState<ClassificationItem[]>([]);
+    const { provider, model } = useProvider();
+
     const formatDate = (dateString: string) => {
         return new Date(dateString).toLocaleString();
     };
@@ -66,7 +70,7 @@ const DatasetView = () => {
         try {
             const response = await axios.post(
                 `http://localhost:5000/api/classify/${datasetId}`,
-                { method },
+                { method:method,provider: provider, model: model },
                 { withCredentials: true }
             );
 
@@ -74,6 +78,7 @@ const DatasetView = () => {
             navigate(`/datasets/${datasetId}/classifications/${response.data.classification_id}`);
 
         } catch (err) {
+            console.log(err);
             setError(`Classification using ${method.toUpperCase()} failed.`);
         } finally {
             setClassifying(null);
@@ -214,13 +219,7 @@ const DatasetView = () => {
 
                 {/* Main Content */}
                 <Col md={9}>
-                    <Row className="mb-4">
-                        <Col>
-                            <Link to="/datasets">
-                                <Button variant="secondary">← Back to Datasets</Button>
-                            </Link>
-                        </Col>
-                    </Row>
+
 
                     {loading ? (
                         <div className="text-center">
