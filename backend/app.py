@@ -56,6 +56,7 @@ def get_dataset(dataset_id):
     except Exception as e:
         print(e)
         return jsonify({"error": str(e)}), 500
+
 @app.route('/api/classify/<dataset_id>', methods=['POST'])
 @login_required
 def classify_dataset(dataset_id):
@@ -961,7 +962,35 @@ def generate_llm_explanation_of_shap():
     except Exception as e:
         print(f"Error: {e}")
         return f"Error: {str(e)}"
+@app.route('/api/explanation/<classification_id>/<result_id>', methods=['GET'])
+@login_required
+def get_explanation(classification_id, result_id):
+    try:
+        classification = mongo.db.classifications.find_one({
+            "_id": ObjectId(classification_id),
+            "user_id": ObjectId(current_user.id)
+        })
 
+        if not classification:
+            return jsonify({"error": "Classification not found"}), 404
+
+        result = classification['results'][int(result_id)]
+
+        return jsonify({
+            "text": result['text'],
+            "prediction": result['label'],
+            "confidence": result['score'],
+            "actualLabel": result.get('actualLabel'),
+            "provider": classification.get('provider'),  # Added provider
+            "model": classification.get('model'),        # Added model
+            # Removed the pre-generated explanation and important words
+            # These will be generated on-demand by the frontend
+        })
+
+    except IndexError:
+        return jsonify({"error": "Result not found"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 @app.route('/api/classifications', methods=['GET'])
 @login_required
 def get_classifications():

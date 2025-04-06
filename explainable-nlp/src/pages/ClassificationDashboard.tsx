@@ -286,7 +286,11 @@ const ClassificationDashboard = () => {
                                         </thead>
                                         <tbody>
                                         {paginatedResults?.map((result, index) => (
-                                            <tr key={index}>
+                                            <tr
+                                                key={index}
+                                                onClick={() => navigate(`/datasets/${datasetId}/classifications/${classificationId}/results/${index}`)}
+                                                style={{ cursor: 'pointer' }}
+                                            >
                                                 <td className="text-truncate" style={{ maxWidth: '300px' }}>
                                                     {result.text}
                                                 </td>
