@@ -25,24 +25,51 @@ const ExplanationPage = () => {
     const [shapString, setShapString] = useState('');
     const [shapExplanation, setShapExplanation] = useState('');
     const navigate = useNavigate();
+    const [totalResults, setTotalResults] = useState(0);
+    const [currentResultIndex, setCurrentResultIndex] = useState(0);
 
     useEffect(() => {
-        const fetchExplanation = async () => {
+        const fetchData = async () => {
             try {
-                const response = await axios.get(
+                // Fetch explanation data
+                const explanationResponse = await axios.get(
                     `http://localhost:5000/api/explanation/${classificationId}/${resultId}`,
                     { withCredentials: true }
                 );
-                setExplanation(response.data);
+                setExplanation(explanationResponse.data);
+
+                // Fetch classification metadata to get total results
+                const classificationResponse = await axios.get(
+                    `http://localhost:5000/api/classification/${classificationId}`,
+                    { withCredentials: true }
+                );
+
+                // Use optional chaining and default to empty array if results is undefined
+                const resultsLength = classificationResponse.data.results?.length || 0;
+                setTotalResults(resultsLength);
+
+                // Ensure resultId is parsed correctly, default to 0 if invalid
+                const parsedResultId = Number(resultId) || 0;
+                setCurrentResultIndex(parsedResultId);
+
             } catch (err) {
-                setError("Failed to load explanation");
+                setError("Failed to load data");
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchExplanation();
-    }, [classificationId, resultId]);
+        fetchData();
+    }, [classificationId, resultId]); // Add resultId to dependency array
+    const handlePrevious = () => {
+        const newIndex = currentResultIndex - 1;
+        navigate(`/datasets/${datasetId}/classifications/${classificationId}/results/${newIndex}`);
+    };
+
+    const handleNext = () => {
+        const newIndex = currentResultIndex + 1;
+        navigate(`/datasets/${datasetId}/classifications/${classificationId}/results/${newIndex}`);
+    };
 
     const handleGenerateExplanation = async () => {
         if (!explanation) return;
@@ -99,13 +126,37 @@ const ExplanationPage = () => {
 
     return (
         <Container className="py-4">
-            <Button
-                variant="outline-secondary"
-                onClick={() => navigate(`/datasets/${datasetId}/classifications/${classificationId}`)}
-                className="mb-4"
-            >
-                ← Back to Classification
-            </Button>
+            <div className="d-flex justify-content-between mb-4">
+                <Button
+                    variant="outline-secondary"
+                    onClick={() => navigate(`/datasets/${datasetId}/classifications/${classificationId}`)}
+                >
+                    ← Back to Classification
+                </Button>
+
+                <div className="d-flex gap-2">
+                    <Button
+                        variant="outline-primary"
+                        onClick={handlePrevious}
+                        disabled={currentResultIndex === 0}
+                    >
+                        ← Previous
+                    </Button>
+
+                    <Button
+                        variant="outline-primary"
+                        onClick={handleNext}
+                        disabled={currentResultIndex >= totalResults - 1}
+                    >
+                        Next →
+                    </Button>
+                </div>
+            </div>
+
+            <div className="text-center mb-4 text-muted">
+                Result {currentResultIndex + 1} of {totalResults}
+            </div>
+
 
             {loading ? (
                 <div className="text-center py-5">
@@ -274,6 +325,7 @@ const ExplanationPage = () => {
                     </Col>
                 </Row>
             ) : null}
+
         </Container>
     );
 };
