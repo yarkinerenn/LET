@@ -440,8 +440,6 @@ const Dashboard = () => {
                             </Card.Body>
                         </Card>
 
-                        {/* AI Provider Settings */}
-
                     </div>
                     {(explanation!=='' || plot) && (
                         <Card className="mt-3 border-dark-subtle">

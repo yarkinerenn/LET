@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Container, Row, Col, Card, Alert, Spinner, Button, Badge } from 'react-bootstrap';
+import {Container, Row, Col, Card, Alert, Spinner, Button, Badge, Form} from 'react-bootstrap';
 import axios from 'axios';
+import {useProvider} from "../modules/provider";
 
 interface ExplanationData {
     text: string;
@@ -15,21 +16,25 @@ interface ExplanationData {
 }
 
 const ExplanationPage = () => {
+    const { provider, model,providerex,modelex } = useProvider();
     const { datasetId, classificationId, resultId } = useParams();
+    const [explanationtext, setExplanationtext] = useState('');
     const [explanation, setExplanation] = useState<ExplanationData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isExplaining, setIsExplaining] = useState(false);
     const [explainerType, setExplainerType] = useState<'llm' | 'shap'>('llm');
-    const [shapPlot, setShapPlot] = useState('');
+    const [plot, setPlot] = useState('');
     const [shapString, setShapString] = useState('');
     const [shapExplanation, setShapExplanation] = useState('');
     const navigate = useNavigate();
     const [totalResults, setTotalResults] = useState(0);
     const [currentResultIndex, setCurrentResultIndex] = useState(0);
+    const [shapstring, setShapstring] = useState('');
 
     useEffect(() => {
         const fetchData = async () => {
+            console.log(providerex,modelex,'models and stuff')
             try {
                 // Fetch explanation data
                 const explanationResponse = await axios.get(
@@ -37,6 +42,7 @@ const ExplanationPage = () => {
                     { withCredentials: true }
                 );
                 setExplanation(explanationResponse.data);
+                console.log(explanationResponse.data);
 
                 // Fetch classification metadata to get total results
                 const classificationResponse = await axios.get(
@@ -61,6 +67,33 @@ const ExplanationPage = () => {
 
         fetchData();
     }, [classificationId, resultId]); // Add resultId to dependency array
+    const generateExplanation = async () => {
+        setIsExplaining(true);
+        // @ts-ignore
+        setExplanationtext('');
+        try {
+            const response = await axios.post('http://localhost:5000/api/explain', {
+                truelabel: explanation?.actualLabel,
+                predictedlabel: explanation?.prediction,
+                confidence: explanation?.confidence,
+                text: explanation?.text,
+                explainer_type: explainerType,
+                provider: providerex ,
+                model: modelex,
+
+            }, { withCredentials: true } );
+
+            if (explainerType === 'shap') {
+                setPlot(response.data.explanation);
+                setShapstring(response.data.top_words);
+            } else {
+                setExplanationtext(response.data.explanation); // Normal metin geldiğinde kaydet.
+            }
+        } catch (err) {
+            setError('Failed to generate explanation');
+        }
+        setIsExplaining(false);
+    };
     const handlePrevious = () => {
         const newIndex = currentResultIndex - 1;
         navigate(`/datasets/${datasetId}/classifications/${classificationId}/results/${newIndex}`);
@@ -89,7 +122,7 @@ const ExplanationPage = () => {
             );
 
             if (explainerType === 'shap') {
-                setShapPlot(response.data.explanation);
+                setPlot(response.data.explanation);
                 setShapString(response.data.top_words);
             } else {
                 setExplanation(prev => prev ? {
@@ -169,162 +202,128 @@ const ExplanationPage = () => {
                     <Col md={8} className="mx-auto">
                         <Card>
                             <Card.Body>
+                                <div className="mb-4   d-flex flex-column flex-md-row gap-4">
+                                    {/* Left: Original Text */}
+                                    <div className="flex-grow-1">
+                                        <h5 className="mb-3">Original Text</h5>
+                                        <p className="p-3 bg-light rounded mb-2" style={{ lineHeight: '1.6', fontSize: '0.95rem' }}>
+                                            {explanation.text}
+                                        </p>
+                                        <div style={{ fontSize: '0.75rem', color: '#666' }}>
+                                            Confidence: {(explanation.confidence * 100).toFixed(1)}%
+                                        </div>
+                                    </div>
 
-                                <div className="mb-4">
-                                    <h5>Original Text</h5>
-                                    <p className="p-3 bg-light rounded">{explanation.text}</p>
-                                </div>
-
-                                <Row className="mb-4">
-                                    <Col md={6}>
-                                        <div className="border rounded p-3 text-center bg-white shadow-sm">
+                                    {/* Right: Labels */}
+                                    <div className="d-flex flex-column justify-content-center align-items-center">
+                                        <div className="mb-3 text-center">
                                             <div className="text-muted mb-1" style={{ fontSize: '0.85rem' }}>Prediction</div>
                                             <div
-                                                className={`d-inline-block px-3 py-1 rounded-pill fw-semibold text-white ${explanation.prediction === 'POSITIVE' ? 'bg-success' : 'bg-danger'}`}
-                                                style={{ fontSize: '0.8rem' }}
+                                                className={`d-flex justify-content-center align-items-center px-4 py-2 rounded-pill fw-semibold text-white shadow-sm ${explanation.prediction === 'POSITIVE' ? 'bg-success' : 'bg-danger'}`}
+                                                style={{ fontSize: '0.9rem', minWidth: '120px', height: '38px' }}
                                             >
                                                 {explanation.prediction}
                                             </div>
-                                            <div className="mt-2" style={{ fontSize: '0.75rem', color: '#666' }}>
-                                                Confidence: {(explanation.confidence * 100).toFixed(1)}%
+                                        </div>
+
+                                        <div className="text-center">
+                                            <div className="text-muted mb-1" style={{ fontSize: '0.85rem' }}>Actual Label</div>
+                                            <div
+                                                className={`d-flex justify-content-center align-items-center px-4 py-2 rounded-pill fw-semibold text-white shadow-sm ${explanation.actualLabel === 1 ? 'bg-success' : 'bg-danger'}`}
+                                                style={{ fontSize: '0.9rem', minWidth: '120px', height: '38px' }}
+                                            >
+                                                {explanation.actualLabel === 1 ? 'POSITIVE' : 'NEGATIVE'}
                                             </div>
                                         </div>
-                                    </Col>
-
-                                    {explanation.actualLabel !== undefined && (
-                                        <Col md={6}>
-                                            <div className="border rounded p-3 text-center bg-white shadow-sm">
-                                                <div className="text-muted mb-1" style={{ fontSize: '0.85rem' }}>Actual Label</div>
-                                                <div
-                                                    className={`d-inline-block px-3 py-1 rounded-pill fw-semibold text-white ${explanation.actualLabel === 1 ? 'bg-success' : 'bg-danger'}`}
-                                                    style={{ fontSize: '0.8rem' }}
-                                                >
-                                                    {explanation.actualLabel === 1 ? 'POSITIVE' : 'NEGATIVE'}
-                                                </div>
-                                            </div>
-                                        </Col>
-                                    )}
-                                </Row>
-
-                                <div className="mb-4">
-                                    <h5>Explanation Controls</h5>
-                                    <div className="d-flex gap-2 mb-3">
-                                        <Button
-                                            variant={explainerType === 'llm' ? 'dark' : 'outline-dark'}
-                                            onClick={() => setExplainerType('llm')}
-                                        >
-                                            LLM Explanation
-                                        </Button>
-                                        <Button
-                                            variant={explainerType === 'shap' ? 'dark' : 'outline-dark'}
-                                            onClick={() => setExplainerType('shap')}
-                                        >
-                                            SHAP Visualization
-                                        </Button>
                                     </div>
-
-                                    <Button
-                                        variant="dark"
-                                        onClick={handleGenerateExplanation}
-                                        disabled={isExplaining}
-                                    >
-                                        {isExplaining ? (
-                                            <>
-                                                <Spinner
-                                                    as="span"
-                                                    animation="border"
-                                                    size="sm"
-                                                    role="status"
-                                                    aria-hidden="true"
-                                                />
-                                                <span className="ms-2">
-                                                    Generating {explainerType.toUpperCase()} Explanation...
-                                                </span>
-                                            </>
-                                        ) : `Generate ${explainerType.toUpperCase()} Explanation`}
-                                    </Button>
                                 </div>
 
-                                {explainerType === 'llm' && explanation.explanation && (
-                                    <Card className="mb-4">
-                                        <Card.Body>
-                                            <Card.Title>AI Explanation</Card.Title>
-                                            <p className="lead">{explanation.explanation}</p>
-                                        </Card.Body>
-                                    </Card>
-                                )}
-
-                                {explainerType === 'shap' && shapPlot && (
-                                    <>
-                                        <Card className="mb-4">
-                                            <Card.Body>
-                                                <Card.Title>SHAP Visualization</Card.Title>
-                                                <div
-                                                    dangerouslySetInnerHTML={{ __html: shapPlot }}
-                                                    style={{
-                                                        fontFamily: 'monospace',
-                                                        fontSize: '14px',
-                                                        lineHeight: '1.5',
-                                                        overflowX: 'auto'
-                                                    }}
-                                                />
-                                            </Card.Body>
-                                        </Card>
-
-                                        <Button
-                                            variant="secondary"
-                                            onClick={handleGenerateShapExplanation}
-                                            disabled={isExplaining}
-                                            className="mb-3"
-                                        >
-                                            {isExplaining ? (
-                                                <>
-                                                    <Spinner
-                                                        as="span"
-                                                        animation="border"
-                                                        size="sm"
-                                                        role="status"
-                                                        aria-hidden="true"
-                                                    />
-                                                    <span className="ms-2">Generating Enhanced Explanation...</span>
-                                                </>
-                                            ) : "Explain SHAP Visualization with LLM"}
-                                        </Button>
-
-                                        {shapExplanation && (
-                                            <Card>
-                                                <Card.Body>
-                                                    <Card.Title>Enhanced SHAP Explanation</Card.Title>
-                                                    <p style={{ whiteSpace: 'pre-wrap' }}>{shapExplanation}</p>
-                                                </Card.Body>
-                                            </Card>
-                                        )}
-                                    </>
-                                )}
-
-                                {explanation.importantWords && (
-                                    <Card>
-                                        <Card.Body>
-                                            <Card.Title>Key Influencing Words</Card.Title>
-                                            <div className="d-flex flex-wrap gap-2">
-                                                {explanation.importantWords.map((word, index) => (
-                                                    <Badge
-                                                        key={index}
-                                                        bg={word.score > 0 ? 'success' : 'danger'}
-                                                        className="p-2"
-                                                    >
-                                                        {word.word} ({word.score > 0 ? '+' : ''}{word.score.toFixed(2)})
-                                                    </Badge>
-                                                ))}
-                                            </div>
-                                        </Card.Body>
-                                    </Card>
-                                )}
                             </Card.Body>
                         </Card>
                     </Col>
                 </Row>
+
+
             ) : null}
+            <div className="bg-white rounded-4 shadow-sm p-4 mb-4 border border-light-subtle">
+                <div className="mb-3 d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between">
+                    <h5 className="mb-2 mb-md-0">Explainer Type</h5>
+                    <div className="d-flex gap-2">
+                        <Button
+                            variant={explainerType === 'llm' ? 'dark' : 'outline-dark'}
+                            onClick={() => setExplainerType('llm')}
+                        >
+                            LLM
+                        </Button>
+                        {explanation?.provider===null && (
+                            <Button
+                                variant={explainerType === 'shap' ? 'dark' : 'outline-dark'}
+                                onClick={() => setExplainerType('shap')}
+                            >
+                                SHAP
+                            </Button>
+                        )}
+                    </div>
+                </div>
+
+                <hr className="my-3" />
+
+                <div className="text-center">
+                    <Button
+                        variant="dark"
+                        size="lg"
+                        className="px-4"
+                        onClick={generateExplanation}
+                        disabled={isExplaining}
+                    >
+                        {isExplaining ? (
+                            <>
+                                <Spinner
+                                    as="span"
+                                    animation="border"
+                                    size="sm"
+                                    role="status"
+                                    aria-hidden="true"
+                                />
+                                <span className="ms-2">
+                        Generating {explainerType.toUpperCase()} Explanation...
+                    </span>
+                            </>
+                        ) : (
+                            `Explain with ${explainerType.toUpperCase()}`
+                        )}
+                    </Button>
+                </div>
+            </div>
+            {(explanationtext!=='' || plot) && (
+                <Card className="mt-3 border-dark-subtle">
+                    <Card.Body>
+                        <Card.Title>
+                            {explainerType === 'shap' ? 'SHAP Explanation' : 'Explanation'}
+                        </Card.Title>
+                        <div className="text-muted">
+                            {explainerType === 'shap' ? (
+                                // SHAP HTML görselleştirmesi
+
+                                <div
+                                    dangerouslySetInnerHTML={{__html: plot}}
+                                    style={{
+                                        fontFamily: 'monospace',
+                                        fontSize: '14px',
+                                        lineHeight: '1.5',
+                                        overflowX: 'auto',
+                                        minHeight: '100px'  // Boş görünmesin diye minimum yükseklik ekle
+                                    }}
+                                    className="shap-html-container"
+                                />
+                            ) : (
+                                // LLM text explanation
+                                <p style={{whiteSpace: 'pre-wrap'}}>{explanationtext}</p>
+                            )}
+                        </div>
+                    </Card.Body>
+                </Card>
+            )}
 
         </Container>
     );

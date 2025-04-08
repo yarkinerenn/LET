@@ -775,25 +775,42 @@ def analyze_text_with_llm():
 def explain_prediction():
     try:
         data = request.json
-        prediction_id = data.get('prediction_id')
+        prediction_id = data.get('prediction_id','fromdata')
+        predictedlabel=data.get('predictedlabel')
+        truelabel=data.get('truelabel')
+        confidence=data.get('confidence')
         text = data.get('text'  )
         provider=data.get('provider')
         model=data.get('model')
         explainer_type = data.get('explainer_type', 'llm')
 
-        if not prediction_id or not text:
-            return jsonify({"error": "Missing prediction_id or text"}), 400
+        if prediction_id=='fromdata':
+            if not text:
+                return jsonify({"error": "Missing text"}), 400
 
-        prediction = mongo.db.predictions.find_one({"_id": ObjectId(prediction_id)})
-        if not prediction:
-            return jsonify({"error": "Prediction not found"}), 404
+            if explainer_type == 'shap':
+                explanation_data,top_words = generate_shap_explanation(text, predictedlabel)
+                return jsonify({'explanation': explanation_data,'explainer_type': explainer_type , 'top_words': top_words})
+            else:
+                explanation_text = generate_llm_explanationofdataset(text, predictedlabel,truelabel, confidence,provider,model)
+                return jsonify({"explanation": explanation_text,'explainer_type': explainer_type})
 
-        if explainer_type == 'shap':
-            explanation_data,top_words = generate_shap_explanation(text, prediction['label'])
-            return jsonify({'explanation': explanation_data,'explainer_type': explainer_type , 'top_words': top_words})
+
         else:
-            explanation_text = generate_llm_explanation(text, prediction['label'], prediction['score'],provider,model)
-            return jsonify({"explanation": explanation_text,'explainer_type': explainer_type})
+
+            if not prediction_id or not text:
+                return jsonify({"error": "Missing prediction_id or text"}), 400
+
+            prediction = mongo.db.predictions.find_one({"_id": ObjectId(prediction_id)})
+            if not prediction:
+                return jsonify({"error": "Prediction not found"}), 404
+
+            if explainer_type == 'shap':
+                explanation_data,top_words = generate_shap_explanation(text, prediction['label'])
+                return jsonify({'explanation': explanation_data,'explainer_type': explainer_type , 'top_words': top_words})
+            else:
+                explanation_text = generate_llm_explanation(text, prediction['label'], prediction['score'],provider,model)
+                return jsonify({"explanation": explanation_text,'explainer_type': explainer_type})
 
     except Exception as e:
         print(f"Error generating explanation: {str(e)}")
@@ -858,6 +875,65 @@ def generate_llm_explanation(text, label, score,provider,model):
     except Exception as e:
             print(f"Error: {e}")
             return f"Error: {str(e)}"
+def generate_llm_explanationofdataset(text, label,truelabel, score,provider,model):
+    try:
+        if provider == 'openai':
+
+            openai_api_key = get_user_api_key_openai()
+
+            if not openai_api_key:
+                return "Error: No OpenAI API key found for this user."
+
+            client = OpenAI(api_key=openai_api_key)
+
+            prompt = f"""
+                Explain this sentiment analysis result in simple terms:
+                
+                Text: {text}
+                Sentiment: {label} ({score}% confidence)
+                
+                Focus on key words and overall tone.
+                Keep explanation under 3 sentences.
+            """
+
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": prompt}]
+            )
+
+            explanation = response.choices[0].message.content
+            return explanation
+        else:
+            api= get_user_api_key_groq()
+
+            client = Groq(
+                api_key=api,
+            )
+
+            chat_completion = client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "user",
+                        "content":f"""
+                Explain this sentiment analysis result in simple terms:
+                
+                Text: {text}
+                Sentiment: {label} ({score}% confidence)
+                
+                Focus on key words and overall tone.
+                Keep explanation under 3 sentences.
+            """,
+                    }
+                ],
+                model=model,
+            )
+            return chat_completion.choices[0].message.content
+
+
+
+    except Exception as e:
+        print(f"Error: {e}")
+        return f"Error: {str(e)}"
 
 def generate_shap_explanation(input_text, label):
     """Generate an explanation using SHAP values"""
