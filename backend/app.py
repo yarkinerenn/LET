@@ -969,77 +969,146 @@ def generate_llm_explanation_of_shap():
         model=data.get('model')
         provider=data.get('provider')
         explainer_type = data.get('explainer_type', 'llm')
+        if prediction_id:
 
-        if not prediction_id or not text:
-            return jsonify({"error": "Missing prediction_id or text"}), 400
+            if not prediction_id or not text:
+                return jsonify({"error": "Missing prediction_id or text"}), 400
 
-        prediction = mongo.db.predictions.find_one({"_id": ObjectId(prediction_id)})
-        if not prediction:
-            return jsonify({"error": "Prediction not found"}), 404
+            prediction = mongo.db.predictions.find_one({"_id": ObjectId(prediction_id)})
+            if not prediction:
+                return jsonify({"error": "Prediction not found"}), 404
 
-        label=prediction['label']
-        score=prediction['score']
-        shapwords=data.get('shapstring')
-        if provider == 'openai':
+            label=prediction['label']
+            score=prediction['score']
+            shapwords=data.get('shapstring')
+            if provider == 'openai':
 
-            openai_api_key = get_user_api_key_openai()
+                openai_api_key = get_user_api_key_openai()
 
-            if not openai_api_key:
-                return "Error: No OpenAI API key found for this user."
+                if not openai_api_key:
+                    return "Error: No OpenAI API key found for this user."
 
-            client = OpenAI(api_key=openai_api_key)
+                client = OpenAI(api_key=openai_api_key)
 
-            prompt = f"""
-                Explain this sentiment analysis result in simple terms with most affecting words provided by SHAP:
-                
-                Text: {text}
-                Sentiment: {label} ({score}% confidence)
-                
-                shap: 
-                
-                {shapwords}
-                
-                Focus on key words and overall tone.
-                Keep explanation under 3 sentences.
-            """
+                prompt = f"""
+                    Explain this sentiment analysis result in simple terms with most affecting words provided by SHAP:
+                    
+                    Text: {text}
+                    Sentiment: {label} ({score}% confidence)
+                    
+                    shap: 
+                    
+                    {shapwords}
+                    
+                    Focus on key words and overall tone.
+                    Keep explanation under 3 sentences.
+                """
 
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "user", "content": prompt}]
-            )
+                response = client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[{"role": "user", "content": prompt}]
+                )
 
-            explanation = response.choices[0].message.content
-            return explanation
+                explanation = response.choices[0].message.content
+                return explanation
+            else:
+                api= get_user_api_key_groq()
+
+                client = Groq(
+                    api_key=api,
+                )
+
+                chat_completion = client.chat.completions.create(
+                    messages=[
+                        {
+                            "role": "user",
+                            "content":f"""
+                    Explain this sentiment analysis result in simple terms with most affecting words provided by SHAP:
+                    
+                    Text: {text}
+                    Sentiment: {label} ({score}% confidence)
+                    
+                    shap: 
+    
+                    {shapwords}
+                    
+                    Focus on key words and overall tone.
+                    Keep explanation under 3 sentences.
+                """,
+                        }
+                    ],
+                    model=model,
+                )
+
+                return chat_completion.choices[0].message.content
+
         else:
-            api= get_user_api_key_groq()
+            if not text:
+                return jsonify({"error": "Missing prediction_id or text"}), 400
 
-            client = Groq(
-                api_key=api,
-            )
+            label=data.get('label')
+            score=data.get('confidence')
+            shapwords=data.get('shapstring')
+            if provider == 'openai':
 
-            chat_completion = client.chat.completions.create(
-                messages=[
-                    {
-                        "role": "user",
-                        "content":f"""
-                Explain this sentiment analysis result in simple terms with most affecting words provided by SHAP:
-                
-                Text: {text}
-                Sentiment: {label} ({score}% confidence)
-                
-                shap: 
+                openai_api_key = get_user_api_key_openai()
 
-                {shapwords}
-                
-                Focus on key words and overall tone.
-                Keep explanation under 3 sentences.
-            """,
-                    }
-                ],
-                model=model,
-            )
+                if not openai_api_key:
+                    return "Error: No OpenAI API key found for this user."
 
-            return chat_completion.choices[0].message.content
+                client = OpenAI(api_key=openai_api_key)
+
+                prompt = f"""
+                    Explain this sentiment analysis result in simple terms with most affecting words provided by SHAP:
+                    
+                    Text: {text}
+                    Sentiment: {label} ({score}% confidence)
+                    
+                    shap: 
+                    
+                    {shapwords}
+                    
+                    Focus on key words and overall tone.
+                    Keep explanation under 3 sentences.
+                """
+
+                response = client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[{"role": "user", "content": prompt}]
+                )
+
+                explanation = response.choices[0].message.content
+                return explanation
+            else:
+                api= get_user_api_key_groq()
+
+                client = Groq(
+                    api_key=api,
+                )
+
+                chat_completion = client.chat.completions.create(
+                    messages=[
+                        {
+                            "role": "user",
+                            "content":f"""
+                    Explain this sentiment analysis result in simple terms with most affecting words provided by SHAP:
+                    
+                    Text: {text}
+                    Sentiment: {label} ({score}% confidence)
+                    
+                    shap: 
+    
+                    {shapwords}
+                    
+                    Focus on key words and overall tone.
+                    Keep explanation under 3 sentences.
+                """,
+                        }
+                    ],
+                    model=model,
+                )
+
+                return chat_completion.choices[0].message.content
 
 
 

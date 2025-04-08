@@ -127,6 +127,7 @@ const ExplanationPage = () => {
             if (explainerType === 'shap') {
                 setPlot(response.data.explanation);
                 setShapString(response.data.top_words);
+                console.log(response.data.top_words);
             } else {
                 setExplanation(prev => prev ? {
                     ...prev,
@@ -148,8 +149,10 @@ const ExplanationPage = () => {
                 {
                     text: explanation?.text,
                     shapwords: shapString,
-                    provider: explanation?.provider,
-                    model: explanation?.model
+                    provider: providerex,
+                    model: modelex,
+                    label: explanation?.prediction,
+                    confidence: explanation?.confidence,
                 },
                 { withCredentials: true }
             );
@@ -330,6 +333,27 @@ const ExplanationPage = () => {
                         </div>
                     </Card.Body>
                 </Card>
+            )}
+            {plot && explainerType === 'shap' &&(
+                <Button
+                    variant="secondary"
+                    className="mt-3"
+                    onClick={handleGenerateShapExplanation}
+                    disabled={isExplaining}
+                >
+                    {isExplaining ? (
+                        <>
+                            <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true"/>
+                            <span className="ms-2">Explaining SHAP with LLM...</span>
+                        </>
+                    ) : "Explain SHAP with LLM"}
+                </Button>
+            )}
+            {shapExplanation && explainerType === 'shap' && (
+                <div className="mt-3 p-3 border rounded bg-light">
+                    <h6>SHAP LLM Explanation</h6>
+                    <p style={{whiteSpace: "pre-wrap"}}>{shapExplanation}</p>
+                </div>
             )}
 
         </Container>
