@@ -33,6 +33,8 @@ const ExplanationPage = () => {
     const [shapstring, setShapstring] = useState('');
 
     useEffect(() => {
+        setExplanationtext('');
+        setPlot('');
         const fetchData = async () => {
             console.log(providerex,modelex,'models and stuff')
             try {
@@ -66,7 +68,7 @@ const ExplanationPage = () => {
         };
 
         fetchData();
-    }, [classificationId, resultId]); // Add resultId to dependency array
+    }, [classificationId, resultId,currentResultIndex]); // Add resultId to dependency array
     const generateExplanation = async () => {
         setIsExplaining(true);
         // @ts-ignore
@@ -91,6 +93,7 @@ const ExplanationPage = () => {
             }
         } catch (err) {
             setError('Failed to generate explanation');
+            console.log(err);
         }
         setIsExplaining(false);
     };
@@ -245,6 +248,10 @@ const ExplanationPage = () => {
 
 
             ) : null}
+            <Row className="mb-4">
+                <Col md={8} className="mx-auto">
+                </Col>
+            </Row>
             <div className="bg-white rounded-4 shadow-sm p-4 mb-4 border border-light-subtle">
                 <div className="mb-3 d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between">
                     <h5 className="mb-2 mb-md-0">Explainer Type</h5>

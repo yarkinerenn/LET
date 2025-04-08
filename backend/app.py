@@ -938,20 +938,28 @@ def generate_llm_explanationofdataset(text, label,truelabel, score,provider,mode
 def generate_shap_explanation(input_text, label):
     """Generate an explanation using SHAP values"""
     try:
+        # Map label to class index, but make sure we check the prediction first
+        class_index = 1 if label == 'POSITIVE' else 0
+
+        # Generate the explanation
         pmodel = shap.models.TransformersPipeline(classifier, rescale_to_logits=True)
-        pmodel([input_text])
+        _ = pmodel([input_text])  # Trigger internal stuff
         explainer2 = shap.Explainer(pmodel)
         shap_values2 = explainer2([input_text])
 
+        # Check prediction: If prediction is POSITIVE, we need class_index = 0
+        # because shap is showing the opposing class's influence
+        predicted_class = np.argmax(shap_values2.values.sum(axis=1))
+        if predicted_class == 1:  # If predicted POSITIVE, swap the class_index
+            class_index = 0  # For POSITIVE predictions, we need to use the negative class index
+
         output_str = get_top_phrases(shap_values2, top_n=10)
-        plot=shap.plots.text(shap_values2[:, :, 1],display=False)
+        plot = shap.plots.text(shap_values2[:, :, class_index], display=False)
 
-        return plot,output_str
+        return plot, output_str
     except Exception as e:
-        print(f"Error: {e}")
         print(f"Error in SHAP explanation: {str(e)}")
-        return f"Could not generate SHAP explanation: {str(e)}"
-
+        return None, f"Could not generate SHAP explanation: {str(e)}"
 @app.route('/api/explain_withshap', methods=['POST'])
 def generate_llm_explanation_of_shap():
     try:
