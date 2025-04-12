@@ -28,7 +28,62 @@ const Settings = () => {
         { name: "qwen-qwq-32b" }
     ];
     const{ provider, setProvider,providerex, setProviderex, model, setModel, modelex, setModelex } = useProvider();
+    const handleExplanationSettingsUpdate = async () => {
+        const payload = {
+            preferred_providerex: providerex,
+            preferred_modelex: modelex
+        };
 
+        try {
+            const response = await fetch("http://localhost:5000/api/settings/update_preferred_explanation", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                credentials: 'include',
+                body: JSON.stringify(payload),
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                setSuccess("Explanation preferences updated successfully!");
+            } else {
+                setError(result.error || "An error occurred while updating explanation settings.");
+            }
+        } catch (error) {
+            console.error("Explanation update error:", error);
+            setError("Failed to connect to the server.");
+        }
+    };
+    const handleClassificationSettingsUpdate = async () => {
+        const payload = {
+            preferred_provider: provider,
+            preferred_model: model
+        };
+
+        try {
+            const response = await fetch("http://localhost:5000/api/settings/update_preferred_classification", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                credentials: 'include',
+                body: JSON.stringify(payload),
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                setSuccess("Classification preferences updated successfully!");
+            } else {
+                setError(result.error || "An error occurred while updating classification settings.");
+            }
+        } catch (error) {
+            console.error("Classification update error:", error);
+            setError("Failed to connect to the server.");
+        }
+    };
     const handleSubmit = async (e: { preventDefault: () => void }) => {
         e.preventDefault();
 
@@ -120,8 +175,8 @@ const Settings = () => {
                 </Col>
             </Row>
             <div className="mt-4 p-4 rounded bg-light">
-                <h5 className="mb-3">AI Settings</h5>
-                <p className="text-muted mb-3">Select the AI provider for classification:</p>
+                <h5 className="mb-3">Classification Settings</h5>
+                <p className="text-muted mb-3">Select the AI provider for classification</p>
 
                 <ButtonGroup className="d-flex justify-content-start">
                     <ToggleButton
@@ -149,12 +204,11 @@ const Settings = () => {
                         Groq
                     </ToggleButton>
                 </ButtonGroup>
-                {/* Show model selection only if Groq is chosen */}
-                {(provider === 'groq') && (
+
+                {provider === 'groq' && (
                     <div className="mb-3">
                         <span className="me-3">Select Model:</span>
-                        <Form.Select value={model}
-                                     onChange={(e) => setModel(e.target.value)}>
+                        <Form.Select value={model} onChange={(e) => setModel(e.target.value)}>
                             <option value="">-- Select a Model --</option>
                             {groqModels.map((m) => (
                                 <option key={m.name} value={m.name}>
@@ -164,9 +218,17 @@ const Settings = () => {
                         </Form.Select>
                     </div>
                 )}
+
+                <Button
+                    variant="dark"
+                    className="mt-3"
+                    onClick={handleClassificationSettingsUpdate}
+                >
+                    Save Classification Preferences
+                </Button>
             </div>
             <div className="mt-4 p-4 rounded bg-light">
-                <h5 className="mb-3">AI Settings</h5>
+                <h5 className="mb-3">Explanation Settings</h5>
                 <p className="text-muted mb-3">Select the AI provider for explanation</p>
 
                 <ButtonGroup className="d-flex justify-content-start">
@@ -174,7 +236,7 @@ const Settings = () => {
                         id="providerex-openai"
                         type="radio"
                         variant={providerex === 'openai' ? 'dark' : 'outline-primary'}
-                        name="provider"
+                        name="providerex"
                         value="openai"
                         checked={providerex === 'openai'}
                         onChange={(e) => setProviderex(e.currentTarget.value)}
@@ -186,7 +248,7 @@ const Settings = () => {
                         id="providerex-groq"
                         type="radio"
                         variant={providerex === 'groq' ? 'dark' : 'outline-primary'}
-                        name="provider"
+                        name="providerex"
                         value="groq"
                         checked={providerex === 'groq'}
                         onChange={(e) => setProviderex(e.currentTarget.value)}
@@ -195,12 +257,11 @@ const Settings = () => {
                         Groq
                     </ToggleButton>
                 </ButtonGroup>
-                {/* Show model selection only if Groq is chosen */}
-                {(providerex === 'groq') && (
+
+                {providerex === 'groq' && (
                     <div className="mb-3">
                         <span className="me-3">Select Model:</span>
-                        <Form.Select value={modelex}
-                                     onChange={(e) => setModelex(e.target.value)}>
+                        <Form.Select value={modelex} onChange={(e) => setModelex(e.target.value)}>
                             <option value="">-- Select a Model --</option>
                             {groqModels.map((m) => (
                                 <option key={m.name} value={m.name}>
@@ -210,6 +271,14 @@ const Settings = () => {
                         </Form.Select>
                     </div>
                 )}
+
+                <Button
+                    variant="dark"
+                    className="mt-3"
+                    onClick={handleExplanationSettingsUpdate}
+                >
+                    Save Explanation Preferences
+                </Button>
             </div>
         </Container>
     );

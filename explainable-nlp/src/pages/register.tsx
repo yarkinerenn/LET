@@ -75,6 +75,7 @@ const Register: React.FC = () => {
                                     placeholder="Password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
+                                    required
                                 />
                             </Form.Group>
 
@@ -85,7 +86,6 @@ const Register: React.FC = () => {
                                     placeholder="Enter your OpenAI API key"
                                     value={openaiApi}
                                     onChange={(e) => setOpenaiApi(e.target.value)}
-                                    required
                                 />
                             </Form.Group>
 

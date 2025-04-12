@@ -41,6 +41,36 @@ CORS(app, supports_credentials=True)
 # Ensure upload folder exists
 if not os.path.exists(app.config["UPLOAD_FOLDER"]):
     os.makedirs(app.config["UPLOAD_FOLDER"])
+def classify_with_chunks(text, classifier, tokenizer, max_length=512, stride=256):
+    inputs = tokenizer(
+        text,
+        return_overflowing_tokens=True,
+        truncation=True,
+        max_length=max_length,
+        stride=stride,
+        padding=True,  # bu eksikti
+        return_tensors="pt"
+    )
+
+    scores = []
+    labels = []
+    for chunk in inputs['input_ids']:
+        decoded = tokenizer.decode(chunk, skip_special_tokens=True)
+        try:
+            result = classifier(decoded)[0]
+            scores.append(result['score'])
+            labels.append(result['label'].upper())
+        except:
+            continue
+
+    if not scores:
+        return "NEGATIVE", 0.0
+
+    # Majority voting or average
+    avg_score = sum(scores) / len(scores)
+    final_label = max(set(labels), key=labels.count)  # majority vote
+
+    return final_label, avg_score
 @app.route("/api/dataset/<dataset_id>", methods=["GET"])
 def get_dataset(dataset_id):
     dataset = mongo.db.datasets.find_one({"_id": ObjectId(dataset_id)})
@@ -71,8 +101,9 @@ def classify_dataset(dataset_id):
         if method not in CLASSIFICATION_METHODS:
             return jsonify({"error": f"Invalid method. Must be one of: {CLASSIFICATION_METHODS}"}), 400
 
-        provider = data.get('provider', 'openai')
-        model_name = data.get('model', 'gpt-3.5-turbo')
+        user_doc = mongo.db.users.find_one({"_id": ObjectId(current_user.id)})
+        provider = user_doc.get('preferred_provider', 'openai')
+        model_name = user_doc.get('preferred_model', 'gpt-3.5-turbo')
         text_column = data.get('text_column', 'text')
         label_column = data.get('label_column','label')
         print(provider)
@@ -121,18 +152,14 @@ def classify_dataset(dataset_id):
         }
 
         # Process samples (limiting to first 100 for demo)
-        df.head(100)
         df = df.sample(frac=1, random_state=42).reset_index(drop=True)
-        df.head(100)
-        samples = df.head(10).iterrows()
+        samples = df.head(100).iterrows()
         for _, row in tqdm(samples, total=min(100, len(df)), desc="Classifying"):
             try:
-                text = str(row[text_column])[:500]  # Truncate long texts
+                text = str(row[text_column])# Truncate long texts
 
                 if method == 'bert':
-                    result = classifier(text)[0]
-                    label = result['label'].upper()
-                    score = result['score']
+                    label, score = classify_with_chunks(text, classifier, tokenizer)
                 else:
                     # LLM classification
                     if provider in ['openai', 'deepseek']:
@@ -472,6 +499,10 @@ class User(UserMixin):
         self.openai_api = user_data.get('openai_api', '')  # Ensure openai_api is loaded
         self.grok_api = user_data.get('grok_api', '')  # Ensure grok_api is loaded
         self.deepseek_api = user_data.get('deepseek_api', '')
+        self.preferred_provider = user_data.get('preferred_provider', 'openai')
+        self.preferred_model = user_data.get('preferred_model', 'gpt-3.5-turbo')
+        self.preferred_providerex = user_data.get('preferred_providerex', 'openai')
+        self.preferred_modelex = user_data.get('preferred_modelex', 'gpt-3.5-turbo')
     @staticmethod
     def get(user_id):
         user_data = mongo.db.users.find_one({'_id': ObjectId(user_id)})
@@ -514,14 +545,18 @@ def register():
 
 
     user_data = {
-            'username': data['username'],
-            'email': data['email'],
-            'password_hash': password_hash,
-            'role': 'user',  # Default role
-            'openai_api': encrypted_openai_api,  # Encrypted API key
-            'grok_api': encrypted_grok_api,
-            'deepseel_api': encrypted_deepseek_api# Encrypted API key
-        }
+        'username': data['username'],
+        'email': data['email'],
+        'password_hash': password_hash,
+        'role': 'user',
+        'openai_api': encrypted_openai_api,
+        'grok_api': encrypted_grok_api,
+        'deepseek_api': encrypted_deepseek_api,
+        'preferred_provider': data.get('preferred_provider', 'openai'),
+        'preferred_model': data.get('preferred_model', 'gpt-3.5-turbo'),
+        'preferred_providerex': data.get('preferred_providerex', 'openai'),
+        'preferred_modelex': data.get('preferred_modelex', 'gpt-3.5-turbo')
+    }
 
     result = mongo.db.users.insert_one(user_data)
 
@@ -529,7 +564,38 @@ def register():
         "message": "User created successfully",
         "id": str(result.inserted_id)
     }), 201
+@app.route('/api/settings/update_preferred_classification', methods=['POST'])
+@login_required
+def update_preferred_classification():
+    data = request.json
+    preferred_provider = data.get('preferred_provider', 'openai')
+    preferred_model = data.get('preferred_model', 'gpt-3.5-turbo')
 
+    mongo.db.users.update_one(
+        {'_id': ObjectId(current_user.id)},
+        {'$set': {
+            'preferred_provider': preferred_provider,
+            'preferred_model': preferred_model
+        }}
+    )
+
+    return jsonify({"message": "Classification preferences updated successfully"}), 200
+@app.route('/api/settings/update_preferred_explanation', methods=['POST'])
+@login_required
+def update_preferred_explanation():
+    data = request.json
+    preferred_providerex = data.get('preferred_providerex', 'openai')
+    preferred_modelex = data.get('preferred_modelex', 'gpt-3.5-turbo')
+
+    mongo.db.users.update_one(
+        {'_id': ObjectId(current_user.id)},
+        {'$set': {
+            'preferred_providerex': preferred_providerex,
+            'preferred_modelex': preferred_modelex
+        }}
+    )
+
+    return jsonify({"message": "Explanation preferences updated successfully"}), 200
 def get_user_api_key_openai():
     """Retrieve the user's OpenAI API key securely."""
     if not current_user.is_authenticated:
@@ -676,8 +742,11 @@ def analyze_text_with_llm():
         # Get the text from the request
         data = request.json
         text = data.get('text', '')
-        provider=data.get('provider')
-        model=data.get('model')
+        # Get user's preferred classification provider and model
+        user_doc = mongo.db.users.find_one({"_id": ObjectId(current_user.id)})
+        provider = user_doc.get('preferred_provider', 'openai')
+        model = user_doc.get('preferred_model', 'gpt-3.5-turbo')
+
 
         if provider=='openai':
             openai_api_key = get_user_api_key_openai()
@@ -769,6 +838,7 @@ def analyze_text_with_llm():
         })
 
     except Exception as e:
+        print(str(e))
         return jsonify({"error": str(e)}), 500
 @app.route('/api/explain', methods=['POST'])
 @login_required
@@ -780,8 +850,9 @@ def explain_prediction():
         truelabel=data.get('truelabel')
         confidence=data.get('confidence')
         text = data.get('text'  )
-        provider=data.get('provider')
-        model=data.get('model')
+        user_doc = mongo.db.users.find_one({"_id": ObjectId(current_user.id)})
+        provider = user_doc.get('preferred_provideexr', 'openai')
+        model = user_doc.get('preferred_modelex', 'gpt-3.5-turbo')
         explainer_type = data.get('explainer_type', 'llm')
 
         if prediction_id=='fromdata':
@@ -966,8 +1037,9 @@ def generate_llm_explanation_of_shap():
         data = request.json
         text = data.get('text')
         prediction_id = data.get('prediction_id')
-        model=data.get('model')
-        provider=data.get('provider')
+        user_doc = mongo.db.users.find_one({"_id": ObjectId(current_user.id)})
+        provider = user_doc.get('preferred_providerex', 'openai')
+        model = user_doc.get('preferred_modelex', 'gpt-3.5-turbo')
         explainer_type = data.get('explainer_type', 'llm')
         if prediction_id:
 

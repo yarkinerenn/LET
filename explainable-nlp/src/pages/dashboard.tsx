@@ -116,6 +116,7 @@ const Dashboard = () => {
             // Refresh classifications after analyzing
             fetchClassifications();
         } catch (err) {
+
             setError('Failed to analyze text');
             console.error('Error analyzing text:', err);
         }
