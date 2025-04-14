@@ -279,43 +279,42 @@ const ClassificationDashboard = () => {
                                             <th>Text</th>
                                             <th>Prediction</th>
                                             <th>Confidence</th>
-                                            {classification?.results[0]?.actualLabel && (
-                                                <th>Actual Label</th>
-                                            )}
+                                            {classification?.results[0]?.actualLabel && <th>Actual Label</th>}
                                         </tr>
                                         </thead>
                                         <tbody>
-                                        {paginatedResults?.map((result, index) => (
-                                            <tr
-                                                key={index}
-                                                onClick={() => navigate(`/datasets/${datasetId}/classifications/${classificationId}/results/${index}`)}
-                                                style={{ cursor: 'pointer' }}
-                                            >
-                                                <td className="text-truncate" style={{ maxWidth: '300px' }}>
-                                                    {result.text}
-                                                </td>
-                                                <td>
-                                                    <Badge
-                                                        bg={result.label === 'POSITIVE' ? 'success' : 'danger'}
-                                                    >
-                                                        {result.label}
-                                                    </Badge>
-                                                </td>
-                                                <td>
-                                                    {renderConfidence(result.score)}
-                                                </td>
-                                                {result.actualLabel && (
+                                        {paginatedResults?.map((result, index) => {
+                                            const isMismatch = result.actualLabel && result.label !== result.actualLabel;
+                                            return (
+                                                <tr
+                                                    key={index}
+                                                    onClick={() => navigate(`/datasets/${datasetId}/classifications/${classificationId}/results/${index}`)}
+                                                    className={isMismatch ? 'table-danger' : ''}
+                                                    style={{ cursor: 'pointer' }}
+                                                >
+                                                    <td className="text-truncate" style={{ maxWidth: '300px' }}>
+                                                        {result.text}
+                                                    </td>
                                                     <td>
-                                                        <Badge bg={result.actualLabel === 'POSITIVE' ? 'success' : 'danger'}>
-                                                            {result.actualLabel}
+                                                        <Badge bg={result.label === 'POSITIVE' ? 'success' : 'danger'}>
+                                                            {result.label}
                                                         </Badge>
                                                     </td>
-                                                )}
-                                            </tr>
-                                        ))}
+                                                    <td>{renderConfidence(result.score)}</td>
+                                                    {result.actualLabel && (
+                                                        <td>
+                                                            <Badge bg={result.actualLabel === 'POSITIVE' ? 'success' : 'danger'}>
+                                                                {result.actualLabel}
+                                                            </Badge>
+                                                        </td>
+                                                    )}
+                                                </tr>
+                                            );
+                                        })}
                                         </tbody>
                                     </Table>
 
+                                    {/* Pagination controls remain the same */}
                                     <div className="d-flex justify-content-center">
                                         <Button
                                             variant="outline-primary"
@@ -325,8 +324,8 @@ const ClassificationDashboard = () => {
                                             Previous
                                         </Button>
                                         <span className="mx-3 my-auto">
-                                            Page {currentPage} of {Math.ceil((classification?.results?.length || 0) / itemsPerPage)}
-                                        </span>
+            Page {currentPage} of {Math.ceil((classification?.results?.length || 0) / itemsPerPage)}
+        </span>
                                         <Button
                                             variant="outline-primary"
                                             disabled={currentPage * itemsPerPage >= (classification?.results?.length || 0)}

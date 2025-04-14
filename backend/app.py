@@ -73,6 +73,7 @@ def classify_with_chunks(text, classifier, tokenizer, max_length=512, stride=256
     return final_label, avg_score
 @app.route("/api/dataset/<dataset_id>", methods=["GET"])
 def get_dataset(dataset_id):
+
     dataset = mongo.db.datasets.find_one({"_id": ObjectId(dataset_id)})
 
     if not dataset:
@@ -267,6 +268,34 @@ def classify_dataset(dataset_id):
             "error": "Classification failed",
             "details": str(e)
         }), 500
+@app.route('/api/track-selection', methods=['POST'])
+@login_required
+def track_selection():
+    try:
+        user_id=ObjectId(current_user.id)
+        data = request.get_json()
+        classification_id = data.get('classificationId')
+        result_id = data.get('resultId')
+        selected_type = data.get('selectedType')
+        timestamp = data.get('timestamp', datetime.utcnow().isoformat())
+
+        if not all([classification_id, result_id, selected_type]):
+            return jsonify({"error": "Missing required fields"}), 400
+
+        selection_data = {
+            "user_id": user_id,
+            "classification_id": classification_id,
+            "result_id": result_id,
+            "selected_type": selected_type,
+            "timestamp": timestamp
+        }
+
+        mongo.db.selections.insert_one(selection_data)
+
+        return jsonify({"message": "Selection tracked successfully"}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 @app.route('/api/classification/<classification_id>', methods=['GET'])
 @login_required
 def get_classification_details(classification_id):
@@ -483,7 +512,10 @@ def upload_dataset():
 # 📌 Retrieve Uploaded Datasets
 @app.route("/api/datasets", methods=["GET"])
 def get_datasets():
-    datasets = list(mongo.db.datasets.find({}, {"_id": 1, "filename": 1, "uploaded_at": 1,'source':1}))
+    user_id = current_user.id
+    if isinstance(user_id, str):
+        user_id = ObjectId(user_id)
+    datasets = list(mongo.db.datasets.find({"user_id": user_id}, {"_id": 1, "filename": 1, "uploaded_at": 1,'source':1}))
     for dataset in datasets:
         dataset["_id"] = str(dataset["_id"])
     return jsonify({"datasets": datasets})
@@ -716,9 +748,12 @@ def analyze_text():
 
         # Classify text
         result = classifier(text)[0]
-
+        user_id = current_user.id
+        if isinstance(user_id, str):
+            user_id = ObjectId(user_id)
         # Store in MongoDB
         prediction = mongo.db.predictions.insert_one({
+            "user_id": user_id,
             "text": text,
             "label": result['label'],
             "score": result['score'],
@@ -822,9 +857,12 @@ def analyze_text_with_llm():
             if sentiment not in ["positive", "negative"]:
                 return jsonify({"error": "Invalid sentiment response from LLM."}), 400
 
-
+        user_id = current_user.id
+        if isinstance(user_id, str):
+            user_id = ObjectId(user_id)
         # Store in MongoDB
         prediction = mongo.db.predictions.insert_one({
+            "user_id": user_id,
             "text": text,
             "label": sentiment,
             "score": 1,  # Assuming the LLM is fully confident here (optional)
@@ -851,7 +889,7 @@ def explain_prediction():
         confidence=data.get('confidence')
         text = data.get('text'  )
         user_doc = mongo.db.users.find_one({"_id": ObjectId(current_user.id)})
-        provider = user_doc.get('preferred_provideexr', 'openai')
+        provider = user_doc.get('preferred_providerex', 'openai')
         model = user_doc.get('preferred_modelex', 'gpt-3.5-turbo')
         explainer_type = data.get('explainer_type', 'llm')
 
@@ -1035,6 +1073,8 @@ def generate_shap_explanation(input_text, label):
 def generate_llm_explanation_of_shap():
     try:
         data = request.json
+        shapwords=data.get('shapwords')
+        print(shapwords)
         text = data.get('text')
         prediction_id = data.get('prediction_id')
         user_doc = mongo.db.users.find_one({"_id": ObjectId(current_user.id)})
@@ -1052,7 +1092,6 @@ def generate_llm_explanation_of_shap():
 
             label=prediction['label']
             score=prediction['score']
-            shapwords=data.get('shapstring')
             if provider == 'openai':
 
                 openai_api_key = get_user_api_key_openai()
@@ -1120,7 +1159,6 @@ def generate_llm_explanation_of_shap():
 
             label=data.get('label')
             score=data.get('confidence')
-            shapwords=data.get('shapstring')
             if provider == 'openai':
 
                 openai_api_key = get_user_api_key_openai()
@@ -1187,9 +1225,9 @@ def generate_llm_explanation_of_shap():
     except Exception as e:
         print(f"Error: {e}")
         return f"Error: {str(e)}"
-@app.route('/api/explanation/<classification_id>/<result_id>', methods=['GET'])
+@app.route('/api/classificationentry/<classification_id>/<result_id>', methods=['GET'])
 @login_required
-def get_explanation(classification_id, result_id):
+def get_classificationentry(classification_id, result_id):
     try:
         classification = mongo.db.classifications.find_one({
             "_id": ObjectId(classification_id),
@@ -1216,13 +1254,19 @@ def get_explanation(classification_id, result_id):
         return jsonify({"error": "Result not found"}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-@app.route('/api/classifications', methods=['GET'])
+@app.route('/api/predictions', methods=['GET'])
 @login_required
-def get_classifications():
+def get_predictions():
     try:
-        # Retrieve last 10 classifications (modify limit as needed)
-        predictions = mongo.db.predictions.find().sort("timestamp", -1).limit(50)
-
+        user_id = current_user.id
+        if isinstance(user_id, str):
+            user_id = ObjectId(user_id)
+        predictions = (
+            mongo.db.predictions
+            .find({"user_id": user_id})
+            .sort("timestamp", -1)
+            .limit(50)
+        )
         # Convert ObjectId to string and prepare JSON response
         results = []
         for prediction in predictions:
@@ -1233,6 +1277,8 @@ def get_classifications():
                 "score": prediction["score"],  # Convert score to percentage
                 "timestamp": prediction["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
             })
+
+        print(results,'these are the results')
 
         return jsonify({"classifications": results})
 

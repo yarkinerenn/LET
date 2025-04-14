@@ -52,7 +52,7 @@ const Dashboard = () => {
     // Function to fetch classifications
     const fetchClassifications = async () => {
         try {
-            const response = await fetch('http://localhost:5000/api/classifications', {
+            const response = await fetch('http://localhost:5000/api/predictions', {
                 method: 'GET',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -203,9 +203,12 @@ const Dashboard = () => {
 
     // Initial fetch of classifications
     useEffect(() => {
-        fetchClassifications();
-        fetchDatasets();
+        const fetchData = async () => {
+            await fetchClassifications();
+            await fetchDatasets();
+        };
 
+        fetchData();
     }, []);
 
     // Format the timestamp in a readable way
