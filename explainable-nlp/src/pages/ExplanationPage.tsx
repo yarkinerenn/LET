@@ -67,6 +67,9 @@ const ExplanationPage = () => {
                     { withCredentials: true }
                 );
                 setClassification(explanationResponse.data);
+                setPlot(explanationResponse.data.shap_plot);
+                setExplanationtext(explanationResponse.data.llm_explanation);
+                setShapExplanation(explanationResponse.data.shapwithllm);
                 console.log(explanationResponse.data);
 
                 // Fetch classification metadata to get total results
@@ -141,8 +144,9 @@ const ExplanationPage = () => {
                 confidence: classification?.confidence,
                 text: classification?.text,
                 explainer_type: explainerType,
-                provider: providerex ,
-                model: modelex,
+                classificationId: classificationId,
+                resultId: resultId,
+
 
             }, { withCredentials: true } );
             setExplanationtext(llmResponse.data.explanation);
@@ -154,6 +158,8 @@ const ExplanationPage = () => {
                 confidence: classification?.confidence,
                 text: classification?.text,
                 explainer_type: 'shap',
+                classificationId: classificationId,
+                resultId: resultId
 
 
             }, { withCredentials: true } );
@@ -170,6 +176,8 @@ const ExplanationPage = () => {
                 model: modelex,
                 label: classification?.prediction,
                 confidence: classification?.confidence,
+                classificationId: classificationId,
+                resultId: resultId,
             }, { withCredentials: true } );
             setShapExplanation(combinedResponse.data);
             console.log(combinedResponse.data,'shap llms');

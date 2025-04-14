@@ -1,3 +1,4 @@
+import requests
 from flask import Flask, jsonify, request,send_file
 from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
 from flask_cors import CORS
@@ -12,6 +13,8 @@ import os
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 from tqdm import tqdm
 import numpy as np
+import traceback  # EN ÜSTE EKLE
+
 import shap
 import io
 from cryptography.fernet import Fernet
@@ -193,7 +196,11 @@ def classify_dataset(dataset_id):
                     "text": text,
                     "label": label,
                     "score": score,
-                    "original_data": row.to_dict()
+                    "original_data": row.to_dict(),
+                    "llm_explanation": "",
+                    "shap_plot_explanation":"",
+                    "shapwithllm_explanation": "",
+
                 }
 
                 if label_column:
@@ -264,10 +271,82 @@ def classify_dataset(dataset_id):
 
     except Exception as e:
         print(f"Classification error: {str(e)}")
+
         return jsonify({
             "error": "Classification failed",
             "details": str(e)
         }), 500
+def save_explanation_to_db(classification_id, user_id, result_id, explanation_type, content):
+    if explanation_type == 'llm':
+        update_field = f'results.{result_id}.llm_explanation'
+        print(update_field)
+
+    elif explanation_type == 'shap_plot':
+
+        update_field = f'results.{result_id}.shap_plot_explanation'
+        print(update_field)
+    elif explanation_type == 'shapwithllm':
+        update_field = f'results.{result_id}.shapwithllm_explanation'
+        print(update_field)
+
+    result = mongo.db.classifications.update_one(
+        {
+            "_id": ObjectId(classification_id),
+            "user_id": ObjectId(user_id),
+            f"results.{result_id}": {"$exists": True}
+        },
+        {
+            "$set": {update_field: content}
+        }
+    )
+    return result.modified_count > 0
+@app.route('/api/save-explanation', methods=['POST'])
+@login_required
+def save_explanation():
+    try:
+        data = request.get_json()
+        print(data)
+        classification_id = data['classification_id']
+        result_id = int(data['result_id'])
+        explanation_type = data['explanation_type']
+        content = data['content']
+
+        # Map explanation types to database fields
+        if explanation_type=='llm':
+            field_map = {
+                'llm': f'results.{result_id}.llm_explanation',
+            }
+        elif explanation_type=='shap_plot':
+            field_map = {
+                'shap_plot': f'results.{result_id}.shap_plot_explanation',
+            }
+
+        else:
+            field_map = {
+                'shapwithllm': f'results.{result_id}.shapwithllm_explanation'
+            }
+
+        update_field = field_map[explanation_type]
+
+        result = mongo.db.classifications.update_one(
+            {
+                "_id": ObjectId(classification_id),
+                "user_id": ObjectId(current_user.id),
+                f"results.{result_id}": {"$exists": True}
+            },
+            {
+                "$set": {update_field: content}
+            }
+        )
+        if result.modified_count == 0:
+            return jsonify({"error": "Failed to save explanation"}), 400
+
+        return jsonify({"message": "Explanation saved successfully"}), 200
+
+    except Exception as e:
+        traceback.print_exc()  # <-- HATA BURADA GÖRÜNÜR
+
+        return jsonify({"error": str(e)}), 500
 @app.route('/api/track-selection', methods=['POST'])
 @login_required
 def track_selection():
@@ -884,7 +963,10 @@ def explain_prediction():
     try:
         data = request.json
         prediction_id = data.get('prediction_id','fromdata')
+        classificationId=data.get('classificationId')
+        resultId=data.get('resultId')
         predictedlabel=data.get('predictedlabel')
+
         truelabel=data.get('truelabel')
         confidence=data.get('confidence')
         text = data.get('text'  )
@@ -899,9 +981,14 @@ def explain_prediction():
 
             if explainer_type == 'shap':
                 explanation_data,top_words = generate_shap_explanation(text, predictedlabel)
+                # Save SHAP plot
+                save_explanation_to_db(classificationId,current_user.id,resultId,'shap_plot',explanation_data)
+
                 return jsonify({'explanation': explanation_data,'explainer_type': explainer_type , 'top_words': top_words})
             else:
                 explanation_text = generate_llm_explanationofdataset(text, predictedlabel,truelabel, confidence,provider,model)
+                save_explanation_to_db(classificationId,current_user.id,resultId,'llm',explanation_text)
+
                 return jsonify({"explanation": explanation_text,'explainer_type': explainer_type})
 
 
@@ -1074,7 +1161,8 @@ def generate_llm_explanation_of_shap():
     try:
         data = request.json
         shapwords=data.get('shapwords')
-        print(shapwords)
+        classificationId=data.get('classificationId')
+        resultId=data.get('resultId')
         text = data.get('text')
         prediction_id = data.get('prediction_id')
         user_doc = mongo.db.users.find_one({"_id": ObjectId(current_user.id)})
@@ -1121,6 +1209,9 @@ def generate_llm_explanation_of_shap():
                 )
 
                 explanation = response.choices[0].message.content
+
+                save_explanation_to_db(classificationId,current_user.id,resultId,'shapwithllm',explanation)
+
                 return explanation
             else:
                 api= get_user_api_key_groq()
@@ -1150,6 +1241,9 @@ def generate_llm_explanation_of_shap():
                     ],
                     model=model,
                 )
+
+                save_explanation_to_db(classificationId,current_user.id,resultId,'shapwithllm',chat_completion.choices[0].message.content)
+
 
                 return chat_completion.choices[0].message.content
 
@@ -1188,6 +1282,14 @@ def generate_llm_explanation_of_shap():
                 )
 
                 explanation = response.choices[0].message.content
+                requests.post('http://localhost:5000/api/save-explanation', json={
+                    'classification_id': classificationId,
+                    'result_id': int(resultId),
+                    'explanation_type': 'shapwithllm',
+                    'content': explanation
+                })
+                save_explanation_to_db(classificationId,current_user.id,resultId,'shapwithllm',explanation)
+
                 return explanation
             else:
                 api= get_user_api_key_groq()
@@ -1218,6 +1320,10 @@ def generate_llm_explanation_of_shap():
                     model=model,
                 )
 
+
+                save_explanation_to_db(classificationId,current_user.id,resultId,'shapwithllm',chat_completion.choices[0].message.content)
+
+
                 return chat_completion.choices[0].message.content
 
 
@@ -1239,15 +1345,17 @@ def get_classificationentry(classification_id, result_id):
 
         result = classification['results'][int(result_id)]
 
+        print(result)
         return jsonify({
             "text": result['text'],
             "prediction": result['label'],
             "confidence": result['score'],
             "actualLabel": result.get('actualLabel'),
-            "provider": classification.get('provider'),  # Added provider
-            "model": classification.get('model'),        # Added model
-            # Removed the pre-generated explanation and important words
-            # These will be generated on-demand by the frontend
+            "llm_explanation": result.get('llm_explanation', ''),
+            "shap_plot": result.get('shap_plot_explanation', ''),
+            "shapwithllm": result.get('shapwithllm_explanation', ''),
+            "provider": classification.get('provider'),
+            "model": classification.get('model')
         })
 
     except IndexError:
