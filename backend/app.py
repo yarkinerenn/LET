@@ -604,8 +604,8 @@ def upload_dataset():
 
 # 📌 Retrieve Uploaded Datasets
 @app.route("/api/datasets", methods=["GET"])
-"""Get the datasets that is on the database uploaded by the user"""
 def get_datasets():
+    """Get the datasets that is on the database uploaded by the user"""
     user_id = current_user.id
     if isinstance(user_id, str):
         user_id = ObjectId(user_id)
