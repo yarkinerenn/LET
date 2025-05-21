@@ -856,6 +856,7 @@ def analyze_text():
             user_id = ObjectId(user_id)
         # Store in MongoDB
         prediction = mongo.db.predictions.insert_one({
+            'model': 'bert',
             "user_id": user_id,
             "text": text,
             "label": result['label'],
@@ -966,6 +967,7 @@ def analyze_text_with_llm():
             user_id = ObjectId(user_id)
         # Store in MongoDB
         prediction = mongo.db.predictions.insert_one({
+            'model':"llm",
             "user_id": user_id,
             "text": text,
             "label": sentiment,
@@ -1415,6 +1417,7 @@ def get_prediction_by_id(prediction_id):
             return jsonify({"error": "Prediction not found"}), 404
 
         result = {
+            'model':prediction["model"],
             "id": str(prediction["_id"]),
             "text": prediction["text"],
             "label": prediction["label"],
@@ -1444,6 +1447,7 @@ def get_predictions():
         results = []
         for prediction in predictions:
             results.append({
+                "model":prediction["model"],
                 "id": str(prediction["_id"]),
                 "text": prediction["text"],
                 "label": prediction["label"],

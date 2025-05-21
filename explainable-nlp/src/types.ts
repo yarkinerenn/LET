@@ -11,6 +11,7 @@ export interface AuthContextType {
 
 }
 export interface Classification {
+    model: string;
     id: string;
     text: string;
     label: string;

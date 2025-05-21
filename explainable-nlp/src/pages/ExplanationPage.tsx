@@ -319,26 +319,30 @@ const ExplanationPage = () => {
             <div className="position-relative">
                 {/* Navigation Arrows */}
                 {/* Arrow Container */}
-                <Button
-                    variant="light"
-                    className="position-absolute d-flex align-items-center justify-content-center"
-                    style={{
-                        left: '-40px',
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        zIndex: 10,
-                        width: '36px',
-                        height: '36px',
-                        borderRadius: '50%',
-                        boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
-                        padding: 0
-                    }}
-                    onClick={() => setActiveExplanation(prev =>
-                        prev === 'llm' ? 'combined' : prev === 'shap' ? 'llm' : 'shap'
-                    )}
-                >
-                    <i className="fas fa-chevron-left" />
-                </Button>
+                {classification?.model !== 'llm' && (
+                    <Button
+                        variant="light"
+                        className="position-absolute d-flex align-items-center justify-content-center"
+                        style={{
+                            left: '-40px',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            zIndex: 10,
+                            width: '36px',
+                            height: '36px',
+                            borderRadius: '50%',
+                            boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                            padding: 0
+                        }}
+                        onClick={() =>
+                            setActiveExplanation(prev =>
+                                prev === 'llm' ? 'combined' : prev === 'shap' ? 'llm' : 'shap'
+                            )
+                        }
+                    >
+                        <i className="fas fa-chevron-left" />
+                    </Button>
+                )}
 
                 {/* Carousel Content */}
                 <Row className="g-4 justify-content-center">
@@ -347,16 +351,23 @@ const ExplanationPage = () => {
                             <Card.Body>
                                 {/* Explanation Type Selector */}
                                 <div className="d-flex justify-content-center gap-2 mb-4">
-                                    {['llm', 'shap', 'combined'].map((type) => (
-                                        <Button
-                                            key={type}
-                                            variant={activeExplanation === type ? 'dark' : 'outline-dark'}
-                                            size="sm"
-                                            onClick={() => setActiveExplanation(type as ExplanationType)}
-                                        >
-                                            {type.toUpperCase()}
-                                        </Button>
-                                    ))}
+                                    {['llm', 'shap', 'combined']
+                                        .filter((type) => {
+                                            if (classification?.model === 'llm') {
+                                                return type === 'llm'; // Only keep LLM for BERT
+                                            }
+                                            return true; // Keep all types for other models
+                                        })
+                                        .map((type) => (
+                                            <Button
+                                                key={type}
+                                                variant={activeExplanation === type ? 'dark' : 'outline-dark'}
+                                                size="sm"
+                                                onClick={() => setActiveExplanation(type as ExplanationType)}
+                                            >
+                                                {type.toUpperCase()}
+                                            </Button>
+                                        ))}
                                 </div>
 
                                 {/* Explanation Content - now using grid layout! */}
@@ -486,26 +497,28 @@ const ExplanationPage = () => {
 
                                 </div>
                             </Card.Body>
-                            <Button
-                                variant="light"
-                                className="position-absolute d-flex align-items-center justify-content-center"
-                                style={{
-                                    right: '-40px',
-                                    top: '50%',
-                                    transform: 'translateY(-50%)',
-                                    zIndex: 10,
-                                    width: '36px',
-                                    height: '36px',
-                                    borderRadius: '50%',
-                                    boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
-                                    padding: 0
-                                }}
-                                onClick={() => setActiveExplanation(prev =>
-                                    prev === 'llm' ? 'shap' : prev === 'shap' ? 'combined' : 'llm'
-                                )}
-                            >
-                                <i className="fas fa-chevron-right" />
-                            </Button>
+                            {classification?.model !== 'llm' && (
+
+                                <Button
+                                    variant="light"
+                                    className="position-absolute d-flex align-items-center justify-content-center"
+                                    style={{
+                                        right: '-40px',
+                                        top: '50%',
+                                        transform: 'translateY(-50%)',
+                                        zIndex: 10,
+                                        width: '36px',
+                                        height: '36px',
+                                        borderRadius: '50%',
+                                        boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                                        padding: 0
+                                    }}
+                                    onClick={() => setActiveExplanation(prev =>
+                                        prev === 'llm' ? 'shap' : prev === 'shap' ? 'combined' : 'llm'
+                                    )}
+                                >
+                                    <i className="fas fa-chevron-right" />
+                                </Button> )}
                         </Card>
 
                     </Col>

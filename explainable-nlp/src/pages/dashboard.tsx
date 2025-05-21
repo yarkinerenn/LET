@@ -65,6 +65,7 @@ const Dashboard = () => {
                 const data = await response.json();
                 if (data.classifications) {
                     setClassifications(data.classifications);
+                    console.log(data.classifications);
                 } else {
                     console.error('No classifications found in the response');
                 }
@@ -387,6 +388,12 @@ const Dashboard = () => {
                                                     {getSentimentBadge(classification.label, classification.score)}
                                                     <small className="text-muted">{formatDate(classification.timestamp)}</small>
                                                 </div>
+
+                                                {/* 👇 Add this: model name */}
+                                                <div className="text-muted small mb-1">
+                                                    Model: <span className="fw-semibold">{classification.model}</span>
+                                                </div>
+
                                                 <p className="mb-2" title={classification.text}>
                                                     {truncateText(classification.text)}
                                                 </p>
@@ -399,11 +406,10 @@ const Dashboard = () => {
                                                     >
                                                         View
                                                     </Button>
-                                                    {/* Delete Button */}
                                                     <Button
                                                         variant="outline-danger"
                                                         size="sm"
-                                                        onClick={() => handleDeleteClassification(classification.id)}  // Call delete function
+                                                        onClick={() => handleDeleteClassification(classification.id)}
                                                     >
                                                         Delete
                                                     </Button>
