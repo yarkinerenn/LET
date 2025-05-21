@@ -231,6 +231,8 @@ const Dashboard = () => {
         return str.length > maxLength ? str.substring(0, maxLength) + '...' : str;
     };
 
+    // @ts-ignore
+    // @ts-ignore
     return (
         <div className="py-5">
 
@@ -339,36 +341,10 @@ const Dashboard = () => {
                                                 </p>
                                                 <p>Confidence: {(prediction.score)}</p>
 
-
-
-                                                <div className="d-flex align-items-center mb-3">
-                                                    <span className="me-3">Explainer Type:</span>
-
-                                                    {/* LLM Button */}
-                                                    <Button
-                                                        variant={explainerType === 'llm' ? 'dark' : 'outline-dark'}
-                                                        onClick={() => setExplainerType('llm')}
-                                                        className="me-2"
-                                                    >
-                                                        LLM
-                                                    </Button>
-
-                                                    {/* SHAP Button */}
-                                                    <Button
-                                                        variant={explainerType === 'shap' ? 'dark' : 'outline-dark'}
-                                                        onClick={() => setExplainerType('shap')}
-                                                    >
-                                                        SHAP
-                                                    </Button>
-                                                </div>
-
-
-
-
                                                 <Button
                                                     variant="dark"
-                                                    onClick={generateExplanation}
-                                                    disabled={isExplaining}
+                                                    onClick={() => selectedClassification && handleVievNavigate(selectedClassification)}
+                                                    disabled={isExplaining || !selectedClassification}
                                                 >
                                                     {isExplaining ? (
                                                         <>
@@ -382,7 +358,7 @@ const Dashboard = () => {
                                                             <span
                                                                 className="ms-2">Generating {explainerType.toUpperCase()} Explanation...</span>
                                                         </>
-                                                    ) : `Explain with ${explainerType.toUpperCase()}`}
+                                                    ) : `To explanation Page`}
                                                 </Button>
                                             </Card.Body>
                                         </Card>
@@ -418,7 +394,7 @@ const Dashboard = () => {
                                                     <Button
                                                         variant="outline-secondary"
                                                         size="sm"
-                                                        onClick={() => handleVievNavigate(classification.id)}
+                                                        onClick={() => viewPreviousClassification(classification)}
                                                         className="me-2"
                                                     >
                                                         View
@@ -444,63 +420,9 @@ const Dashboard = () => {
                         </Card>
 
                     </div>
-                    {(explanation!=='' || plot) && (
-                        <Card className="mt-3 border-dark-subtle">
-                            <Card.Body>
-                                <Card.Title>
-                                    {explainerType === 'shap' ? 'SHAP Explanation' : 'Explanation'}
-                                </Card.Title>
-                                <div className="text-muted">
-                                    {explainerType === 'shap' ? (
-                                        // SHAP HTML görselleştirmesi
-
-                                        <div
-                                            dangerouslySetInnerHTML={{__html: plot}}
-                                            style={{
-                                                fontFamily: 'monospace',
-                                                fontSize: '14px',
-                                                lineHeight: '1.5',
-                                                overflowX: 'auto',
-                                                minHeight: '100px'  // Boş görünmesin diye minimum yükseklik ekle
-                                            }}
-                                            className="shap-html-container"
-                                        />
-                                    ) : (
-                                        // LLM text explanation
-                                        <p style={{whiteSpace: 'pre-wrap'}}>{explanation}</p>
-                                    )}
-                                </div>
-                            </Card.Body>
-                        </Card>
-                    )}
                     {/* Show "Explain SHAP with LLM" button only if SHAP explanation exists */}
-                    {plot && explainerType === 'shap' &&(
-                        <Button
-                            variant="secondary"
-                            className="mt-3"
-                            onClick={generateExplanationfromshap}
-                            disabled={isExplaining}
-                        >
-                            {isExplaining ? (
-                                <>
-                                    <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true"/>
-                                    <span className="ms-2">Explaining SHAP with LLM...</span>
-                                </>
-                            ) : "Explain SHAP with LLM"}
-                        </Button>
-                    )}
-                    {shap_explanation && explainerType === 'shap' && (
-                        <div className="mt-3 p-3 border rounded bg-light">
-                            <h6>SHAP LLM Explanation</h6>
-                            <p style={{whiteSpace: "pre-wrap"}}>{shap_explanation}</p>
-                        </div>
-                    )}
 
-                    {error && (
-                        <Alert variant="danger" className="mt-3">
-                            {error}
-                        </Alert>
-                    )}
+
 
 
                 </div>
