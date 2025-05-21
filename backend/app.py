@@ -1397,10 +1397,39 @@ def get_classificationentry(classification_id, result_id):
         return jsonify({"error": "Result not found"}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+@app.route('/api/predictions/<prediction_id>', methods=['GET'])
+@login_required
+def get_prediction_by_id(prediction_id):
+    """Get a specific prediction by its ObjectId"""
+    try:
+        user_id = current_user.id
+        if isinstance(user_id, str):
+            user_id = ObjectId(user_id)
+
+        prediction = mongo.db.predictions.find_one({
+            "_id": ObjectId(prediction_id),
+            "user_id": user_id
+        })
+
+        if not prediction:
+            return jsonify({"error": "Prediction not found"}), 404
+
+        result = {
+            "id": str(prediction["_id"]),
+            "text": prediction["text"],
+            "label": prediction["label"],
+            "confidence": prediction["score"],
+            "timestamp": prediction["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
+        }
+
+        return jsonify({"classification": result})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 @app.route('/api/predictions', methods=['GET'])
 @login_required
 def get_predictions():
-    """Get the classification made from the dashboard independent from any dataset"""
+    """Get the classification made from the dashboard independent of any dataset"""
     try:
         user_id = current_user.id
         if isinstance(user_id, str):

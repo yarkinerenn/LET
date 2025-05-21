@@ -49,6 +49,9 @@ const Dashboard = () => {
     const handleViewDataset = (datasetId: string) => {
         navigate(`/dataset/${datasetId}`);
     };
+    const handleVievNavigate = (predictionId: string) => {
+        navigate(`/predictions/${predictionId}`);
+    };
     // Function to fetch classifications
     const fetchClassifications = async () => {
         try {
@@ -131,8 +134,6 @@ const Dashboard = () => {
                 prediction_id: prediction?.id,
                 text: text,
                 explainer_type: explainerType,
-                provider: providerex ,
-                model: modelex,
                 shapwords: shapstring
 
             }, { withCredentials: true } );
@@ -153,8 +154,6 @@ const Dashboard = () => {
                 prediction_id: prediction?.id,
                 text: text,
                 explainer_type: explainerType,
-                provider: providerex ,
-                model: modelex,
 
             }, { withCredentials: true } );
 
@@ -419,7 +418,7 @@ const Dashboard = () => {
                                                     <Button
                                                         variant="outline-secondary"
                                                         size="sm"
-                                                        onClick={() => viewPreviousClassification(classification)}
+                                                        onClick={() => handleVievNavigate(classification.id)}
                                                         className="me-2"
                                                     >
                                                         View
