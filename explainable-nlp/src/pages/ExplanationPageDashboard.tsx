@@ -11,6 +11,7 @@ interface PredictionEntry {
     label: string;
     confidence: number;
     model: string;
+    user_label: string;
 
 }
 
@@ -219,7 +220,40 @@ const ExplanationPageDashboard = () => {
                                                 {classification.label}
                                             </div>
                                         </div>
-
+                                        {/* User Label or Submission Form */}
+                                        <Form
+                                            className="mt-3 w-100"
+                                            onSubmit={async (e) => {
+                                                e.preventDefault();
+                                                const form = e.currentTarget;
+                                                // @ts-ignore
+                                                const userLabel = form.elements.namedItem("userLabel")?.value;
+                                                if (userLabel && predictionId) {
+                                                    try {
+                                                        await axios.post(
+                                                            `http://localhost:5000/api/predictions/update_prediction_label/${predictionId}`,
+                                                            { user_label: userLabel },
+                                                            { withCredentials: true }
+                                                        );
+                                                        setClassification(prev => prev ? { ...prev, user_label: userLabel } : prev);
+                                                    } catch (error) {
+                                                        console.error("Failed to submit label", error);
+                                                    }
+                                                }
+                                            }}
+                                        >
+                                            <Form.Group controlId="userLabel">
+                                                <Form.Label>{classification.user_label ? "Update your label" : "Submit your label"}</Form.Label>
+                                                <Form.Select name="userLabel" required defaultValue={classification.user_label || ""}>
+                                                    <option value="" disabled>Select a label</option>
+                                                    <option value="POSITIVE">POSITIVE</option>
+                                                    <option value="NEGATIVE">NEGATIVE</option>
+                                                </Form.Select>
+                                            </Form.Group>
+                                            <Button type="submit" className="mt-2" size="sm">
+                                                {classification.user_label ? "Update Label" : "Submit Label"}
+                                            </Button>
+                                        </Form>
                                     </div>
                                 </div>
 

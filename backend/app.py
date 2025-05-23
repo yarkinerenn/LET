@@ -458,6 +458,25 @@ def get_dataset_classifications(dataset_id):
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+@app.route('/api/predictions/update_prediction_label/<prediction_id>', methods=['POST'])
+def update_prediction_label(prediction_id):
+    """User can label their own data entry"""
+    user_label = request.json.get("user_label")
+
+    if not user_label:
+        return {"error": "Missing 'user_label' in request"}, 400
+
+    result = mongo.db.predictions.update_one(
+        {"_id": ObjectId(prediction_id)},
+        {"$set": {"user_label": user_label}}
+    )
+
+    if result.matched_count == 0:
+        return {"error": "Prediction not found"}, 404
+
+    return {"message": "Label updated successfully"}, 200
+
+
 
 @app.route('/api/delete_prediction/<classification_id>', methods=['DELETE'])
 def delete_prediction(classification_id):
@@ -861,7 +880,8 @@ def analyze_text():
             "text": text,
             "label": result['label'],
             "score": result['score'],
-            "timestamp": datetime.now()
+            "timestamp": datetime.now(),
+            "user_label": "",
         })
 
         return jsonify({
@@ -972,7 +992,8 @@ def analyze_text_with_llm():
             "text": text,
             "label": sentiment,
             "score": 1,  # Assuming the LLM is fully confident here (optional)
-            "timestamp": datetime.now()
+            "timestamp": datetime.now(),
+            "user_label": "",
         })
 
         return jsonify({
