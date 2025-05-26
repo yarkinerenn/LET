@@ -881,7 +881,7 @@ def analyze_text():
             "label": result['label'],
             "score": result['score'],
             "timestamp": datetime.now(),
-            "user_label": "",
+            "user_label": " ",
         })
 
         return jsonify({
@@ -1443,7 +1443,8 @@ def get_prediction_by_id(prediction_id):
             "text": prediction["text"],
             "label": prediction["label"],
             "confidence": prediction["score"],
-            "timestamp": prediction["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
+            "timestamp": prediction["timestamp"].strftime("%Y-%m-%d %H:%M:%S"),
+            "user_label":prediction["user_label"]
         }
 
         return jsonify({"classification": result})

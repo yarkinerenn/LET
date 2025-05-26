@@ -49,7 +49,7 @@ const ExplanationPageDashboard = () => {
                     { withCredentials: true }
                 );
                 setClassification(explanationResponse.data.classification);
-                console.log(classification,'thats it');
+                console.log(explanationResponse.data.classification,'thats it');
 
 
 
@@ -211,6 +211,7 @@ const ExplanationPageDashboard = () => {
 
                                     {/* Right: Labels */}
                                     <div className="d-flex flex-column justify-content-center align-items-center">
+                                        {/* Prediction Pill */}
                                         <div className="mb-3 text-center">
                                             <div className="text-muted mb-1" style={{ fontSize: '0.85rem' }}>Prediction</div>
                                             <div
@@ -220,40 +221,50 @@ const ExplanationPageDashboard = () => {
                                                 {classification.label}
                                             </div>
                                         </div>
-                                        {/* User Label or Submission Form */}
-                                        <Form
-                                            className="mt-3 w-100"
-                                            onSubmit={async (e) => {
-                                                e.preventDefault();
-                                                const form = e.currentTarget;
-                                                // @ts-ignore
-                                                const userLabel = form.elements.namedItem("userLabel")?.value;
-                                                if (userLabel && predictionId) {
-                                                    try {
-                                                        await axios.post(
-                                                            `http://localhost:5000/api/predictions/update_prediction_label/${predictionId}`,
-                                                            { user_label: userLabel },
-                                                            { withCredentials: true }
-                                                        );
-                                                        setClassification(prev => prev ? { ...prev, user_label: userLabel } : prev);
-                                                    } catch (error) {
-                                                        console.error("Failed to submit label", error);
-                                                    }
-                                                }
-                                            }}
-                                        >
-                                            <Form.Group controlId="userLabel">
-                                                <Form.Label>{classification.user_label ? "Update your label" : "Submit your label"}</Form.Label>
-                                                <Form.Select name="userLabel" required defaultValue={classification.user_label || ""}>
-                                                    <option value="" disabled>Select a label</option>
+
+                                        {/* User Label Dropdown styled to match Prediction */}
+                                        <div className="text-center w-100">
+                                            <div className="text-muted mb-1" style={{ fontSize: '0.85rem' }}>
+                                                {classification.user_label ? "Your Label" : "Submit a Label"}
+                                            </div>
+                                            <div className="d-flex justify-content-center">
+                                                <Form.Select
+                                                    name="userLabel"
+                                                    value={classification.user_label || ""}
+                                                    required
+                                                    onChange={async (e) => {
+                                                        const userLabel = e.target.value;
+                                                        if (userLabel && predictionId) {
+                                                            try {
+                                                                await axios.post(
+                                                                    `http://localhost:5000/api/predictions/update_prediction_label/${predictionId}`,
+                                                                    { user_label: userLabel },
+                                                                    { withCredentials: true }
+                                                                );
+                                                                setClassification((prev) =>
+                                                                    prev ? { ...prev, user_label: userLabel } : prev
+                                                                );
+                                                            } catch (error) {
+                                                                console.error("Failed to update label", error);
+                                                            }
+                                                        }
+                                                    }}
+                                                    className={`px-4 py-2 rounded-pill fw-semibold shadow-sm ${classification.user_label === 'POSITIVE' ? 'text-white bg-success' : classification.user_label === 'NEGATIVE' ? 'text-white bg-danger' : 'bg-light border'}`}
+                                                    style={{
+                                                        fontSize: '0.9rem',
+                                                        minWidth: '120px',
+                                                        height: '38px',
+                                                        maxWidth: '200px',
+                                                    }}
+                                                >
+                                                    <option value="" disabled>
+                                                        {classification.user_label ? "Change label" : "Select a label"}
+                                                    </option>
                                                     <option value="POSITIVE">POSITIVE</option>
                                                     <option value="NEGATIVE">NEGATIVE</option>
                                                 </Form.Select>
-                                            </Form.Group>
-                                            <Button type="submit" className="mt-2" size="sm">
-                                                {classification.user_label ? "Update Label" : "Submit Label"}
-                                            </Button>
-                                        </Form>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
