@@ -205,44 +205,97 @@ const DatasetView = () => {
                                     <Spinner animation="border" size="sm" />
                                 </div>
                             ) : classifications.length > 0 ? (
-                                <div className="classifications-list">
+                                <div className="classifications-list" style={{ maxHeight: '400px', overflowY: 'auto', padding: '0 4px' }}>
                                     {classifications.map((classification) => (
                                         <Card
                                             key={classification._id}
-                                            className="mb-2 classification-card"
+                                            className="mb-3 border-0"
                                             onClick={() => navigate(`/datasets/${datasetId}/classifications/${classification._id}`)}
-                                            style={{ cursor: 'pointer' }}
+                                            style={{
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s ease',
+                                                borderRadius: '12px',
+                                                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                                                borderLeft: `4px solid ${classification.method === "llm" ? '#4361ee' : '#4cc9f0'}`
+                                            }}
+                                            onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                                            onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
                                         >
-                                            <Card.Body className="p-3">
+                                            <Card.Body className="p-4">
                                                 <div className="d-flex justify-content-between align-items-start">
-                                                    <div>
-                                                        <div className="d-flex justify-content-between align-items-center mb-1">
-                                                            <Badge bg={classification.method === "llm" ? "primary" : "success"}>
+                                                    <div style={{ flex: 1 }}>
+                                                        <div className="d-flex align-items-center gap-2 mb-3">
+                                                            <Badge
+                                                                bg={classification.method === "llm" ? "primary" : "info"}
+                                                                pill
+                                                                style={{
+                                                                    fontWeight: 500,
+                                                                    background: classification.method === "llm" ? '#4361ee' : '#4cc9f0'
+                                                                }}
+                                                            >
                                                                 {classification.method.toUpperCase()}
                                                             </Badge>
                                                             {getAccuracyBadge(classification.stats.accuracy)}
+                                                            <div className="text-muted small ms-auto">
+                                                                {formatDate(classification.created_at)}
+                                                            </div>
                                                         </div>
 
                                                         {classification.method === "llm" && (
-                                                            <div className="text-muted small mb-1">
-                                                                {classification.provider} / {classification.model}
+                                                            <div className="mb-3">
+                <span className="text-muted" style={{ fontSize: '0.85rem' }}>
+                  Model:
+                </span>
+                                                                <span className="ms-2 fw-semibold">
+                  {classification.provider} / {classification.model}
+                </span>
                                                             </div>
                                                         )}
 
-                                                        <div className="small text-muted">
-                                                            {formatDate(classification.created_at)}
-                                                        </div>
-
-                                                        <div className="small mt-1">
-                                                            <span className="text-success me-2">Positive: {classification.stats.positive}</span>
-                                                            <span className="text-danger">Negative: {classification.stats.negative}</span>
+                                                        <div className="d-flex align-items-center mt-3">
+                                                            <div className="me-4">
+                                                                <div className="d-flex align-items-center">
+                                                                    <div style={{
+                                                                        width: '12px',
+                                                                        height: '12px',
+                                                                        borderRadius: '50%',
+                                                                        background: '#2ecc71',
+                                                                        marginRight: '8px'
+                                                                    }}></div>
+                                                                    <span className="text-muted small">Positive:</span>
+                                                                    <span className="ms-2 fw-semibold">{classification.stats.positive}</span>
+                                                                </div>
+                                                            </div>
+                                                            <div>
+                                                                <div className="d-flex align-items-center">
+                                                                    <div style={{
+                                                                        width: '12px',
+                                                                        height: '12px',
+                                                                        borderRadius: '50%',
+                                                                        background: '#e74c3c',
+                                                                        marginRight: '8px'
+                                                                    }}></div>
+                                                                    <span className="text-muted small">Negative:</span>
+                                                                    <span className="ms-2 fw-semibold">{classification.stats.negative}</span>
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                     </div>
+
                                                     <Button
                                                         variant="outline-danger"
                                                         size="sm"
-                                                        onClick={(e) => handleDeleteClassification(classification._id, e)}
-                                                        className="ms-2"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleDeleteClassification(classification._id, e);
+                                                        }}
+                                                        style={{
+                                                            borderColor: '#ff6b6b',
+                                                            color: '#ff6b6b',
+                                                            padding: '4px 12px',
+                                                            borderRadius: '8px',
+                                                            fontWeight: 500
+                                                        }}
                                                     >
                                                         Delete
                                                     </Button>
@@ -290,17 +343,18 @@ const DatasetView = () => {
                             {dataset?.data && dataset.data.length > 0 ? (
                                 <>
                                     <Card className="shadow-sm mb-4">
-                                        <Table hover responsive className="mb-0">
-                                            <thead className="bg-light">
+                                        <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                                            <Table hover responsive className="mb-0">
+                                                <thead className="bg-light">
                                                 <tr>
                                                     {Object.keys(dataset.data[0]).map((key) => (
                                                         <th key={key} className="px-4 py-3">{key}</th>
                                                     ))}
                                                 </tr>
-                                            </thead>
-                                            <tbody>
+                                                </thead>
+                                                <tbody>
                                                 {currentItems.map((row, index) => (
-                                                    <tr 
+                                                    <tr
                                                         key={index}
                                                         onClick={() => handleEntryClick(row)}
                                                         style={{ cursor: 'pointer' }}
@@ -313,8 +367,9 @@ const DatasetView = () => {
                                                         ))}
                                                     </tr>
                                                 ))}
-                                            </tbody>
-                                        </Table>
+                                                </tbody>
+                                            </Table>
+                                        </div>
                                     </Card>
 
                                     <div className="d-flex justify-content-between align-items-center">

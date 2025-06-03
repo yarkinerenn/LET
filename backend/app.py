@@ -682,13 +682,14 @@ def register():
     openai_api_key = data.get("openai_api", "")
     grok_api_key = data.get("grok_api", "")
     deepseek_api_key = data.get("deepseek_api", "")
+    openrouter_api_key = data.get("openrouter_api", "")
 
 
     # Encrypt the user-entered API keys
     encrypted_openai_api = encrypt_api_key(openai_api_key) if openai_api_key else ""
     encrypted_grok_api = encrypt_api_key(grok_api_key) if grok_api_key else ""
     encrypted_deepseek_api = encrypt_api_key(deepseek_api_key) if deepseek_api_key else ""
-
+    encrypted_openrouter_api = encrypt_api_key(openrouter_api_key) if openrouter_api_key else ""
 
     user_data = {
         'username': data['username'],
@@ -698,6 +699,7 @@ def register():
         'openai_api': encrypted_openai_api,
         'grok_api': encrypted_grok_api,
         'deepseek_api': encrypted_deepseek_api,
+        'openrouter_api': encrypted_openrouter_api,
         'preferred_provider': data.get('preferred_provider', 'openai'),
         'preferred_model': data.get('preferred_model', 'gpt-3.5-turbo'),
         'preferred_providerex': data.get('preferred_providerex', 'openai'),
@@ -780,6 +782,18 @@ def get_user_api_key_groq():
     if user_data and "grok_api" in user_data:
         return decrypt_api_key(user_data['grok_api'])  # Return decrypted API key
     return None
+def get_user_api_key_openrouter():
+    """Retrieve the user's Groq API key securely."""
+    if not current_user.is_authenticated:
+        return None
+
+    # Fetch the OpenAI API key from MongoDB to avoid issues with Flask-Login session
+    user_data = mongo.db.users.find_one({'_id': ObjectId(current_user.id)}, {'grok_api': 1})
+    print(current_user.username,'this is the user')
+
+    if user_data and "grok_api" in user_data:
+        return decrypt_api_key(user_data['grok_api'])  # Return decrypted API key
+    return None
 
 @app.route('/api/login', methods=['POST'])
 def login():
@@ -807,6 +821,7 @@ def update_api_keys():
     openai_api_key = data.get("openai_api")
     grok_api_key = data.get("grok_api")
     deepseek_api_key = data.get("deepseek_api")
+    openrouter_api_key= data.get('openrouter_api_key')
 
     update_fields = {}
 
@@ -819,6 +834,9 @@ def update_api_keys():
 
     if deepseek_api_key:
         update_fields["deepseek_api"] = encrypt_api_key(deepseek_api_key)
+
+    if openrouter_api_key:
+        update_fields["openrouter_api"] = encrypt_api_key(openrouter_api_key)
 
     # Only update if there's something to change
     if update_fields:
@@ -981,6 +999,30 @@ def analyze_text_with_llm():
             # Ensure the sentiment is either positive or negative
             if sentiment not in ["positive", "negative"]:
                 return jsonify({"error": "Invalid sentiment response from LLM."}), 400
+        elif provider=='openrouter':
+            openai_api_key = get_user_api_key_openrouter()
+            client = OpenAI(api_key=openai_api_key)
+
+
+            if len(text) < 3:
+                return jsonify({"error": "Text must be at least 3 characters"}), 400
+
+            # Send the text to OpenAI for sentiment analysis
+            prompt = f"Classify the sentiment of the following text as either positive or negative:\n{text}"
+
+            # Call OpenAI GPT-3/4 model to analyze the sentiment
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}]
+            )
+
+            # Extract the sentiment result (positive or negative)
+            sentiment =  response.choices[0].message.content
+
+            # Ensure the sentiment is either positive or negative
+            if sentiment not in ["positive", "negative"]:
+                return jsonify({"error": "Invalid sentiment response from LLM."}), 400
+
 
         user_id = current_user.id
         if isinstance(user_id, str):
@@ -1025,7 +1067,7 @@ def explain_prediction():
         model = user_doc.get('preferred_modelex', 'gpt-3.5-turbo')
         explainer_type = data.get('explainer_type', 'llm')
 
-        if prediction_id=='fromdata':
+        if prediction_id=='fromdata': #if the explanation is for dataset
             if not text:
                 return jsonify({"error": "Missing text"}), 400
 
@@ -1042,7 +1084,7 @@ def explain_prediction():
                 return jsonify({"explanation": explanation_text,'explainer_type': explainer_type})
 
 
-        else:
+        else: # if the explanation is asked through dashboard
 
             if not prediction_id or not text:
                 return jsonify({"error": "Missing prediction_id or text"}), 400
@@ -1092,7 +1134,7 @@ def generate_llm_explanation(text, label, score,provider,model):
 
             explanation = response.choices[0].message.content
             return explanation
-        else:
+        elif provider=='groq':
             api= get_user_api_key_groq()
 
             client = Groq(
@@ -1117,7 +1159,31 @@ def generate_llm_explanation(text, label, score,provider,model):
                 model=model,
             )
             return chat_completion.choices[0].message.content
+        elif provider=='openrouter':
+            openai_api_key = get_user_api_key_openrouter()
 
+            if not openai_api_key:
+                return "Error: No OpenAI API key found for this user."
+
+            client = OpenAI(api_key=openai_api_key)
+
+            prompt = f"""
+                Explain this sentiment analysis result in simple terms:
+                
+                Text: {text}
+                Sentiment: {label} ({score}% confidence)
+                
+                Focus on key words and overall tone.
+                Keep explanation under 3 sentences.
+            """
+
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}]
+            )
+
+            explanation = response.choices[0].message.content
+            return explanation
 
 
     except Exception as e:
@@ -1271,7 +1337,7 @@ def generate_llm_explanation_of_shap():
                 save_explanation_to_db(classificationId,current_user.id,resultId,'shapwithllm',explanation)
 
                 return explanation
-            else:
+            elif provider=='groq':
                 api= get_user_api_key_groq()
 
                 client = Groq(
@@ -1304,6 +1370,40 @@ def generate_llm_explanation_of_shap():
 
 
                 return chat_completion.choices[0].message.content
+
+            elif provider=='openrouter':
+                openai_api_key = get_user_api_key_openrouter()
+
+                if not openai_api_key:
+                    return "Error: No OpenAI API key found for this user."
+
+                client = OpenAI(api_key=openai_api_key)
+
+                prompt = f"""
+                        Explain this sentiment analysis result in simple terms with most affecting words provided by SHAP:
+                        
+                        Text: {text}
+                        Sentiment: {label} ({score}% confidence)
+                        
+                        shap: 
+                        
+                        {shapwords}
+                        
+                        Focus on key words and overall tone.
+                        Keep explanation under 3 sentences.
+                    """
+
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+
+                explanation = response.choices[0].message.content
+
+                save_explanation_to_db(classificationId,current_user.id,resultId,'shapwithllm',explanation)
+
+                return explanation
+
 
         else:
             if not text:
@@ -1349,7 +1449,7 @@ def generate_llm_explanation_of_shap():
                 save_explanation_to_db(classificationId,current_user.id,resultId,'shapwithllm',explanation)
 
                 return explanation
-            else:
+            elif provider=='groq':
                 api= get_user_api_key_groq()
 
                 client = Groq(
@@ -1383,7 +1483,44 @@ def generate_llm_explanation_of_shap():
 
 
                 return chat_completion.choices[0].message.content
+            if provider == 'openrouter':
 
+                openai_api_key = get_user_api_key_openrouter()
+
+                if not openai_api_key:
+                    return "Error: No OpenAI API key found for this user."
+
+                client = OpenAI(api_key=openai_api_key)
+
+                prompt = f"""
+                    Explain this sentiment analysis result in simple terms with most affecting words provided by SHAP:
+                    
+                    Text: {text}
+                    Sentiment: {label} ({score}% confidence)
+                    
+                    shap: 
+                    
+                    {shapwords}
+                    
+                    Focus on key words and overall tone.
+                    Keep explanation under 3 sentences.
+                """
+
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+
+                explanation = response.choices[0].message.content
+                requests.post('http://localhost:5000/api/save-explanation', json={
+                    'classification_id': classificationId,
+                    'result_id': int(resultId),
+                    'explanation_type': 'shapwithllm',
+                    'content': explanation
+                })
+                save_explanation_to_db(classificationId,current_user.id,resultId,'shapwithllm',explanation)
+
+                return explanation
 
 
     except Exception as e:

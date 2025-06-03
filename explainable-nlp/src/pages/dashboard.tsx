@@ -280,7 +280,7 @@ const Dashboard = () => {
                         </Table>
                         <Card className="shadow mb-4">
                             <Card.Body>
-                                <Card.Title className="mb-4">Sentiment Analyzer</Card.Title>
+                                <Card.Title className="mb-4">Sentiment Classification</Card.Title>
 
                                 <Form.Group>
                                     <Form.Control
@@ -310,10 +310,10 @@ const Dashboard = () => {
                                                     role="status"
                                                     aria-hidden="true"
                                                 />
-                                                <span className="ms-2">Analyzing...</span>
+                                                <span className="ms-2">Loading....</span>
                                             </>
                                         ) : (
-                                            'Analyze with BERT'
+                                            'Classify with BERT'
                                         )}
                                     </Button>
 
@@ -324,7 +324,7 @@ const Dashboard = () => {
                                         disabled={isLoading}
                                         className="mb-2 mb-md-0"
                                     >
-                                        Analyze with LLM
+                                        Classify with LLM
                                     </Button>
                                 </div>
 

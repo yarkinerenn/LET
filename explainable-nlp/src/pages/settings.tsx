@@ -5,6 +5,8 @@ import {useProvider} from "../modules/provider";
 const Settings = () => {
     const [openaiApi, setOpenaiApi] = useState(""); // Current OpenAI API Key
     const [grokApi, setGrokApi] = useState("");     // Current Grok API Key
+    const [deepseekApi, setdeepseekApi] = useState("");
+    const [openrouterApi, setopenrouterApi] = useState("");
     const [error, setError] = useState("");         // For error messages
     const [success, setSuccess] = useState("");     // For success message
     const groqModels = [
@@ -26,6 +28,77 @@ const Settings = () => {
         { name: "qwen-2.5-32b" },
         { name: "qwen-2.5-coder-32b" },
         { name: "qwen-qwq-32b" }
+    ];
+    const openrouterModels = [
+        { name: "deepseek-r1-0528-qwen3-8b" },
+        { name: "deepseek-r1-0528" },
+        { name: "sarvam-m" },
+        { name: "devstral-small" },
+        { name: "gemma-3n-e4b-it" },
+        { name: "llama-3.3-8b-instruct" },
+        { name: "deephermes-3-mistral-24b-preview" },
+        { name: "phi-4-reasoning-plus" },
+        { name: "phi-4-reasoning" },
+        { name: "internvl3-14b" },
+        { name: "internvl3-2b" },
+        { name: "deepseek-prover-v2" },
+        { name: "qwen3-30b-a3b" },
+        { name: "qwen3-8b" },
+        { name: "qwen3-14b" },
+        { name: "qwen3-32b" },
+        { name: "qwen3-235b-a22b" },
+        { name: "deepseek-r1t-chimera" },
+        { name: "mai-ds-r1" },
+        { name: "glm-z1-32b" },
+        { name: "glm-4-32b" },
+        { name: "shisa-v2-llama3.3-70b" },
+        { name: "qwq-32b-arliai-rpr-v1" },
+        { name: "deepcoder-14b-preview" },
+        { name: "kimi-vl-a3b-thinking" },
+        { name: "llama-3.3-nemotron-super-49b-v1" },
+        { name: "llama-3.1-nemotron-ultra-253b-v1" },
+        { name: "llama-4-maverick" },
+        { name: "llama-4-scout" },
+        { name: "deepseek-v3-base" },
+        { name: "qwen2.5-vl-3b-instruct" },
+        { name: "gemini-2.5-pro-exp-03-25" },
+        { name: "qwen2.5-vl-32b-instruct" },
+        { name: "deepseek-chat-v3-0324" },
+        { name: "qwerky-72b" },
+        { name: "mistral-small-3.1-24b-instruct" },
+        { name: "olympiccoder-32b" },
+        { name: "gemma-3-1b-it" },
+        { name: "gemma-3-4b-it" },
+        { name: "gemma-3-12b-it" },
+        { name: "reka-flash-3" },
+        { name: "gemma-3-27b-it" },
+        { name: "deepseek-r1-zero" },
+        { name: "qwq-32b" },
+        { name: "moonlight-16b-a3b-instruct" },
+        { name: "deephermes-3-llama-3-8b-preview" },
+        { name: "dolphin3.0-r1-mistral-24b" },
+        { name: "dolphin3.0-mistral-24b" },
+        { name: "qwen2.5-vl-72b-instruct" },
+        { name: "mistral-small-24b-instruct-2501" },
+        { name: "deepseek-r1-distill-qwen-32b" },
+        { name: "deepseek-r1-distill-qwen-14b" },
+        { name: "deepseek-r1-distill-llama-70b" },
+        { name: "deepseek-r1" },
+        { name: "deepseek-chat" },
+        { name: "gemini-2.0-flash-exp" },
+        { name: "llama-3.3-70b-instruct" },
+        { name: "qwen-2.5-coder-32b-instruct" },
+        { name: "qwen-2.5-7b-instruct" },
+        { name: "llama-3.2-3b-instruct" },
+        { name: "llama-3.2-1b-instruct" },
+        { name: "llama-3.2-11b-vision-instruct" },
+        { name: "qwen-2.5-72b-instruct" },
+        { name: "qwen-2.5-vl-7b-instruct" },
+        { name: "llama-3.1-405b" },
+        { name: "llama-3.1-8b-instruct" },
+        { name: "mistral-nemo" },
+        { name: "gemma-2-9b-it" },
+        { name: "mistral-7b-instruct" }
     ];
     const{ provider, setProvider,providerex, setProviderex, model, setModel, modelex, setModelex } = useProvider();
     const handleExplanationSettingsUpdate = async () => {
@@ -167,6 +240,26 @@ const Settings = () => {
                                 />
                             </Form.Group>
 
+                            <Form.Group className="mb-3">
+                                <Form.Label>DeepSeek API Key</Form.Label>
+                                <Form.Control
+                                    type="text"
+                                    placeholder="Enter your Deepseek API key (optional)"
+                                    value={grokApi}
+                                    onChange={(e) => setdeepseekApi(e.target.value)}
+                                />
+                            </Form.Group>
+
+                            <Form.Group className="mb-3">
+                                <Form.Label>Openrouter API Key</Form.Label>
+                                <Form.Control
+                                    type="text"
+                                    placeholder="Enter your Openrouter API key (optional)"
+                                    value={grokApi}
+                                    onChange={(e) => setopenrouterApi(e.target.value)}
+                                />
+                            </Form.Group>
+
                             <Button variant="dark" className="w-100 mb-3" type="submit">
                                 Update API Keys
                             </Button>
@@ -199,9 +292,33 @@ const Settings = () => {
                         value="groq"
                         checked={provider === 'groq'}
                         onChange={(e) => setProvider(e.currentTarget.value)}
-                        className="mb-2"
+                        className="mb-2 me-3"
                     >
                         Groq
+                    </ToggleButton>
+                    <ToggleButton
+                        id="provider-deepseek"
+                        type="radio"
+                        variant={provider === 'deepseek' ? 'dark' : 'outline-primary'}
+                        name="provider"
+                        value="deepseek"
+                        checked={provider === 'deepseek'}
+                        onChange={(e) => setProvider(e.currentTarget.value)}
+                        className="mb-2 me-3"
+                    >
+                        Deepseek
+                    </ToggleButton>
+                    <ToggleButton
+                        id="provider-openrouter"
+                        type="radio"
+                        variant={provider === 'openrouter' ? 'dark' : 'outline-primary'}
+                        name="provider"
+                        value="openrouter"
+                        checked={provider === 'openrouter'}
+                        onChange={(e) => setProvider(e.currentTarget.value)}
+                        className="mb-2"
+                    >
+                        Open router
                     </ToggleButton>
                 </ButtonGroup>
 
@@ -211,6 +328,19 @@ const Settings = () => {
                         <Form.Select value={model} onChange={(e) => setModel(e.target.value)}>
                             <option value="">-- Select a Model --</option>
                             {groqModels.map((m) => (
+                                <option key={m.name} value={m.name}>
+                                    {m.name}
+                                </option>
+                            ))}
+                        </Form.Select>
+                    </div>
+                )}
+                {provider === 'openrouter' && (
+                    <div className="mb-3">
+                        <span className="me-3">Select Model:</span>
+                        <Form.Select value={model} onChange={(e) => setModel(e.target.value)}>
+                            <option value="">-- Select a Model --</option>
+                            {openrouterModels.map((m) => (
                                 <option key={m.name} value={m.name}>
                                     {m.name}
                                 </option>
@@ -252,9 +382,33 @@ const Settings = () => {
                         value="groq"
                         checked={providerex === 'groq'}
                         onChange={(e) => setProviderex(e.currentTarget.value)}
-                        className="mb-2"
+                        className="mb-2 me-3"
                     >
                         Groq
+                    </ToggleButton>
+                    <ToggleButton
+                        id="providerex-deepseek"
+                        type="radio"
+                        variant={providerex === 'deepseek' ? 'dark' : 'outline-primary'}
+                        name="providerex"
+                        value="deepseek"
+                        checked={providerex === 'deepseek'}
+                        onChange={(e) => setProviderex(e.currentTarget.value)}
+                        className="mb-2 me-3"
+                    >
+                        Deepseek
+                    </ToggleButton>
+                    <ToggleButton
+                        id="providerex-openrouter"
+                        type="radio"
+                        variant={providerex === 'openrouter' ? 'dark' : 'outline-primary'}
+                        name="providerex"
+                        value="openrouter"
+                        checked={providerex === 'openrouter'}
+                        onChange={(e) => setProviderex(e.currentTarget.value)}
+                        className="mb-2"
+                    >
+                        Openrouter
                     </ToggleButton>
                 </ButtonGroup>
 
@@ -264,6 +418,19 @@ const Settings = () => {
                         <Form.Select value={modelex} onChange={(e) => setModelex(e.target.value)}>
                             <option value="">-- Select a Model --</option>
                             {groqModels.map((m) => (
+                                <option key={m.name} value={m.name}>
+                                    {m.name}
+                                </option>
+                            ))}
+                        </Form.Select>
+                    </div>
+                )}
+                {providerex === 'openrouter' && (
+                    <div className="mb-3">
+                        <span className="me-3">Select Model:</span>
+                        <Form.Select value={modelex} onChange={(e) => setModelex(e.target.value)}>
+                            <option value="">-- Select a Model --</option>
+                            {openrouterModels.map((m) => (
                                 <option key={m.name} value={m.name}>
                                     {m.name}
                                 </option>
