@@ -160,8 +160,8 @@ def classify_dataset(dataset_id):
 
         # Process samples (limiting to first 100 for demo)
         df = df.sample(frac=1, random_state=42).reset_index(drop=True)
-        samples = df.head(100).iterrows()
-        for _, row in tqdm(samples, total=min(100, len(df)), desc="Classifying"):
+        samples = df.head(500).iterrows()
+        for _, row in tqdm(samples, total=500, desc="Classifying"):
             try:
                 text = str(row[text_column])# Truncate long texts
 

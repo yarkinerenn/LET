@@ -163,7 +163,7 @@ const DatasetView = () => {
         <Container fluid>
             <Row className="py-4">
                 {/* Classification Sidebar */}
-                <Col md={2} className="border-end border-2">
+                <Col md={4} className="border-end border-2">
                     <Card className="border-0">
                         <Card.Body>
                             <Card.Title className="mb-4">Classification Methods</Card.Title>
@@ -236,9 +236,6 @@ const DatasetView = () => {
                                                                 {classification.method.toUpperCase()}
                                                             </Badge>
                                                             {getAccuracyBadge(classification.stats.accuracy)}
-                                                            <div className="text-muted small ms-auto">
-                                                                {formatDate(classification.created_at)}
-                                                            </div>
                                                         </div>
 
                                                         {classification.method === "llm" && (
@@ -312,7 +309,7 @@ const DatasetView = () => {
                 </Col>
 
                 {/* Main Content */}
-                <Col md={10}>
+                <Col md={8}>
                     {loading ? (
                         <div className="text-center">
                             <Spinner animation="border" />
