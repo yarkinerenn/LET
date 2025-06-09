@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import {Container, Row, Col, Card, Alert, Spinner, Button, Badge, Form} from 'react-bootstrap';
+import { Container, Row, Col, Card, Alert, Spinner, Button, Badge, Form } from 'react-bootstrap';
 import axios from 'axios';
-import {useProvider} from "../modules/provider";
+import { useProvider } from "../modules/provider";
 import '../index.css';
 
 interface ClassificationEntry {
@@ -17,8 +17,7 @@ interface ClassificationEntry {
 }
 
 const ExplanationPage = () => {
-    const [selectedBestExplanation, setSelectedBestExplanation] = useState<ExplanationType | null>(null);
-    const { provider, model,providerex,modelex } = useProvider();
+    const { provider, model, providerex, modelex } = useProvider();
     const { datasetId, classificationId, resultId } = useParams();
     const [explanationtext, setExplanationtext] = useState('');
     const [classification, setClassification] = useState<ClassificationEntry | null>(null);
@@ -36,32 +35,49 @@ const ExplanationPage = () => {
     const [combinedExplanation, setCombinedExplanation] = useState('');
     type ExplanationType = 'llm' | 'shap' | 'combined';
     const [activeExplanation, setActiveExplanation] = useState<ExplanationType>('llm');
-    const handleSelectBest = async (type: ExplanationType) => {
+    const [ratings, setRatings] = useState({
+        llm: 0,
+        shap: 0,
+        combined: 0
+    });
+    const [isSubmittingRatings, setIsSubmittingRatings] = useState(false);
+
+    const handleRatingChange = (type: ExplanationType, rating: number) => {
+        setRatings(prev => ({
+            ...prev,
+            [type]: rating
+        }));
+    };
+
+    const submitRatings = async () => {
+        setIsSubmittingRatings(true);
         try {
             await axios.post(
-                'http://localhost:5000/api/track-selection',
+                'http://localhost:5000/api/save_ratings',
                 {
                     classificationId,
                     resultId,
-                    selectedType: type,
+                    ratings,
                     timestamp: new Date().toISOString()
                 },
                 { withCredentials: true }
             );
-            setSelectedBestExplanation(type);
+            // Optionally show success message or navigate away
         } catch (err) {
-            setError('Failed to save selection');
+            setError('Failed to submit ratings');
+        } finally {
+            setIsSubmittingRatings(false);
         }
     };
+
     useEffect(() => {
         setExplanationtext('');
         setPlot('');
         setShapExplanation('');
         setCombinedExplanation('');
-        setSelectedBestExplanation(null);
+        setRatings({ llm: 0, shap: 0, combined: 0 }); // Reset ratings when changing result
         const fetchData = async () => {
             try {
-                // Fetch explanation data
                 const explanationResponse = await axios.get(
                     `http://localhost:5000/api/classificationentry/${classificationId}/${resultId}`,
                     { withCredentials: true }
@@ -70,19 +86,22 @@ const ExplanationPage = () => {
                 setPlot(explanationResponse.data.shap_plot);
                 setExplanationtext(explanationResponse.data.llm_explanation);
                 setShapExplanation(explanationResponse.data.shapwithllm);
-                console.log(explanationResponse.data);
+                const existingRatings = explanationResponse.data.ratings;
+                if (existingRatings) {
+                    setRatings({
+                        llm: existingRatings.llm || 0,
+                        shap: existingRatings.shap || 0,
+                        combined: existingRatings.combined || 0
+                    });
+                }
 
-                // Fetch classification metadata to get total results
                 const classificationResponse = await axios.get(
                     `http://localhost:5000/api/classification/${classificationId}`,
                     { withCredentials: true }
                 );
 
-                // Use optional chaining and default to empty array if results is undefined
                 const resultsLength = classificationResponse.data.results?.length || 0;
                 setTotalResults(resultsLength);
-
-                // Ensure resultId is parsed correctly, default to 0 if invalid
                 const parsedResultId = Number(resultId) || 0;
                 setCurrentResultIndex(parsedResultId);
 
@@ -94,11 +113,10 @@ const ExplanationPage = () => {
         };
 
         fetchData();
-    }, [classificationId, resultId]); // Add resultId to dependency array
+    }, [classificationId, resultId]);
+
     const generateExplanation = async () => {
         setIsExplaining(true);
-        // @ts-ignore
-        setExplanationtext('');
         try {
             const response = await axios.post('http://localhost:5000/api/explain', {
                 truelabel: classification?.actualLabel,
@@ -106,16 +124,15 @@ const ExplanationPage = () => {
                 confidence: classification?.confidence,
                 text: classification?.text,
                 explainer_type: explainerType,
-                provider: providerex ,
+                provider: providerex,
                 model: modelex,
-
-            }, { withCredentials: true } );
+            }, { withCredentials: true });
 
             if (explainerType === 'shap') {
                 setPlot(response.data.explanation);
                 setShapstring(response.data.top_words);
             } else {
-                setExplanationtext(response.data.explanation); // Normal metin geldiğinde kaydet.
+                setExplanationtext(response.data.explanation);
             }
         } catch (err) {
             setError('Failed to generate explanation');
@@ -123,6 +140,7 @@ const ExplanationPage = () => {
         }
         setIsExplaining(false);
     };
+
     const handlePrevious = () => {
         const newIndex = currentResultIndex - 1;
         setCurrentResultIndex(newIndex);
@@ -134,24 +152,21 @@ const ExplanationPage = () => {
         setCurrentResultIndex(newIndex);
         navigate(`/datasets/${datasetId}/classifications/${classificationId}/results/${newIndex}`);
     };
+
     const generateAllExplanations = async () => {
         try {
-            // Generate LLM explanation
             setIsExplaining(true);
             const llmResponse = await axios.post('http://localhost:5000/api/explain', {
                 truelabel: classification?.actualLabel,
                 predictedlabel: classification?.prediction,
                 confidence: classification?.confidence,
                 text: classification?.text,
-                explainer_type: explainerType,
+                explainer_type: 'llm',
                 classificationId: classificationId,
                 resultId: resultId,
-
-
-            }, { withCredentials: true } );
+            }, { withCredentials: true });
             setExplanationtext(llmResponse.data.explanation);
 
-            // Generate SHAP explanation
             const shapResponse = await axios.post('http://localhost:5000/api/explain', {
                 truelabel: classification?.actualLabel,
                 predictedlabel: classification?.prediction,
@@ -160,15 +175,10 @@ const ExplanationPage = () => {
                 explainer_type: 'shap',
                 classificationId: classificationId,
                 resultId: resultId
-
-
-            }, { withCredentials: true } );
+            }, { withCredentials: true });
             setPlot(shapResponse.data.explanation);
-            console.log(shapResponse.data.explanation);
             const shapwords = shapResponse.data.top_words;
-            console.log(shapwords,'SHAP words');
 
-            // Generate Combined explanation
             const combinedResponse = await axios.post('http://localhost:5000/api/explain_withshap', {
                 text: classification?.text,
                 shapwords: shapwords,
@@ -178,18 +188,14 @@ const ExplanationPage = () => {
                 confidence: classification?.confidence,
                 classificationId: classificationId,
                 resultId: resultId,
-            }, { withCredentials: true } );
+            }, { withCredentials: true });
             setShapExplanation(combinedResponse.data);
-            console.log(combinedResponse.data,'shap llms');
-
         } catch (err) {
             setError('Failed to generate explanations');
         } finally {
             setIsExplaining(false);
         }
     };
-
-
 
     const handleGenerateShapExplanation = async () => {
         setIsExplaining(true);
@@ -246,7 +252,6 @@ const ExplanationPage = () => {
                 Result {currentResultIndex + 1} of {totalResults}
             </div>
 
-
             {loading ? (
                 <div className="text-center py-5">
                     <Spinner animation="border" />
@@ -258,8 +263,7 @@ const ExplanationPage = () => {
                     <Col md={8} className="mx-auto">
                         <Card>
                             <Card.Body>
-                                <div className="mb-4   d-flex flex-column flex-md-row gap-4">
-                                    {/* Left: Original Text */}
+                                <div className="mb-4 d-flex flex-column flex-md-row gap-4">
                                     <div className="flex-grow-1">
                                         <h5 className="mb-3">Original Text</h5>
                                         <p
@@ -267,9 +271,9 @@ const ExplanationPage = () => {
                                             style={{
                                                 lineHeight: '1.6',
                                                 fontSize: '0.95rem',
-                                                maxHeight: '300px', // Sabit yükseklik
-                                                overflowY: 'auto',  // Scrollbars when needed
-                                                whiteSpace: 'pre-wrap', // Satır kaymaları düzgün olsun
+                                                maxHeight: '300px',
+                                                overflowY: 'auto',
+                                                whiteSpace: 'pre-wrap',
                                             }}
                                         >
                                             {classification.text}
@@ -279,7 +283,6 @@ const ExplanationPage = () => {
                                         </div>
                                     </div>
 
-                                    {/* Right: Labels */}
                                     <div className="d-flex flex-column justify-content-center align-items-center">
                                         <div className="mb-3 text-center">
                                             <div className="text-muted mb-1" style={{ fontSize: '0.85rem' }}>Prediction</div>
@@ -302,23 +305,20 @@ const ExplanationPage = () => {
                                         </div>
                                     </div>
                                 </div>
-
                             </Card.Body>
                         </Card>
                     </Col>
                 </Row>
-
-
             ) : null}
+
             <Row className="mb-5 mt-4 text-center">
                 <Col md={12}>
-                    <h5 className="fw-semibold text-muted">Please select the best type of explanation</h5>
+                    <h5 className="fw-semibold text-muted">Please rate each explanation (1-5)</h5>
                     <hr style={{ width: '60px', margin: '10px auto', borderTop: '2px solid #ccc' }} />
                 </Col>
             </Row>
+
             <div className="position-relative">
-                {/* Navigation Arrows */}
-                {/* Arrow Container */}
                 {classification?.model !== 'llm' && (
                     <Button
                         variant="light"
@@ -344,19 +344,17 @@ const ExplanationPage = () => {
                     </Button>
                 )}
 
-                {/* Carousel Content */}
                 <Row className="g-4 justify-content-center">
                     <Col xs={12} lg={12}>
                         <Card className="h-100">
                             <Card.Body>
-                                {/* Explanation Type Selector */}
                                 <div className="d-flex justify-content-center gap-2 mb-4">
                                     {['llm', 'shap', 'combined']
                                         .filter((type) => {
                                             if (classification?.model === 'llm') {
-                                                return type === 'llm'; // Only keep LLM for BERT
+                                                return type === 'llm';
                                             }
-                                            return true; // Keep all types for other models
+                                            return true;
                                         })
                                         .map((type) => (
                                             <Button
@@ -370,135 +368,113 @@ const ExplanationPage = () => {
                                         ))}
                                 </div>
 
-                                {/* Explanation Content - now using grid layout! */}
                                 <div style={{
                                     minHeight: '300px',
                                     display: 'grid',
                                     gridTemplateColumns: '1fr',
                                     position: 'relative'
                                 }}>
-                                    {/* LLM */}
-                                    <div className={`transition-all ${activeExplanation === 'llm' ? 'opacity-100 z-1' : 'opacity-0 z-0'}`}
-                                         style={{
-                                             gridArea: '1 / 1 / 2 / 2',
-                                             overflowY: 'auto'
-                                         }}>
-                                        <div className="d-flex justify-content-between align-items-center mb-3">
-                                            <Card.Title>LLM Explanation</Card.Title>
-                                            <Button
-                                                variant="outline-dark"
-                                                size="sm"
-                                                onClick={() => generateExplanation()}
-                                                disabled={isExplaining}
+                                    {['llm', 'shap', 'combined']
+                                        .filter(type => classification?.model === 'llm' ? type === 'llm' : true)
+                                        .map((type) => (
+                                            <div
+                                                key={type}
+                                                className={`transition-all ${activeExplanation === type ? 'opacity-100 z-1' : 'opacity-0 z-0'}`}
+                                                style={{
+                                                    gridArea: '1 / 1 / 2 / 2',
+                                                    overflowY: 'auto'
+                                                }}
                                             >
-                                                {isExplaining ? <Spinner size="sm" /> : 'Generate'}
-                                            </Button>
-                                        </div>
-                                        {explanationtext || 'No explanation generated yet'}
-                                        <div className="mt-3 center">
-                                            <Button
-                                                variant={selectedBestExplanation === 'llm' ? 'success' : 'outline-secondary'}
-                                                size="sm"
-                                                onClick={() => handleSelectBest('llm')}
-                                                disabled={!explanationtext}
-                                            >
-                                                {selectedBestExplanation === 'llm' ? '✓ Selected as Best' : 'Select as Best'}
-                                            </Button>
-                                        </div>
-                                    </div>
+                                                <div className="d-flex justify-content-between align-items-center mb-3">
+                                                    <Card.Title>
+                                                        {type === 'llm' ? 'LLM Explanation' :
+                                                            type === 'shap' ? 'SHAP Visualization' :
+                                                                'Combined SHAP + LLM Analysis'}
+                                                    </Card.Title>
+                                                    <Button
+                                                        variant="outline-dark"
+                                                        size="sm"
+                                                        onClick={() => {
+                                                            if (type === 'combined') {
+                                                                handleGenerateShapExplanation();
+                                                            } else {
+                                                                setExplainerType(type as 'llm' | 'shap');
+                                                                generateExplanation();
+                                                            }
+                                                        }}
+                                                        disabled={isExplaining}
+                                                    >
+                                                        {isExplaining ? <Spinner size="sm" /> : 'Generate'}
+                                                    </Button>
+                                                </div>
 
-                                    {/* SHAP */}
-                                    <div className={`transition-all ${activeExplanation === 'shap' ? 'opacity-100 z-1' : 'opacity-0 z-0'}`}
-                                         style={{
-                                             gridArea: '1 / 1 / 2 / 2',
-                                             overflowY: 'auto'
-                                         }}>
-                                        <div className="d-flex justify-content-between align-items-center mb-3">
-                                            <Card.Title>SHAP Visualization</Card.Title>
-                                            <Button
-                                                variant="outline-dark"
-                                                size="sm"
-                                                onClick={() => generateExplanation()}
-                                                disabled={isExplaining}
-                                            >
-                                                {isExplaining ? <Spinner size="sm" /> : 'Generate'}
-                                            </Button>
-                                        </div>
-                                        {plot ? (
-                                            <div className="bg-light p-3 rounded">
-                                                <div
-                                                    dangerouslySetInnerHTML={{ __html: plot }}
-                                                    style={{
-                                                        maxHeight: '300px',
-                                                        overflowY: 'auto'
-                                                    }}
-                                                />
-                                            </div>
-                                        ) : (
-                                            <div className="text-muted small">
-                                                Click generate to view SHAP analysis of important features
-                                            </div>
-                                        )}
-                                        <div className="mt-3">
-                                            <Button
-                                                variant={selectedBestExplanation === 'shap' ? 'success' : 'outline-secondary'}
-                                                size="sm"
-                                                onClick={() => handleSelectBest('shap')}
-                                                disabled={!plot}
-                                            >
-                                                {selectedBestExplanation === 'shap' ? '✓ Selected as Best' : 'Select as Best'}
-                                            </Button>
-                                        </div>
-                                    </div>
+                                                {type === 'llm' && (
+                                                    <div className="mb-3">
+                                                        {explanationtext || 'No explanation generated yet'}
+                                                    </div>
+                                                )}
 
-                                    {/* Combined */}
-                                    <div className={`transition-all ${activeExplanation === 'combined' ? 'opacity-100 z-1' : 'opacity-0 z-0'}`}
-                                         style={{
-                                             gridArea: '1 / 1 / 2 / 2',
-                                             overflowY: 'auto'
-                                         }}>
-                                        <div className="d-flex justify-content-between align-items-center mb-3">
-                                            <Card.Title>Combined SHAP + LLM Analysis</Card.Title>
-                                            <Button
-                                                variant="outline-dark"
-                                                size="sm"
-                                                onClick={handleGenerateShapExplanation}
-                                                disabled={isExplaining || !shapString}
-                                            >
-                                                {isExplaining ? <Spinner size="sm" /> : 'Generate'}
-                                            </Button>
-                                        </div>
-                                        {shapExplanation ? (
-                                            <div className="bg-light p-3 rounded explanation-box">
-                  <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0 }}>
-                    {shapExplanation}
-                  </pre>
-                                            </div>
-                                        ) : (
-                                            <div className="text-muted small">
-                                                {shapString
-                                                    ? "Generate combined explanation using SHAP features and LLM"
-                                                    : "Generate SHAP analysis first to enable combined explanation"
-                                                }
-                                            </div>
+                                                {type === 'shap' && (plot ? (
+                                                    <div className="bg-light p-3 rounded mb-3">
+                                                        <div
+                                                            dangerouslySetInnerHTML={{ __html: plot }}
+                                                            style={{
+                                                                maxHeight: '300px',
+                                                                overflowY: 'auto'
+                                                            }}
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-muted small mb-3">
+                                                        Click generate to view SHAP analysis of important features
+                                                    </div>
+                                                ))}
 
-                                        )}
-                                        <div className="mt-3">
-                                            <Button
-                                                variant={selectedBestExplanation === 'combined' ? 'success' : 'outline-secondary'}
-                                                size="sm"
-                                                onClick={() => handleSelectBest('combined')}
-                                                disabled={!shapExplanation}
-                                            >
-                                                {selectedBestExplanation === 'combined' ? '✓ Selected as Best' : 'Select as Best'}
-                                            </Button>
-                                        </div>
-                                    </div>
+                                                {type === 'combined' && (shapExplanation ? (
+                                                    <div className="bg-light p-3 rounded explanation-box mb-3">
+                                                        <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0 }}>
+                                                            {shapExplanation}
+                                                        </pre>
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-muted small mb-3">
+                                                        {shapString
+                                                            ? "Generate combined explanation using SHAP features and LLM"
+                                                            : "Generate SHAP analysis first to enable combined explanation"
+                                                        }
+                                                    </div>
+                                                ))}
 
+                                                <div className="mt-3">
+                                                    <h6>Rate this explanation (1-5):</h6>
+                                                    <div className="d-flex justify-content-center gap-1">
+                                                        {[1, 2, 3, 4, 5].map((star) => (
+                                                            <Button
+                                                                key={star}
+                                                                variant={ratings[type as ExplanationType] >= star ? "warning" : "outline-secondary"}
+                                                                className="p-1"
+                                                                style={{ minWidth: '36px' }}
+                                                                onClick={() => handleRatingChange(type as ExplanationType, star)}
+                                                                disabled={!(
+                                                                    (type === 'llm' && explanationtext) ||
+                                                                    (type === 'shap' && plot) ||
+                                                                    (type === 'combined' && shapExplanation))
+                                                                }
+                                                            >
+                                                                {star}
+                                                            </Button>
+                                                        ))}
+                                                    </div>
+                                                    <div className="text-center mt-2 small text-muted">
+                                                        {ratings[type as ExplanationType] ? `You rated: ${ratings[type as ExplanationType]}` : 'Not rated yet'}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
                                 </div>
                             </Card.Body>
-                            {classification?.model !== 'llm' && (
 
+                            {classification?.model !== 'llm' && (
                                 <Button
                                     variant="light"
                                     className="position-absolute d-flex align-items-center justify-content-center"
@@ -518,25 +494,35 @@ const ExplanationPage = () => {
                                     )}
                                 >
                                     <i className="fas fa-chevron-right" />
-                                </Button> )}
+                                </Button>
+                            )}
                         </Card>
-
                     </Col>
                 </Row>
             </div>
 
-            {/* Generate All Button */}
             <div className="text-center mt-4">
                 <Button
                     variant="primary"
                     onClick={generateAllExplanations}
                     disabled={isExplaining}
+                    className="me-2"
                 >
                     {isExplaining ? <Spinner size="sm" className="me-2" /> : null}
                     Generate All Explanations
                 </Button>
-            </div>
 
+                <Button
+                    variant="success"
+                    onClick={submitRatings}
+                    disabled={isSubmittingRatings || Object.values(ratings).every(rating => rating === 0)}
+                >
+                    {isSubmittingRatings ? (
+                        <Spinner size="sm" className="me-2" />
+                    ) : null}
+                    Submit All Ratings
+                </Button>
+            </div>
         </Container>
     );
 };

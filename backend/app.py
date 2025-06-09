@@ -1549,6 +1549,8 @@ def get_classificationentry(classification_id, result_id):
             "llm_explanation": result.get('llm_explanation', ''),
             "shap_plot": result.get('shap_plot_explanation', ''),
             "shapwithllm": result.get('shapwithllm_explanation', ''),
+            "ratings": result.get('ratings', {}),
+            "rating_timestamp": result.get('rating_timestamp', ''),
             "provider": classification.get('provider'),
             "model": classification.get('model')
         })
@@ -1656,6 +1658,49 @@ def encrypt_api_key(api_key: str) -> str:
 def decrypt_api_key(encrypted_api_key: str) -> str:
     """Decrypts an API key when retrieving from the database."""
     return cipher.decrypt(encrypted_api_key.encode()).decode()
+def save_ratings_to_db(classification_id, user_id, result_id, ratings, timestamp):
+    update_fields = {
+        f"results.{result_id}.ratings": ratings,
+        f"results.{result_id}.rating_timestamp": timestamp
+    }
 
+    result = mongo.db.classifications.update_one(
+        {
+            "_id": ObjectId(classification_id),
+            "user_id": ObjectId(user_id),
+            f"results.{result_id}": {"$exists": True}
+        },
+        {
+            "$set": update_fields
+        }
+    )
+
+    return result.modified_count > 0
+@app.route('/api/save_ratings', methods=['POST'])
+def save_ratings():
+    try:
+        data = request.get_json()
+
+        classification_id = data.get("classificationId")
+        result_id = data.get("resultId")
+        ratings = data.get("ratings")
+        timestamp = data.get("timestamp")
+        user_id = current_user.id
+        if isinstance(user_id, str):
+            user_id = ObjectId(user_id)  # depends on your auth system
+
+        if not all([classification_id, result_id, ratings, timestamp, user_id]):
+            return jsonify({"success": False, "message": "Missing required fields"}), 400
+
+        success = save_ratings_to_db(classification_id, user_id, result_id, ratings, timestamp)
+
+        if success:
+            return jsonify({"success": True}), 200
+        else:
+            return jsonify({"success": False, "message": "Update failed"}), 404
+
+    except Exception as e:
+        print("Error saving ratings:", e)
+        return jsonify({"success": False, "message": "Server error"}), 500
 if __name__ == '__main__':
     app.run(port=5000, debug=True)
