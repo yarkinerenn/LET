@@ -131,6 +131,7 @@ const ExplanationPage = () => {
                 provider: model?.provider,
                 model: modelId,
                 explainer_type: 'llm',
+                resultId:resultId,
                 predictedlabel: classification?.prediction,
                 confidence: classification?.confidence,
                 truelabel: classification?.actualLabel
@@ -145,6 +146,7 @@ const ExplanationPage = () => {
                     provider: model?.provider,
                     model: modelId,
                     label: classification?.prediction,
+                    resultId:resultId,
                     confidence: classification?.confidence
                 }, { withCredentials: true });
                 combinedExplanation = combinedResponse.data;
