@@ -30,7 +30,6 @@ interface ModelInfo {
     id: string;
     name: string;
     provider: string;
-    icon: string;
 }
 
 const ExplanationPage = () => {
@@ -45,9 +44,9 @@ const ExplanationPage = () => {
 
     // Available LLM models
     const [availableModels] = useState<ModelInfo[]>([
-        { id: 'deepseek', name: 'DeepSeek', provider: 'deepseek', icon: '🤖' },
-        { id: 'chatgpt', name: 'ChatGPT', provider: 'openai', icon: '🧠' },
-        { id: 'mistral', name: 'Mistral', provider: 'mistral', icon: '🌪️' }
+        { id: 'deepseek', name: 'DeepSeek', provider: 'deepseek'},
+        { id: 'chatgpt', name: 'ChatGPT', provider: 'openai'},
+        { id: 'mistral', name: 'Mistral', provider: 'mistral' }
     ]);
 
     const [activeModel, setActiveModel] = useState('deepseek');
@@ -338,7 +337,6 @@ const ExplanationPage = () => {
                     <Card className="h-100 explanation-card border-info">
                         <Card.Header className="bg-info text-white d-flex justify-content-between align-items-center">
                             <Card.Title className="mb-0">
-                                <span className="me-2">📊</span>
                                 SHAP Analysis
                             </Card.Title>
                             <Button
@@ -360,9 +358,6 @@ const ExplanationPage = () => {
                                 />
                             ) : (
                                 <div className="text-muted text-center py-5">
-                                    <div className="mb-3">
-                                        <span style={{ fontSize: '3rem' }}>📊</span>
-                                    </div>
                                     <p>Click "Generate" to create SHAP visualization</p>
                                 </div>
                             )}
@@ -424,7 +419,6 @@ const ExplanationPage = () => {
                                         eventKey={model.id}
                                         title={
                                             <div className="d-flex align-items-center justify-content-center gap-2">
-                                                <span className="model-icon">{model.icon}</span>
                                                 {model.name}
                                             </div>
                                         }
@@ -435,7 +429,6 @@ const ExplanationPage = () => {
                                                 <Col md={6}>
                                                     <div className="explanation-section">
                                                         <h6 className="text-primary mb-3">
-                                                            <span className="me-2">🧠</span>
                                                             Direct Explanation
                                                         </h6>
                                                         <div className="explanation-content mb-3">
@@ -462,7 +455,6 @@ const ExplanationPage = () => {
                                                 <Col md={6}>
                                                     <div className="explanation-section">
                                                         <h6 className="text-success mb-3">
-                                                            <span className="me-2">✨</span>
                                                             SHAP-Enhanced Analysis
                                                         </h6>
                                                         <div className="explanation-content mb-3">
