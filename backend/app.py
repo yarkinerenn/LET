@@ -1557,6 +1557,8 @@ def generate_llm_explanation_of_shap():
 
 
     except Exception as e:
+        traceback.print_exc()  # <-- HATA BURADA GÖRÜNÜR
+
         print(f"Error: {e}")
         return f"Error: {str(e)}"
 @app.route('/api/classificationentry/<classification_id>/<result_id>', methods=['GET'])

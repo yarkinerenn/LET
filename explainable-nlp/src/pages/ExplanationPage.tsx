@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Container, Row, Col, Card, Alert, Spinner, Button, Badge, Form } from 'react-bootstrap';
+import { Container, Row, Col, Card, Alert, Spinner, Button, Tab, Tabs, Badge } from 'react-bootstrap';
 import axios from 'axios';
 import { useProvider } from "../modules/provider";
 import '../index.css';
@@ -16,94 +16,76 @@ interface ClassificationEntry {
     model?: string;
 }
 
+interface ExplanationData {
+    llm?: string;
+    combined?: string;
+}
+
+interface ShapData {
+    explanation?: string;
+    shapWords?: string[];
+}
+
+interface ModelInfo {
+    id: string;
+    name: string;
+    provider: string;
+    icon: string;
+}
+
 const ExplanationPage = () => {
-    const { provider, model, providerex, modelex } = useProvider();
     const { datasetId, classificationId, resultId } = useParams();
-    const [explanationtext, setExplanationtext] = useState('');
+    const navigate = useNavigate();
     const [classification, setClassification] = useState<ClassificationEntry | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isExplaining, setIsExplaining] = useState(false);
-    const [explainerType, setExplainerType] = useState<'llm' | 'shap'>('llm');
-    const [plot, setPlot] = useState('');
-    const [shapString, setShapString] = useState('');
-    const [shapExplanation, setShapExplanation] = useState('');
-    const navigate = useNavigate();
     const [totalResults, setTotalResults] = useState(0);
     const [currentResultIndex, setCurrentResultIndex] = useState(0);
-    const [shapstring, setShapstring] = useState('');
-    const [combinedExplanation, setCombinedExplanation] = useState('');
-    type ExplanationType = 'llm' | 'shap' | 'combined';
-    const [activeExplanation, setActiveExplanation] = useState<ExplanationType>('llm');
-    const [ratings, setRatings] = useState({
-        llm: 0,
-        shap: 0,
-        combined: 0
-    });
+
+    // Available LLM models
+    const [availableModels] = useState<ModelInfo[]>([
+        { id: 'deepseek', name: 'DeepSeek', provider: 'deepseek', icon: '🤖' },
+        { id: 'chatgpt', name: 'ChatGPT', provider: 'openai', icon: '🧠' },
+        { id: 'mistral', name: 'Mistral', provider: 'mistral', icon: '🌪️' }
+    ]);
+
+    const [activeModel, setActiveModel] = useState('deepseek');
+    const [explanations, setExplanations] = useState<Record<string, ExplanationData>>({});
+    const [shapData, setShapData] = useState<ShapData>({});
+    const [ratings, setRatings] = useState<Record<string, Record<string, number>>>({});
+    const [shapRating, setShapRating] = useState(0);
     const [isSubmittingRatings, setIsSubmittingRatings] = useState(false);
 
-    const handleRatingChange = (type: ExplanationType, rating: number) => {
-        setRatings(prev => ({
-            ...prev,
-            [type]: rating
-        }));
-    };
-
-    const submitRatings = async () => {
-        setIsSubmittingRatings(true);
-        try {
-            await axios.post(
-                'http://localhost:5000/api/save_ratings',
-                {
-                    classificationId,
-                    resultId,
-                    ratings,
-                    timestamp: new Date().toISOString()
-                },
-                { withCredentials: true }
-            );
-            // Optionally show success message or navigate away
-        } catch (err) {
-            setError('Failed to submit ratings');
-        } finally {
-            setIsSubmittingRatings(false);
-        }
-    };
-
     useEffect(() => {
-        setExplanationtext('');
-        setPlot('');
-        setShapExplanation('');
-        setCombinedExplanation('');
-        setRatings({ llm: 0, shap: 0, combined: 0 }); // Reset ratings when changing result
         const fetchData = async () => {
             try {
-                const explanationResponse = await axios.get(
-                    `http://localhost:5000/api/classificationentry/${classificationId}/${resultId}`,
-                    { withCredentials: true }
-                );
-                setClassification(explanationResponse.data);
-                setPlot(explanationResponse.data.shap_plot);
-                setExplanationtext(explanationResponse.data.llm_explanation);
-                setShapExplanation(explanationResponse.data.shapwithllm);
-                const existingRatings = explanationResponse.data.ratings;
-                if (existingRatings) {
-                    setRatings({
-                        llm: existingRatings.llm || 0,
-                        shap: existingRatings.shap || 0,
-                        combined: existingRatings.combined || 0
-                    });
-                }
+                setLoading(true);
 
-                const classificationResponse = await axios.get(
-                    `http://localhost:5000/api/classification/${classificationId}`,
-                    { withCredentials: true }
-                );
+                // Fetch classification data
+                const [entryResponse, classificationResponse] = await Promise.all([
+                    axios.get(`http://localhost:5000/api/classificationentry/${classificationId}/${resultId}`, { withCredentials: true }),
+                    axios.get(`http://localhost:5000/api/classification/${classificationId}`, { withCredentials: true })
+                ]);
 
-                const resultsLength = classificationResponse.data.results?.length || 0;
-                setTotalResults(resultsLength);
-                const parsedResultId = Number(resultId) || 0;
-                setCurrentResultIndex(parsedResultId);
+                setClassification(entryResponse.data);
+                setTotalResults(classificationResponse.data.results?.length || 0);
+                setCurrentResultIndex(Number(resultId) || 0);
+
+                // Initialize empty explanations and ratings for all models
+                const initialData: Record<string, ExplanationData> = {};
+                const initialRatings: Record<string, Record<string, number>> = {};
+
+                availableModels.forEach(model => {
+                    initialData[model.id] = {};
+                    initialRatings[model.id] = {
+                        llm: 0,
+                        combined: 0
+                    };
+                });
+
+                setExplanations(initialData);
+                setRatings(initialRatings);
 
             } catch (err) {
                 setError("Failed to load data");
@@ -115,113 +97,165 @@ const ExplanationPage = () => {
         fetchData();
     }, [classificationId, resultId]);
 
-    const generateExplanation = async () => {
+    const generateShapExplanation = async () => {
         setIsExplaining(true);
         try {
-            const response = await axios.post('http://localhost:5000/api/explain', {
-                truelabel: classification?.actualLabel,
-                predictedlabel: classification?.prediction,
-                confidence: classification?.confidence,
-                text: classification?.text,
-                explainer_type: explainerType,
-                provider: providerex,
-                model: modelex,
-            }, { withCredentials: true });
-
-            if (explainerType === 'shap') {
-                setPlot(response.data.explanation);
-                setShapstring(response.data.top_words);
-            } else {
-                setExplanationtext(response.data.explanation);
-            }
-        } catch (err) {
-            setError('Failed to generate explanation');
-            console.log(err);
-        }
-        setIsExplaining(false);
-    };
-
-    const handlePrevious = () => {
-        const newIndex = currentResultIndex - 1;
-        setCurrentResultIndex(newIndex);
-        navigate(`/datasets/${datasetId}/classifications/${classificationId}/results/${newIndex}`);
-    };
-
-    const handleNext = () => {
-        const newIndex = currentResultIndex + 1;
-        setCurrentResultIndex(newIndex);
-        navigate(`/datasets/${datasetId}/classifications/${classificationId}/results/${newIndex}`);
-    };
-
-    const generateAllExplanations = async () => {
-        try {
-            setIsExplaining(true);
-            const llmResponse = await axios.post('http://localhost:5000/api/explain', {
-                truelabel: classification?.actualLabel,
-                predictedlabel: classification?.prediction,
-                confidence: classification?.confidence,
-                text: classification?.text,
-                explainer_type: 'llm',
-                classificationId: classificationId,
-                resultId: resultId,
-            }, { withCredentials: true });
-            setExplanationtext(llmResponse.data.explanation);
-
             const shapResponse = await axios.post('http://localhost:5000/api/explain', {
-                truelabel: classification?.actualLabel,
-                predictedlabel: classification?.prediction,
-                confidence: classification?.confidence,
                 text: classification?.text,
                 explainer_type: 'shap',
-                classificationId: classificationId,
-                resultId: resultId
-            }, { withCredentials: true });
-            setPlot(shapResponse.data.explanation);
-            const shapwords = shapResponse.data.top_words;
-
-            const combinedResponse = await axios.post('http://localhost:5000/api/explain_withshap', {
-                text: classification?.text,
-                shapwords: shapwords,
-                provider: providerex,
-                model: modelex,
-                label: classification?.prediction,
+                predictedlabel: classification?.prediction,
                 confidence: classification?.confidence,
-                classificationId: classificationId,
-                resultId: resultId,
+                truelabel: classification?.actualLabel
             }, { withCredentials: true });
-            setShapExplanation(combinedResponse.data);
+
+            setShapData({
+                explanation: shapResponse.data.explanation,
+                shapWords: shapResponse.data.top_words
+            });
+
         } catch (err) {
-            setError('Failed to generate explanations');
+            setError('Failed to generate SHAP explanation');
         } finally {
             setIsExplaining(false);
         }
     };
 
-    const handleGenerateShapExplanation = async () => {
+    const generateLLMExplanation = async (modelId: string) => {
+        setIsExplaining(true);
+        const model = availableModels.find(m => m.id === modelId);
+
+        try {
+            // Generate LLM explanation
+            const llmResponse = await axios.post('http://localhost:5000/api/explain', {
+                text: classification?.text,
+                provider: model?.provider,
+                model: modelId,
+                explainer_type: 'llm',
+                predictedlabel: classification?.prediction,
+                confidence: classification?.confidence,
+                truelabel: classification?.actualLabel
+            }, { withCredentials: true });
+
+            // Generate combined explanation if SHAP data exists
+            let combinedExplanation: null = null;
+            if (shapData.shapWords) {
+                const combinedResponse = await axios.post('http://localhost:5000/api/explain_withshap', {
+                    text: classification?.text,
+                    shapwords: shapData.shapWords,
+                    provider: model?.provider,
+                    model: modelId,
+                    label: classification?.prediction,
+                    confidence: classification?.confidence
+                }, { withCredentials: true });
+                combinedExplanation = combinedResponse.data;
+            }
+
+            // @ts-ignore
+            setExplanations(prev => ({
+                ...prev,
+                [modelId]: {
+                    llm: llmResponse.data.explanation,
+                    combined: combinedExplanation
+                }
+            }));
+
+        } catch (err) {
+            setError(`Failed to generate explanations for ${modelId}`);
+        } finally {
+            setIsExplaining(false);
+        }
+    };
+
+    const generateAllExplanations = async () => {
         setIsExplaining(true);
         try {
-            const response = await axios.post(
-                'http://localhost:5000/api/explain_withshap',
+            // First generate SHAP if not exists
+            if (!shapData.explanation) {
+                await generateShapExplanation();
+            }
+
+            // Then generate LLM explanations for all models
+            for (const model of availableModels) {
+                await generateLLMExplanation(model.id);
+            }
+        } catch (err) {
+            setError('Failed to generate all explanations');
+        } finally {
+            setIsExplaining(false);
+        }
+    };
+
+    const handleRatingChange = (modelId: string, type: string, rating: number) => {
+        setRatings(prev => ({
+            ...prev,
+            [modelId]: {
+                ...prev[modelId],
+                [type]: rating
+            }
+        }));
+    };
+
+    const submitRatings = async () => {
+        setIsSubmittingRatings(true);
+        try {
+            await axios.post(
+                'http://localhost:5000/api/submit-ratings',
                 {
-                    text: classification?.text,
-                    shapwords: shapString,
-                    provider: providerex,
-                    model: modelex,
-                    label: classification?.prediction,
-                    confidence: classification?.confidence,
+                    classificationId,
+                    resultId,
+                    ratings,
+                    shapRating,
+                    timestamp: new Date().toISOString()
                 },
                 { withCredentials: true }
             );
-            setShapExplanation(response.data);
+            alert('Ratings submitted successfully!');
         } catch (err) {
-            setError('Failed to generate SHAP explanation');
+            setError('Failed to submit ratings');
+        } finally {
+            setIsSubmittingRatings(false);
         }
-        setIsExplaining(false);
     };
 
+    const hasRatings = () => {
+        const hasModelRatings = Object.values(ratings).some(modelRatings =>
+            Object.values(modelRatings).some(rating => rating > 0)
+        );
+        return hasModelRatings || shapRating > 0;
+    };
+
+    const handlePrevious = () => {
+        const newIndex = currentResultIndex - 1;
+        navigate(`/datasets/${datasetId}/classifications/${classificationId}/results/${newIndex}`);
+    };
+
+    const handleNext = () => {
+        const newIndex = currentResultIndex + 1;
+        navigate(`/datasets/${datasetId}/classifications/${classificationId}/results/${newIndex}`);
+    };
+
+    if (loading) {
+        return (
+            <Container className="py-5 text-center">
+                <Spinner animation="border" variant="primary" />
+                <p className="mt-3">Loading classification data...</p>
+            </Container>
+        );
+    }
+
+    if (error) {
+        return (
+            <Container className="py-5">
+                <Alert variant="danger">{error}</Alert>
+                <Button variant="secondary" onClick={() => navigate(-1)}>Go Back</Button>
+            </Container>
+        );
+    }
+
     return (
-        <Container className="py-4">
-            <div className="d-flex justify-content-between mb-4">
+        <Container className="py-4 explanation-page" fluid>
+            {/* Navigation Header */}
+            <div className="d-flex justify-content-between align-items-center mb-4">
                 <Button
                     variant="outline-secondary"
                     onClick={() => navigate(`/datasets/${datasetId}/classifications/${classificationId}`)}
@@ -229,302 +263,300 @@ const ExplanationPage = () => {
                     ← Back to Classification
                 </Button>
 
-                <div className="d-flex gap-2">
-                    <Button
-                        variant="outline-primary"
-                        onClick={handlePrevious}
-                        disabled={currentResultIndex === 0}
-                    >
-                        ← Previous
-                    </Button>
-
-                    <Button
-                        variant="outline-primary"
-                        onClick={handleNext}
-                        disabled={currentResultIndex >= totalResults - 1}
-                    >
-                        Next →
-                    </Button>
+                <div className="d-flex align-items-center gap-3">
+                    <div className="text-muted">
+                        Result {currentResultIndex + 1} of {totalResults}
+                    </div>
+                    <div className="d-flex gap-2">
+                        <Button
+                            variant="outline-primary"
+                            onClick={handlePrevious}
+                            disabled={currentResultIndex === 0}
+                        >
+                            ← Previous
+                        </Button>
+                        <Button
+                            variant="outline-primary"
+                            onClick={handleNext}
+                            disabled={currentResultIndex >= totalResults - 1}
+                        >
+                            Next →
+                        </Button>
+                    </div>
                 </div>
             </div>
 
-            <div className="text-center mb-4 text-muted">
-                Result {currentResultIndex + 1} of {totalResults}
-            </div>
-
-            {loading ? (
-                <div className="text-center py-5">
-                    <Spinner animation="border" />
-                </div>
-            ) : error ? (
-                <Alert variant="danger">{error}</Alert>
-            ) : classification ? (
-                <Row>
-                    <Col md={8} className="mx-auto">
-                        <Card>
-                            <Card.Body>
-                                <div className="mb-4 d-flex flex-column flex-md-row gap-4">
-                                    <div className="flex-grow-1">
-                                        <h5 className="mb-3">Original Text</h5>
-                                        <p
-                                            className="p-3 bg-light rounded mb-2"
-                                            style={{
-                                                lineHeight: '1.6',
-                                                fontSize: '0.95rem',
-                                                maxHeight: '300px',
-                                                overflowY: 'auto',
-                                                whiteSpace: 'pre-wrap',
-                                            }}
+            {/* Classification Summary */}
+            {classification && (
+                <Card className="mb-4">
+                    <Card.Body>
+                        <Row>
+                            <Col md={8}>
+                                <h5>Original Text</h5>
+                                <div className="original-text p-3 bg-light rounded">
+                                    {classification.text}
+                                </div>
+                                <div className="text-muted small mt-2">
+                                    Confidence: {(classification.confidence * 100).toFixed(1)}%
+                                </div>
+                            </Col>
+                            <Col md={4}>
+                                <div className="d-flex flex-column gap-3">
+                                    <div className="text-center">
+                                        <div className="text-muted small">Prediction</div>
+                                        <Badge
+                                            pill
+                                            bg={classification.prediction === 'POSITIVE' ? 'success' : 'danger'}
+                                            className="px-3 py-2 fs-6"
                                         >
-                                            {classification.text}
-                                        </p>
-                                        <div style={{ fontSize: '0.75rem', color: '#666' }}>
-                                            Confidence: {(classification.confidence * 100).toFixed(1)}%
-                                        </div>
+                                            {classification.prediction}
+                                        </Badge>
                                     </div>
-
-                                    <div className="d-flex flex-column justify-content-center align-items-center">
-                                        <div className="mb-3 text-center">
-                                            <div className="text-muted mb-1" style={{ fontSize: '0.85rem' }}>Prediction</div>
-                                            <div
-                                                className={`d-flex justify-content-center align-items-center px-4 py-2 rounded-pill fw-semibold text-white shadow-sm ${classification.prediction === 'POSITIVE' ? 'bg-success' : 'bg-danger'}`}
-                                                style={{ fontSize: '0.9rem', minWidth: '120px', height: '38px' }}
-                                            >
-                                                {classification.prediction}
-                                            </div>
-                                        </div>
-
-                                        <div className="text-center">
-                                            <div className="text-muted mb-1" style={{ fontSize: '0.85rem' }}>Actual Label</div>
-                                            <div
-                                                className={`d-flex justify-content-center align-items-center px-4 py-2 rounded-pill fw-semibold text-white shadow-sm ${classification.actualLabel === 1 ? 'bg-success' : 'bg-danger'}`}
-                                                style={{ fontSize: '0.9rem', minWidth: '120px', height: '38px' }}
-                                            >
-                                                {classification.actualLabel === 1 ? 'POSITIVE' : 'NEGATIVE'}
-                                            </div>
-                                        </div>
+                                    <div className="text-center">
+                                        <div className="text-muted small">Actual Label</div>
+                                        <Badge
+                                            pill
+                                            bg={classification.actualLabel === 1 ? 'success' : 'danger'}
+                                            className="px-3 py-2 fs-6"
+                                        >
+                                            {classification.actualLabel === 1 ? 'POSITIVE' : 'NEGATIVE'}
+                                        </Badge>
                                     </div>
                                 </div>
-                            </Card.Body>
-                        </Card>
-                    </Col>
-                </Row>
-            ) : null}
+                            </Col>
+                        </Row>
+                    </Card.Body>
+                </Card>
+            )}
 
-            <Row className="mb-5 mt-4 text-center">
-                <Col md={12}>
-                    <h5 className="fw-semibold text-muted">Please rate each explanation (1-5)</h5>
-                    <hr style={{ width: '60px', margin: '10px auto', borderTop: '2px solid #ccc' }} />
+            {/* Main Layout */}
+            <Row className="g-4">
+                {/* Left Column - SHAP Visualization */}
+                <Col lg={4}>
+                    <Card className="h-100 explanation-card border-info">
+                        <Card.Header className="bg-info text-white d-flex justify-content-between align-items-center">
+                            <Card.Title className="mb-0">
+                                <span className="me-2">📊</span>
+                                SHAP Analysis
+                            </Card.Title>
+                            <Button
+                                size="sm"
+                                variant="light"
+                                onClick={generateShapExplanation}
+                                disabled={isExplaining}
+                            >
+                                {isExplaining ? (
+                                    <Spinner size="sm" animation="border" />
+                                ) : shapData.explanation ? 'Regenerate' : 'Generate'}
+                            </Button>
+                        </Card.Header>
+                        <Card.Body>
+                            {shapData.explanation ? (
+                                <div
+                                    dangerouslySetInnerHTML={{ __html: shapData.explanation }}
+                                    className="shap-visualization"
+                                />
+                            ) : (
+                                <div className="text-muted text-center py-5">
+                                    <div className="mb-3">
+                                        <span style={{ fontSize: '3rem' }}>📊</span>
+                                    </div>
+                                    <p>Click "Generate" to create SHAP visualization</p>
+                                </div>
+                            )}
+                        </Card.Body>
+                        <Card.Footer>
+                            <RatingSection
+                                title="SHAP Analysis"
+                                value={shapRating}
+                                onChange={setShapRating}
+                                disabled={!shapData.explanation}
+                            />
+                        </Card.Footer>
+                    </Card>
+                </Col>
+
+                {/* Right Column - LLM Explanations */}
+                <Col lg={8}>
+                    <Card className="h-100">
+                        <Card.Header>
+                            <div className="d-flex justify-content-between align-items-center">
+                                <Card.Title className="mb-0">
+                                    <span className="me-2">🤖</span>
+                                    LLM Explanations
+                                </Card.Title>
+                                <div className="d-flex gap-2">
+                                    <Button
+                                        size="sm"
+                                        variant="outline-primary"
+                                        onClick={() => generateLLMExplanation(activeModel)}
+                                        disabled={isExplaining}
+                                    >
+                                        Generate Current
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        variant="primary"
+                                        onClick={generateAllExplanations}
+                                        disabled={isExplaining}
+                                    >
+                                        {isExplaining ? (
+                                            <Spinner size="sm" className="me-2" />
+                                        ) : null}
+                                        Generate All
+                                    </Button>
+                                </div>
+                            </div>
+                        </Card.Header>
+                        <Card.Body className="p-0">
+                            {/* Model Selection Tabs */}
+                            <Tabs
+                                activeKey={activeModel}
+                                onSelect={(k) => setActiveModel(k as string)}
+                                className="model-tabs border-bottom-0"
+                                fill
+                            >
+                                {availableModels.map(model => (
+                                    <Tab
+                                        key={model.id}
+                                        eventKey={model.id}
+                                        title={
+                                            <div className="d-flex align-items-center justify-content-center gap-2">
+                                                <span className="model-icon">{model.icon}</span>
+                                                {model.name}
+                                            </div>
+                                        }
+                                    >
+                                        <div className="p-4">
+                                            <Row className="g-4">
+                                                {/* LLM Explanation */}
+                                                <Col md={6}>
+                                                    <div className="explanation-section">
+                                                        <h6 className="text-primary mb-3">
+                                                            <span className="me-2">🧠</span>
+                                                            Direct Explanation
+                                                        </h6>
+                                                        <div className="explanation-content mb-3">
+                                                            {explanations[activeModel]?.llm ? (
+                                                                <div className="p-3 bg-light rounded">
+                                                                    {explanations[activeModel].llm}
+                                                                </div>
+                                                            ) : (
+                                                                <div className="text-muted text-center py-4 border rounded">
+                                                                    No explanation generated yet
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <RatingSection
+                                                            title="Direct Explanation"
+                                                            value={ratings[activeModel]?.llm || 0}
+                                                            onChange={(rating: number) => handleRatingChange(activeModel, 'llm', rating)}
+                                                            disabled={!explanations[activeModel]?.llm}
+                                                        />
+                                                    </div>
+                                                </Col>
+
+                                                {/* Combined Analysis */}
+                                                <Col md={6}>
+                                                    <div className="explanation-section">
+                                                        <h6 className="text-success mb-3">
+                                                            <span className="me-2">✨</span>
+                                                            SHAP-Enhanced Analysis
+                                                        </h6>
+                                                        <div className="explanation-content mb-3">
+                                                            {explanations[activeModel]?.combined ? (
+                                                                <div className="p-3 bg-light rounded">
+                                                                    {explanations[activeModel].combined}
+                                                                </div>
+                                                            ) : (
+                                                                <div className="text-muted text-center py-4 border rounded">
+                                                                    {!shapData.shapWords ?
+                                                                        "Generate SHAP analysis first" :
+                                                                        "Generate combined analysis"
+                                                                    }
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <RatingSection
+                                                            title="Combined Analysis"
+                                                            value={ratings[activeModel]?.combined || 0}
+                                                            onChange={(rating: number) => handleRatingChange(activeModel, 'combined', rating)}
+                                                            disabled={!explanations[activeModel]?.combined}
+                                                        />
+                                                    </div>
+                                                </Col>
+                                            </Row>
+                                        </div>
+                                    </Tab>
+                                ))}
+                            </Tabs>
+                        </Card.Body>
+                    </Card>
                 </Col>
             </Row>
 
-            <div className="position-relative">
-                {classification?.model !== 'llm' && (
-                    <Button
-                        variant="light"
-                        className="position-absolute d-flex align-items-center justify-content-center"
-                        style={{
-                            left: '-40px',
-                            top: '50%',
-                            transform: 'translateY(-50%)',
-                            zIndex: 10,
-                            width: '36px',
-                            height: '36px',
-                            borderRadius: '50%',
-                            boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
-                            padding: 0
-                        }}
-                        onClick={() =>
-                            setActiveExplanation(prev =>
-                                prev === 'llm' ? 'combined' : prev === 'shap' ? 'llm' : 'shap'
-                            )
-                        }
-                    >
-                        <i className="fas fa-chevron-left" />
-                    </Button>
-                )}
-
-                <Row className="g-4 justify-content-center">
-                    <Col xs={12} lg={12}>
-                        <Card className="h-100">
-                            <Card.Body>
-                                <div className="d-flex justify-content-center gap-2 mb-4">
-                                    {['llm', 'shap', 'combined']
-                                        .filter((type) => {
-                                            if (classification?.model === 'llm') {
-                                                return type === 'llm';
-                                            }
-                                            return true;
-                                        })
-                                        .map((type) => (
-                                            <Button
-                                                key={type}
-                                                variant={activeExplanation === type ? 'dark' : 'outline-dark'}
-                                                size="sm"
-                                                onClick={() => setActiveExplanation(type as ExplanationType)}
-                                            >
-                                                {type.toUpperCase()}
-                                            </Button>
-                                        ))}
-                                </div>
-
-                                <div style={{
-                                    minHeight: '300px',
-                                    display: 'grid',
-                                    gridTemplateColumns: '1fr',
-                                    position: 'relative'
-                                }}>
-                                    {['llm', 'shap', 'combined']
-                                        .filter(type => classification?.model === 'llm' ? type === 'llm' : true)
-                                        .map((type) => (
-                                            <div
-                                                key={type}
-                                                className={`transition-all ${activeExplanation === type ? 'opacity-100 z-1' : 'opacity-0 z-0'}`}
-                                                style={{
-                                                    gridArea: '1 / 1 / 2 / 2',
-                                                    overflowY: 'auto'
-                                                }}
-                                            >
-                                                <div className="d-flex justify-content-between align-items-center mb-3">
-                                                    <Card.Title>
-                                                        {type === 'llm' ? 'LLM Explanation' :
-                                                            type === 'shap' ? 'SHAP Visualization' :
-                                                                'Combined SHAP + LLM Analysis'}
-                                                    </Card.Title>
-                                                    <Button
-                                                        variant="outline-dark"
-                                                        size="sm"
-                                                        onClick={() => {
-                                                            if (type === 'combined') {
-                                                                handleGenerateShapExplanation();
-                                                            } else {
-                                                                setExplainerType(type as 'llm' | 'shap');
-                                                                generateExplanation();
-                                                            }
-                                                        }}
-                                                        disabled={isExplaining}
-                                                    >
-                                                        {isExplaining ? <Spinner size="sm" /> : 'Generate'}
-                                                    </Button>
-                                                </div>
-
-                                                {type === 'llm' && (
-                                                    <div className="mb-3">
-                                                        {explanationtext || 'No explanation generated yet'}
-                                                    </div>
-                                                )}
-
-                                                {type === 'shap' && (plot ? (
-                                                    <div className="bg-light p-3 rounded mb-3">
-                                                        <div
-                                                            dangerouslySetInnerHTML={{ __html: plot }}
-                                                            style={{
-                                                                maxHeight: '300px',
-                                                                overflowY: 'auto'
-                                                            }}
-                                                        />
-                                                    </div>
-                                                ) : (
-                                                    <div className="text-muted small mb-3">
-                                                        Click generate to view SHAP analysis of important features
-                                                    </div>
-                                                ))}
-
-                                                {type === 'combined' && (shapExplanation ? (
-                                                    <div className="bg-light p-3 rounded explanation-box mb-3">
-                                                        <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0 }}>
-                                                            {shapExplanation}
-                                                        </pre>
-                                                    </div>
-                                                ) : (
-                                                    <div className="text-muted small mb-3">
-                                                        {shapString
-                                                            ? "Generate combined explanation using SHAP features and LLM"
-                                                            : "Generate SHAP analysis first to enable combined explanation"
-                                                        }
-                                                    </div>
-                                                ))}
-
-                                                <div className="mt-3">
-                                                    <h6>Rate this explanation (1-5):</h6>
-                                                    <div className="d-flex justify-content-center gap-1">
-                                                        {[1, 2, 3, 4, 5].map((star) => (
-                                                            <Button
-                                                                key={star}
-                                                                variant={ratings[type as ExplanationType] >= star ? "warning" : "outline-secondary"}
-                                                                className="p-1"
-                                                                style={{ minWidth: '36px' }}
-                                                                onClick={() => handleRatingChange(type as ExplanationType, star)}
-                                                                disabled={!(
-                                                                    (type === 'llm' && explanationtext) ||
-                                                                    (type === 'shap' && plot) ||
-                                                                    (type === 'combined' && shapExplanation))
-                                                                }
-                                                            >
-                                                                {star}
-                                                            </Button>
-                                                        ))}
-                                                    </div>
-                                                    <div className="text-center mt-2 small text-muted">
-                                                        {ratings[type as ExplanationType] ? `You rated: ${ratings[type as ExplanationType]}` : 'Not rated yet'}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                </div>
-                            </Card.Body>
-
-                            {classification?.model !== 'llm' && (
-                                <Button
-                                    variant="light"
-                                    className="position-absolute d-flex align-items-center justify-content-center"
-                                    style={{
-                                        right: '-40px',
-                                        top: '50%',
-                                        transform: 'translateY(-50%)',
-                                        zIndex: 10,
-                                        width: '36px',
-                                        height: '36px',
-                                        borderRadius: '50%',
-                                        boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
-                                        padding: 0
-                                    }}
-                                    onClick={() => setActiveExplanation(prev =>
-                                        prev === 'llm' ? 'shap' : prev === 'shap' ? 'combined' : 'llm'
-                                    )}
-                                >
-                                    <i className="fas fa-chevron-right" />
-                                </Button>
-                            )}
-                        </Card>
-                    </Col>
-                </Row>
-            </div>
-
-            <div className="text-center mt-4">
-                <Button
-                    variant="primary"
-                    onClick={generateAllExplanations}
-                    disabled={isExplaining}
-                    className="me-2"
-                >
-                    {isExplaining ? <Spinner size="sm" className="me-2" /> : null}
-                    Generate All Explanations
-                </Button>
-
+            {/* Submit Ratings */}
+            <div className="d-flex justify-content-end mt-4">
                 <Button
                     variant="success"
+                    size="lg"
                     onClick={submitRatings}
-                    disabled={isSubmittingRatings || Object.values(ratings).every(rating => rating === 0)}
+                    disabled={isSubmittingRatings || !hasRatings()}
+                    className="submit-ratings-btn"
                 >
                     {isSubmittingRatings ? (
                         <Spinner size="sm" className="me-2" />
                     ) : null}
-                    Submit All Ratings
+                    Submit All Ratings ({Object.keys(ratings).length * 2 + 1} explanations)
                 </Button>
             </div>
         </Container>
     );
 };
+
+// Rating Component
+interface RatingSectionProps {
+    title: string;
+    value: number;
+    onChange: (rating: number) => void;
+    disabled: boolean;
+}
+
+const RatingSection: React.FC<RatingSectionProps> = ({ title, value, onChange, disabled }) => (
+    <div className="rating-section">
+        <div className="d-flex justify-content-between align-items-center">
+            <span className="small text-muted">Rate {title}:</span>
+            <div className="d-flex gap-1">
+                {[1, 2, 3, 4, 5].map((rating) => (
+                    <button
+                        key={rating}
+                        className={`rating-star ${value >= rating ? 'active' : ''} ${disabled ? 'disabled' : ''}`}
+                        onClick={() => !disabled && onChange(rating)}
+                        disabled={disabled}
+                        style={{
+                            minWidth: '30px',
+                            height: '30px',
+                            border: '1px solid #dee2e6',
+                            borderRadius: '4px',
+                            backgroundColor: value >= rating ? '#007bff' : 'white',
+                            color: value >= rating ? 'white' : '#6c757d',
+                            cursor: disabled ? 'not-allowed' : 'pointer',
+                            fontSize: '14px',
+                            fontWeight: '500',
+                            opacity: disabled ? 0.5 : 1
+                        }}
+                    >
+                        {rating}
+                    </button>
+                ))}
+            </div>
+        </div>
+        {value > 0 && (
+            <div className="text-end small mt-1">
+                <span className="text-muted">Your rating:</span> {value}/5
+            </div>
+        )}
+    </div>
+);
 
 export default ExplanationPage;
