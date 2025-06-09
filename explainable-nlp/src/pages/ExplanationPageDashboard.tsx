@@ -67,6 +67,8 @@ const ExplanationPageDashboard = () => {
 
         try {
             const response = await axios.post('http://localhost:5000/api/explain', {
+                predictionId: predictionId,
+
                 predictedlabel: classification?.label,
                 confidence: classification?.confidence,
                 text: classification?.text,
@@ -93,8 +95,10 @@ const ExplanationPageDashboard = () => {
     const generateAllExplanations = async () => {
         try {
             // Generate LLM explanation
+            console.log('this is the predictionid',predictionId)
             setIsExplaining(true);
             const llmResponse = await axios.post('http://localhost:5000/api/explain', {
+                predictionId: predictionId,
                 predictedlabel: classification?.label,
                 confidence: classification?.confidence,
                 text: classification?.text,
@@ -106,6 +110,7 @@ const ExplanationPageDashboard = () => {
 
             // Generate SHAP explanation
             const shapResponse = await axios.post('http://localhost:5000/api/explain', {
+                predictionId: predictionId,
                 predictedlabel: classification?.label,
                 confidence: classification?.confidence,
                 text: classification?.text,
@@ -120,6 +125,7 @@ const ExplanationPageDashboard = () => {
 
             // Generate Combined explanation
             const combinedResponse = await axios.post('http://localhost:5000/api/explain_withshap', {
+                predictionId: predictionId,
                 text: classification?.text,
                 shapwords: shapwords,
                 provider: providerex,
@@ -145,6 +151,7 @@ const ExplanationPageDashboard = () => {
             const response = await axios.post(
                 'http://localhost:5000/api/explain_withshap',
                 {
+                    predictionId: predictionId,
                     text: classification?.text,
                     shapwords: shapString,
                     provider: providerex,

@@ -30,7 +30,7 @@ const Settings = () => {
         { name: "qwen-qwq-32b" }
     ];
     const openrouterModels = [
-        { name: "deepseek-r1-0528-qwen3-8b" },
+        { name: "deepseek/deepseek-r1-0528-qwen3-8b:free" },
         { name: "deepseek-r1-0528" },
         { name: "sarvam-m" },
         { name: "devstral-small" },
@@ -163,7 +163,7 @@ const Settings = () => {
         console.log("Submit button clicked!");
 
         // Ensure at least one API key is filled
-        if (!openaiApi && !grokApi) {
+        if (!openaiApi && !grokApi && !deepseekApi && !openrouterApi) {
             setError("Please enter at least one API key.");
             console.log("Error: Both API fields are empty.");
             return;
@@ -175,9 +175,12 @@ const Settings = () => {
         setSuccess(""); // Clear previous success messages
 
         // Prepare the request payload (only include non-empty values)
-        const payload: { openai_api?: string; grok_api?: string } = {};
+        const payload: { openai_api?: string; grok_api?: string ,deepseek_api?: string, openrouter_api?: string} = {};
         if (openaiApi) payload.openai_api = openaiApi;
         if (grokApi) payload.grok_api = grokApi;
+        if (deepseekApi) payload.deepseek_api = deepseekApi;
+        if (openrouterApi) payload.openrouter_api = openrouterApi;
+
 
         console.log("Sending request with payload:", payload);
 
@@ -245,7 +248,7 @@ const Settings = () => {
                                 <Form.Control
                                     type="text"
                                     placeholder="Enter your Deepseek API key (optional)"
-                                    value={grokApi}
+                                    value={deepseekApi}
                                     onChange={(e) => setdeepseekApi(e.target.value)}
                                 />
                             </Form.Group>
@@ -255,7 +258,7 @@ const Settings = () => {
                                 <Form.Control
                                     type="text"
                                     placeholder="Enter your Openrouter API key (optional)"
-                                    value={grokApi}
+                                    value={openrouterApi}
                                     onChange={(e) => setopenrouterApi(e.target.value)}
                                 />
                             </Form.Group>

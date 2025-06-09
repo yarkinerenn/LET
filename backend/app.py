@@ -788,11 +788,11 @@ def get_user_api_key_openrouter():
         return None
 
     # Fetch the OpenAI API key from MongoDB to avoid issues with Flask-Login session
-    user_data = mongo.db.users.find_one({'_id': ObjectId(current_user.id)}, {'grok_api': 1})
+    user_data = mongo.db.users.find_one({'_id': ObjectId(current_user.id)}, {'openrouter_api': 1})
     print(current_user.username,'this is the user')
 
-    if user_data and "grok_api" in user_data:
-        return decrypt_api_key(user_data['grok_api'])  # Return decrypted API key
+    if user_data and "openrouter_api" in user_data:
+        return decrypt_api_key(user_data['openrouter_api'])  # Return decrypted API key
     return None
 
 @app.route('/api/login', methods=['POST'])
@@ -821,7 +821,7 @@ def update_api_keys():
     openai_api_key = data.get("openai_api")
     grok_api_key = data.get("grok_api")
     deepseek_api_key = data.get("deepseek_api")
-    openrouter_api_key= data.get('openrouter_api_key')
+    openrouter_api_key= data.get('openrouter_api')
 
     update_fields = {}
 
@@ -1054,7 +1054,7 @@ def explain_prediction():
 
     try:
         data = request.json
-        prediction_id = data.get('prediction_id','fromdata')
+        prediction_id = data.get('predictionId','fromdata')
         classificationId=data.get('classificationId')
         resultId=data.get('resultId')
         predictedlabel=data.get('predictedlabel')
@@ -1066,6 +1066,8 @@ def explain_prediction():
         provider = user_doc.get('preferred_providerex', 'openai')
         model = user_doc.get('preferred_modelex', 'gpt-3.5-turbo')
         explainer_type = data.get('explainer_type', 'llm')
+
+        print('this is predid', prediction_id)
 
         if prediction_id=='fromdata': #if the explanation is for dataset
             if not text:
@@ -1108,6 +1110,7 @@ def generate_llm_explanation(text, label, score,provider,model):
     """generate explanations with generative AI"""
 
     try:
+        print('this is the provider')
         if provider == 'openai':
 
             openai_api_key = get_user_api_key_openai()
@@ -1160,12 +1163,15 @@ def generate_llm_explanation(text, label, score,provider,model):
             )
             return chat_completion.choices[0].message.content
         elif provider=='openrouter':
+            print('openroutersss')
             openai_api_key = get_user_api_key_openrouter()
+            print(openai_api_key,'inst it a key')
 
             if not openai_api_key:
                 return "Error: No OpenAI API key found for this user."
 
-            client = OpenAI(api_key=openai_api_key)
+            client = OpenAI(  base_url="https://openrouter.ai/api/v1",
+                              api_key=openai_api_key)
 
             prompt = f"""
                 Explain this sentiment analysis result in simple terms:
@@ -1215,6 +1221,32 @@ def generate_llm_explanationofdataset(text, label,truelabel, score,provider,mode
 
             response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": prompt}]
+            )
+
+            explanation = response.choices[0].message.content
+            return explanation
+        elif provider=='openrouter':
+            openai_api_key = get_user_api_key_openrouter()
+
+            if not openai_api_key:
+                return "Error: No OpenAI API key found for this user."
+
+            client = OpenAI(  base_url="https://openrouter.ai/api/v1",
+                              api_key=openai_api_key)
+
+            prompt = f"""
+                Explain this sentiment analysis result in simple terms:
+                
+                Text: {text}
+                Sentiment: {label} ({score}% confidence)
+                
+                Focus on key words and overall tone.
+                Keep explanation under 3 sentences.
+            """
+
+            response = client.chat.completions.create(
+                model=model,
                 messages=[{"role": "user", "content": prompt}]
             )
 
@@ -1288,12 +1320,13 @@ def generate_llm_explanation_of_shap():
         classificationId=data.get('classificationId')
         resultId=data.get('resultId')
         text = data.get('text')
-        prediction_id = data.get('prediction_id')
+        prediction_id = data.get('predictionId')
         user_doc = mongo.db.users.find_one({"_id": ObjectId(current_user.id)})
         provider = user_doc.get('preferred_providerex', 'openai')
         model = user_doc.get('preferred_modelex', 'gpt-3.5-turbo')
         explainer_type = data.get('explainer_type', 'llm')
         if prediction_id:
+            print('prediction is in shap')
 
             if not prediction_id or not text:
                 return jsonify({"error": "Missing prediction_id or text"}), 400
@@ -1377,7 +1410,7 @@ def generate_llm_explanation_of_shap():
                 if not openai_api_key:
                     return "Error: No OpenAI API key found for this user."
 
-                client = OpenAI(api_key=openai_api_key)
+                client = OpenAI( base_url="https://openrouter.ai/api/v1",api_key=openai_api_key)
 
                 prompt = f"""
                         Explain this sentiment analysis result in simple terms with most affecting words provided by SHAP:
@@ -1490,7 +1523,7 @@ def generate_llm_explanation_of_shap():
                 if not openai_api_key:
                     return "Error: No OpenAI API key found for this user."
 
-                client = OpenAI(api_key=openai_api_key)
+                client = OpenAI(base_url="https://openrouter.ai/api/v1",api_key=openai_api_key)
 
                 prompt = f"""
                     Explain this sentiment analysis result in simple terms with most affecting words provided by SHAP:
