@@ -14,6 +14,7 @@ interface ClassificationEntry {
     importantWords?: { word: string; score: number }[];
     provider?: string;
     model?: string;
+    explanation_models?: Array<{provider: string, model: string}>; // Add this line
 }
 
 interface ExplanationData {
@@ -42,12 +43,8 @@ const ExplanationPage = () => {
     const [totalResults, setTotalResults] = useState(0);
     const [currentResultIndex, setCurrentResultIndex] = useState(0);
 
-    // Available LLM models
-    const [availableModels] = useState<ModelInfo[]>([
-        { id: 'deepseek', name: 'DeepSeek', provider: 'deepseek'},
-        { id: 'chatgpt', name: 'ChatGPT', provider: 'openai'},
-        { id: 'mistral', name: 'Mistral', provider: 'mistral' }
-    ]);
+    const [availableModels, setAvailableModels] = useState<ModelInfo[]>([]);
+
 
     const [activeModel, setActiveModel] = useState('deepseek');
     const [explanations, setExplanations] = useState<Record<string, ExplanationData>>({});
@@ -57,44 +54,59 @@ const ExplanationPage = () => {
     const [isSubmittingRatings, setIsSubmittingRatings] = useState(false);
 
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                setLoading(true);
+    const fetchData = async () => {
+        try {
+            setLoading(true);
 
-                // Fetch classification data
-                const [entryResponse, classificationResponse] = await Promise.all([
-                    axios.get(`http://localhost:5000/api/classificationentry/${classificationId}/${resultId}`, { withCredentials: true }),
-                    axios.get(`http://localhost:5000/api/classification/${classificationId}`, { withCredentials: true })
-                ]);
+            // Fetch classification data
+            const [entryResponse, classificationResponse] = await Promise.all([
+                axios.get(`http://localhost:5000/api/classificationentry/${classificationId}/${resultId}`, { withCredentials: true }),
+                axios.get(`http://localhost:5000/api/classification/${classificationId}`, { withCredentials: true })
+            ]);
 
-                setClassification(entryResponse.data);
-                setTotalResults(classificationResponse.data.results?.length || 0);
-                setCurrentResultIndex(Number(resultId) || 0);
+            setClassification(entryResponse.data);
+            setTotalResults(classificationResponse.data.results?.length || 0);
+            setCurrentResultIndex(Number(resultId) || 0);
 
-                // Initialize empty explanations and ratings for all models
-                const initialData: Record<string, ExplanationData> = {};
-                const initialRatings: Record<string, Record<string, number>> = {};
+            // Get saved explanation models or use default if none exist
+            const savedModels = classificationResponse.data.explanation_models || [
+                { provider: 'deepseek', model: 'deepseek' },
+                { provider: 'openai', model: 'chatgpt' },
+                { provider: 'mistral', model: 'mistral' }
+            ];
 
-                availableModels.forEach(model => {
-                    initialData[model.id] = {};
-                    initialRatings[model.id] = {
-                        llm: 0,
-                        combined: 0
-                    };
-                });
+            // Initialize explanations and ratings for saved models
+            const initialData: Record<string, ExplanationData> = {};
+            const initialRatings: Record<string, Record<string, number>> = {};
 
-                setExplanations(initialData);
-                setRatings(initialRatings);
+            savedModels.forEach((model: { provider: any; model: any; }) => {
+                const modelId = `${model.provider}-${model.model}`.toLowerCase();
+                initialData[modelId] = {};
+                initialRatings[modelId] = {
+                    llm: 0,
+                    combined: 0
+                };
+            });
+            const modelInfos = savedModels.map((model: { provider: any; model: any; }, index: any) => ({
+                id: `${model.provider}-${model.model}`.toLowerCase(),
+                name: `${model.provider}/${model.model}`,
+                provider: model.provider
+            }));
+            setAvailableModels(modelInfos);
 
-            } catch (err) {
-                setError("Failed to load data");
-            } finally {
-                setLoading(false);
-            }
-        };
+            setExplanations(initialData);
+            setRatings(initialRatings);
+            setActiveModel(Object.keys(initialData)[0] || '');
 
-        fetchData();
-    }, [classificationId, resultId]);
+        } catch (err) {
+            setError("Failed to load data");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    fetchData();
+}, [classificationId, resultId]);
 
     const generateShapExplanation = async () => {
         setIsExplaining(true);
@@ -122,18 +134,20 @@ const ExplanationPage = () => {
     const generateLLMExplanation = async (modelId: string) => {
         setIsExplaining(true);
         const model = availableModels.find(m => m.id === modelId);
+        const [provider, modelName] = modelId.split('-');
 
         try {
             // Generate LLM explanation
             const llmResponse = await axios.post('http://localhost:5000/api/explain', {
                 text: classification?.text,
-                provider: model?.provider,
-                model: modelId,
+                provider: provider,
+                model: modelName,
                 explainer_type: 'llm',
                 resultId:resultId,
                 predictedlabel: classification?.prediction,
                 confidence: classification?.confidence,
-                truelabel: classification?.actualLabel
+                truelabel: classification?.actualLabel,
+                classificationId:classificationId,
             }, { withCredentials: true });
 
             // Generate combined explanation if SHAP data exists

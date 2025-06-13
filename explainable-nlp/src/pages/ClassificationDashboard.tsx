@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link,useNavigate } from 'react-router-dom';
-import { Container, Row, Col, Card, Table, Alert, Spinner, Button, Badge } from 'react-bootstrap';
+import { Container, Row, Col, Card, Table, Alert, Spinner, Button, Badge,Modal,Form } from 'react-bootstrap';
 import axios from 'axios';
 import {
     BarChart,
@@ -57,7 +57,16 @@ const ClassificationDashboard = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
     const navigate = useNavigate();
-
+    const [showModelModal, setShowModelModal] = useState(false);
+    const availableModels = [
+      { provider: 'OpenAI', model: 'gpt-4' },
+      { provider: 'OpenAI', model: 'gpt-3.5-turbo' },
+      { provider: 'Anthropic', model: 'claude-3-opus' },
+      { provider: 'Anthropic', model: 'claude-3-sonnet' },
+      { provider: 'Google', model: 'gemini-pro' },
+      { provider: 'Meta', model: 'llama-3-70b' },
+    ];
+    const [selectedModels, setSelectedModels] = useState<string[]>([]);
     useEffect(() => {
         const fetchData = async () => {
             try {
@@ -122,36 +131,72 @@ const ClassificationDashboard = () => {
         currentPage * itemsPerPage
     );
 
+const handleSubmitModels = async () => {
+  try {
+    const explanation_models = selectedModels.map(model => {
+      const [provider, modelName] = model.split(':');
+      return { provider, model: modelName };
+    });
+
+    await axios.post(
+      `http://localhost:5000/api/classification/${classificationId}/add_explanation_models`,
+      { explanation_models },
+      { withCredentials: true }
+    );
+
+    setShowModelModal(false);
+    alert('Explanation models added successfully!');
+  } catch (error) {
+    console.error('Failed to add explanation models:', error);
+    alert('Failed to add explanation models. Please try again.');
+  }
+};
+
     return (
-        <Container fluid className="py-4">
+
+        <><Container fluid className="py-4">
             {loading ? (
                 <div className="text-center">
-                    <Spinner animation="border" />
+                    <Spinner animation="border"/>
                 </div>
             ) : error ? (
                 <Alert variant="danger">{error}</Alert>
             ) : (
                 <>
-                    <Row className="mb-4">
-                        <Col>
-                            <h2>Classification Report</h2>
-                            <div className="d-flex gap-3 mb-3">
-                                <Badge bg="info">
-                                    Method: {classification?.method?.toUpperCase()}
-                                </Badge>
-                                {classification?.provider && (
-                                    <Badge bg="secondary">
-                                        Provider: {classification.provider}
-                                    </Badge>
-                                )}
-                                {classification?.model && (
-                                    <Badge bg="dark">
-                                        Model: {classification.model}
-                                    </Badge>
-                                )}
-                            </div>
-                        </Col>
-                    </Row>
+                    <Row className="mb-4 align-items-center justify-content-between">
+              <Col md="auto">
+                <h2 className="mb-2">Classification Report</h2>
+                <div className="d-flex gap-2 flex-wrap">
+                  <Badge bg="info">
+                    Method: {classification?.method?.toUpperCase()}
+                  </Badge>
+                  {classification?.provider && (
+                    <Badge bg="secondary">
+                      Provider: {classification.provider}
+                    </Badge>
+                  )}
+                  {classification?.model && (
+                    <Badge bg="dark">
+                      Model: {classification.model}
+                    </Badge>
+                  )}
+                </div>
+              </Col>
+
+              <Col md="auto">
+                <Button
+                  variant="outline-primary"
+                  onClick={() => {
+                    setSelectedModels([]);
+                    setShowModelModal(true);
+                  }}
+                  className="mt-2"
+                >
+                  Choose Different LLMs
+                </Button>
+              </Col>
+            </Row>
+
 
                     <Row className="mb-4">
                         <Col md={3}>
@@ -210,8 +255,8 @@ const ClassificationDashboard = () => {
                                         <PieChart>
                                             <Pie
                                                 data={[
-                                                    { name: 'Positive', value: stats?.positive || 0 },
-                                                    { name: 'Negative', value: stats?.negative || 0 },
+                                                    {name: 'Positive', value: stats?.positive || 0},
+                                                    {name: 'Negative', value: stats?.negative || 0},
                                                 ]}
                                                 cx="50%"
                                                 cy="50%"
@@ -223,11 +268,10 @@ const ClassificationDashboard = () => {
                                                 {['Positive', 'Negative'].map((entry, index) => (
                                                     <Cell
                                                         key={`cell-${index}`}
-                                                        fill={index === 0 ? '#4CAF50' : '#F44336'}
-                                                    />
+                                                        fill={index === 0 ? '#4CAF50' : '#F44336'}/>
                                                 ))}
                                             </Pie>
-                                            <Tooltip />
+                                            <Tooltip/>
                                         </PieChart>
                                     </ResponsiveContainer>
                                 </Card.Body>
@@ -255,12 +299,12 @@ const ClassificationDashboard = () => {
                                                 },
                                             ]}
                                         >
-                                            <CartesianGrid strokeDasharray="3 3" />
-                                            <XAxis dataKey="name" />
-                                            <YAxis />
-                                            <Tooltip />
-                                            <RechartsLegend />
-                                            <Bar dataKey="value" fill="#8884d8" />
+                                            <CartesianGrid strokeDasharray="3 3"/>
+                                            <XAxis dataKey="name"/>
+                                            <YAxis/>
+                                            <Tooltip/>
+                                            <RechartsLegend/>
+                                            <Bar dataKey="value" fill="#8884d8"/>
                                         </BarChart>
                                     </ResponsiveContainer>
                                 </Card.Body>
@@ -290,9 +334,9 @@ const ClassificationDashboard = () => {
                                                     key={index}
                                                     onClick={() => navigate(`/datasets/${datasetId}/classifications/${classificationId}/results/${index}`)}
                                                     className={isMismatch ? 'table-danger' : ''}
-                                                    style={{ cursor: 'pointer' }}
+                                                    style={{cursor: 'pointer'}}
                                                 >
-                                                    <td className="text-truncate" style={{ maxWidth: '300px' }}>
+                                                    <td className="text-truncate" style={{maxWidth: '300px'}}>
                                                         {result.text}
                                                     </td>
                                                     <td>
@@ -303,7 +347,8 @@ const ClassificationDashboard = () => {
                                                     <td>{renderConfidence(result.score)}</td>
                                                     {result.actualLabel && (
                                                         <td>
-                                                            <Badge bg={result.actualLabel === 'POSITIVE' ? 'success' : 'danger'}>
+                                                            <Badge
+                                                                bg={result.actualLabel === 'POSITIVE' ? 'success' : 'danger'}>
                                                                 {result.actualLabel}
                                                             </Badge>
                                                         </td>
@@ -324,8 +369,8 @@ const ClassificationDashboard = () => {
                                             Previous
                                         </Button>
                                         <span className="mx-3 my-auto">
-            Page {currentPage} of {Math.ceil((classification?.results?.length || 0) / itemsPerPage)}
-        </span>
+                                            Page {currentPage} of {Math.ceil((classification?.results?.length || 0) / itemsPerPage)}
+                                        </span>
                                         <Button
                                             variant="outline-primary"
                                             disabled={currentPage * itemsPerPage >= (classification?.results?.length || 0)}
@@ -340,7 +385,57 @@ const ClassificationDashboard = () => {
                     </Row>
                 </>
             )}
-        </Container>
+
+        </Container><Modal show={showModelModal} onHide={() => setShowModelModal(false)}>
+            <Modal.Header closeButton>
+                <Modal.Title>Select 3 LLMs</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+                <p>Choose 3 models from different providers:</p>
+                <div className="model-selection">
+                    {availableModels.map((model, index) => (
+                        <div key={index} className="mb-2">
+                            <input
+                                type="checkbox"
+                                id={`model-${index}`}
+                                checked={selectedModels.includes(`${model.provider}:${model.model}`)}
+                                onChange={(e) => {
+                                    const modelKey = `${model.provider}:${model.model}`;
+                                    let newSelected = [...selectedModels];
+
+                                    if (e.target.checked) {
+                                        // Only allow 3 selections
+                                        if (newSelected.length < 3) {
+                                            newSelected.push(modelKey);
+                                        }
+                                    } else {
+                                        newSelected = newSelected.filter(m => m !== modelKey);
+                                    }
+
+                                    setSelectedModels(newSelected);
+                                }}
+                                disabled={selectedModels.length >= 3 &&
+                                    !selectedModels.includes(`${model.provider}:${model.model}`)}/>
+                            <label htmlFor={`model-${index}`} className="ms-2">
+                                {model.provider} - {model.model}
+                            </label>
+                        </div>
+                    ))}
+                </div>
+            </Modal.Body>
+            <Modal.Footer>
+                <Button variant="secondary" onClick={() => setShowModelModal(false)}>
+                    Cancel
+                </Button>
+                <Button
+                    variant="primary"
+                    onClick={handleSubmitModels}
+                    disabled={selectedModels.length !== 3}
+                >
+                    Submit
+                </Button>
+            </Modal.Footer>
+        </Modal></>
     );
 };
 

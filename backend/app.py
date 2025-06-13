@@ -92,6 +92,30 @@ def get_dataset(dataset_id):
     except Exception as e:
         print(e)
         return jsonify({"error": str(e)}), 500
+@app.route('/api/classification/<classification_id>/add_explanation_models', methods=['POST'])
+@login_required
+def add_explanationmodels_to_classficication(classification_id):
+    data = request.get_json()
+    explanation_models = data.get('explanation_models', [])
+    mongo.db.classifications.update_one(
+            {
+                "_id": ObjectId(classification_id),
+                "user_id": ObjectId(current_user.id)  # Ensure user owns this classification
+            },
+            {
+                "$set": {
+                    "explanation_models": explanation_models,
+                    "updated_at": datetime.now()
+                }
+            }
+        )
+
+    return jsonify({
+        "message": "Explanation models added successfully",
+        "classification_id": classification_id
+    }), 200
+
+
 
 @app.route('/api/classify/<dataset_id>', methods=['POST'])
 @login_required
@@ -1053,18 +1077,24 @@ def explain_prediction():
     """Generate explanations shap or generative AI explanations for classification"""
 
     try:
+        user_doc = mongo.db.users.find_one({"_id": ObjectId(current_user.id)})
         data = request.json
         prediction_id = data.get('predictionId','fromdata')
-        classificationId=data.get('classificationId')
+        classificationId=data.get('classificationId','empty')
+        if classificationId == 'empty':
+            provider = user_doc.get('preferred_providerex', 'openai')
+            model = user_doc.get('preferred_modelex', 'gpt-3.5-turbo')
+        else:
+            provider = data.get('provider', 'openai')
+            model = data.get('model', 'gpt-3.5-turbo')
+
         resultId=data.get('resultId')
         predictedlabel=data.get('predictedlabel')
 
         truelabel=data.get('truelabel')
         confidence=data.get('confidence')
         text = data.get('text'  )
-        user_doc = mongo.db.users.find_one({"_id": ObjectId(current_user.id)})
-        provider = user_doc.get('preferred_providerex', 'openai')
-        model = user_doc.get('preferred_modelex', 'gpt-3.5-turbo')
+
         explainer_type = data.get('explainer_type', 'llm')
 
         print('this is predid', prediction_id)
