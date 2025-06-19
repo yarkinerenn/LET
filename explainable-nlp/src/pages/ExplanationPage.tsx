@@ -112,10 +112,9 @@ const ExplanationPage = () => {
             setActiveModel(Object.keys(initialData)[0] || '');
 
             // Load SHAP explanation if it exists
-            if (entryData.shap_plot_explanation?.content) {
+            if (entryData.shap_plot_explanation) {
                 setShapData({
-                    explanation: entryData.shap_plot_explanation.content,
-                    shapWords: entryData.shap_plot_explanation.top_words || []
+                    explanation: entryData.shap_plot_explanation
                 });
             }
 
@@ -139,6 +138,7 @@ const ExplanationPage = () => {
                 confidence: classification?.confidence,
                 truelabel: classification?.actualLabel,
                 classificationId:classificationId,
+                resultId:resultId,
 
             }, { withCredentials: true });
 
