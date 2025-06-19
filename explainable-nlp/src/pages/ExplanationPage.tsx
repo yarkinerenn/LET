@@ -102,7 +102,7 @@ const ExplanationPage = () => {
 
             const modelInfos = savedModels.map((model: { provider: any; model: any; }) => ({
                 id: `${model.provider}-${model.model}`.toLowerCase(),
-                name: model.model,
+                model: model.model,
                 provider: model.provider
             }));
 
@@ -146,6 +146,8 @@ const ExplanationPage = () => {
                 explanation: shapResponse.data.explanation,
                 shapWords: shapResponse.data.top_words
             });
+            console.log(shapResponse.data.top_words,'shaping ');
+
 
         } catch (err) {
             setError('Failed to generate SHAP explanation');
@@ -157,7 +159,13 @@ const ExplanationPage = () => {
     const generateLLMExplanation = async (modelId: string) => {
         setIsExplaining(true);
         const model = availableModels.find(m => m.id === modelId);
-        if (!model) return;
+        if (!model) {
+        console.error(`Model with ID "${modelId}" not found in availableModels.`);
+        return;
+        }
+
+        setIsExplaining(true);
+        console.log(model, '→ sending to backend');
 
         try {
             const llmResponse = await axios.post('http://localhost:5000/api/explain', {
@@ -165,15 +173,16 @@ const ExplanationPage = () => {
                 provider: model.provider,
                 model: model.model,
                 explainer_type: 'llm',
-                resultId,
+                resultId:resultId,
                 predictedlabel: classification?.prediction,
                 confidence: classification?.confidence,
                 truelabel: classification?.actualLabel,
-                classificationId
+                classificationId:classificationId
             }, { withCredentials: true });
 
             // Generate combined explanation if SHAP data exists
             let combinedExplanation: null = null;
+            console.log(shapData);
             if (shapData.shapWords) {
                 const combinedResponse = await axios.post('http://localhost:5000/api/explain_withshap', {
                     text: classification?.text,
@@ -182,7 +191,8 @@ const ExplanationPage = () => {
                     model: model.model,
                     label: classification?.prediction,
                     resultId:resultId,
-                    confidence: classification?.confidence
+                    confidence: classification?.confidence,
+                    classificationId:classificationId
                 }, { withCredentials: true });
                 combinedExplanation = combinedResponse.data;
             }
@@ -455,7 +465,7 @@ const ExplanationPage = () => {
                                         eventKey={model.id}
                                         title={
                                             <div className="d-flex align-items-center justify-content-center gap-2">
-                                                {model.name}
+                                                {model.model}
                                             </div>
                                         }
                                     >

@@ -1100,17 +1100,20 @@ def explain_prediction():
     try:
         user_doc = mongo.db.users.find_one({"_id": ObjectId(current_user.id)})
         data = request.json
+        print(data)
         prediction_id = data.get('predictionId','fromdata')
         classificationId=data.get('classificationId','empty')
         if classificationId == 'empty':
+            print('empty')
             provider = user_doc.get('preferred_providerex', 'openai')
             model = user_doc.get('preferred_modelex', 'gpt-3.5-turbo')
         else:
+            print('not empty')
             provider = data.get('provider', 'openai')
             model = data.get('model', 'gpt-3.5-turbo')
         print(model,provider,'these are model and proviider')
 
-        resultId=data.get('resultId')
+        resultId=data.get('')
         predictedlabel=data.get('predictedlabel')
 
         truelabel=data.get('truelabel')
@@ -1356,6 +1359,7 @@ def generate_shap_explanation(input_text, label):
 
         output_str = get_top_phrases(shap_values2, top_n=10)
         plot = shap.plots.text(shap_values2[:, :, class_index], display=False)
+        print(output_str)
 
         return plot, output_str
     except Exception as e:
@@ -1369,13 +1373,17 @@ def generate_llm_explanation_of_shap():
     try:
         data = request.json
         shapwords=data.get('shapwords')
-        classificationId=data.get('classificationId')
+        classificationId=data.get('classificationId','empty')
         resultId=data.get('resultId')
         text = data.get('text')
         prediction_id = data.get('predictionId')
         user_doc = mongo.db.users.find_one({"_id": ObjectId(current_user.id)})
-        provider = user_doc.get('preferred_providerex', 'openai')
-        model = user_doc.get('preferred_modelex', 'gpt-3.5-turbo')
+        if classificationId == 'empty':
+            provider = user_doc.get('preferred_providerex', 'openai')
+            model = user_doc.get('preferred_modelex', 'gpt-3.5-turbo')
+        else:
+            provider= data.get('provider', 'openai')
+            model = data.get('model', 'gpt-3.5-turbo')
         explainer_type = data.get('explainer_type', 'llm')
         if prediction_id:
             print('prediction is in shap')
@@ -1422,7 +1430,7 @@ def generate_llm_explanation_of_shap():
                 save_explanation_to_db(classificationId,current_user.id,resultId,'shapwithllm',explanation,model)
 
                 return explanation
-            elif provider=='groq':
+            elif provider=='grok':
                 api= get_user_api_key_groq()
 
                 client = Groq(
@@ -1534,7 +1542,7 @@ def generate_llm_explanation_of_shap():
                 save_explanation_to_db(classificationId,current_user.id,resultId,'shapwithllm',explanation,model)
 
                 return explanation
-            elif provider=='groq':
+            elif provider=='grok':
                 api= get_user_api_key_groq()
 
                 client = Groq(
@@ -1597,17 +1605,12 @@ def generate_llm_explanation_of_shap():
                 )
 
                 explanation = response.choices[0].message.content
-                requests.post('http://localhost:5000/api/save-explanation', json={
-                    'classification_id': classificationId,
-                    'result_id': int(resultId),
-                    'explanation_type': 'shapwithllm',
-                    'content': explanation
-                })
+
                 save_explanation_to_db(classificationId,current_user.id,resultId,'shapwithllm',explanation,model)
 
                 return explanation
 
-
+        return jsonify({"error": "Invalid provider or missing return path"}), 400
     except Exception as e:
         traceback.print_exc()  # <-- HATA BURADA GÖRÜNÜR
 
