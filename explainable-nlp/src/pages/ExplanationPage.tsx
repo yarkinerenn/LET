@@ -79,7 +79,7 @@ const ExplanationPage = () => {
                 { provider: 'openai', model: 'chatgpt' },
                 { provider: 'mistral', model: 'mistral' }
             ];
-            console.log(savedModels);
+            console.log(entryData);
 
             // Initialize explanations and ratings for saved models
             const initialData: Record<string, ExplanationData> = {};
@@ -90,8 +90,8 @@ const ExplanationPage = () => {
 
                 // Load existing explanations if they exist
                 initialData[modelId] = {
-                    llm: entryData.llm_explanations?.[modelId]?.content,
-                    combined: entryData.shapwithllm_explanations?.[modelId]?.content
+                    llm: entryData.llm_explanations?.[model.model],
+                    combined: entryData.shapwithllm_explanations?.[model.model]
                 };
 
                 initialRatings[modelId] = {
@@ -182,7 +182,7 @@ const ExplanationPage = () => {
 
             // Generate combined explanation if SHAP data exists
             let combinedExplanation: null = null;
-            console.log(shapData);
+            console.log(shapData.shapWords);
             if (shapData.shapWords) {
                 const combinedResponse = await axios.post('http://localhost:5000/api/explain_withshap', {
                     text: classification?.text,
