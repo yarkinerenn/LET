@@ -59,12 +59,10 @@ const ClassificationDashboard = () => {
     const navigate = useNavigate();
     const [showModelModal, setShowModelModal] = useState(false);
     const availableModels = [
-      { provider: 'OpenAI', model: 'gpt-4' },
-      { provider: 'OpenAI', model: 'gpt-3.5-turbo' },
-      { provider: 'Anthropic', model: 'claude-3-opus' },
-      { provider: 'Anthropic', model: 'claude-3-sonnet' },
-      { provider: 'Google', model: 'gemini-pro' },
-      { provider: 'Meta', model: 'llama-3-70b' },
+      { provider: 'openrouter', model: "deepseek/deepseek-r1-0528-qwen3-8b:free" },
+      { provider: 'grok', model: 'llama-3.1-8b-instant' },
+      { provider: 'grok', model: 'mistral-saba-24b' },
+      { provider: 'grok', model: 'qwen-2.5-32b' },
     ];
     const [selectedModels, setSelectedModels] = useState<string[]>([]);
     useEffect(() => {

@@ -11,6 +11,9 @@ interface ClassificationEntry {
     confidence: number;
     actualLabel?: number;
     explanation: string;
+    llm_explanations?: Record<string, { content: string }>;
+    shap_plot_explanation?: { content: string };
+    shapwithllm_explanations?: Record<string, { content: string }>;
     importantWords?: { word: string; score: number }[];
     provider?: string;
     model?: string;
@@ -28,6 +31,7 @@ interface ShapData {
 }
 
 interface ModelInfo {
+    model: string;
     id: string;
     name: string;
     provider: string;
@@ -64,7 +68,8 @@ const ExplanationPage = () => {
                 axios.get(`http://localhost:5000/api/classification/${classificationId}`, { withCredentials: true })
             ]);
 
-            setClassification(entryResponse.data);
+            const entryData = entryResponse.data;
+            setClassification(entryData);
             setTotalResults(classificationResponse.data.results?.length || 0);
             setCurrentResultIndex(Number(resultId) || 0);
 
@@ -74,6 +79,7 @@ const ExplanationPage = () => {
                 { provider: 'openai', model: 'chatgpt' },
                 { provider: 'mistral', model: 'mistral' }
             ];
+            console.log(savedModels);
 
             // Initialize explanations and ratings for saved models
             const initialData: Record<string, ExplanationData> = {};
@@ -81,22 +87,37 @@ const ExplanationPage = () => {
 
             savedModels.forEach((model: { provider: any; model: any; }) => {
                 const modelId = `${model.provider}-${model.model}`.toLowerCase();
-                initialData[modelId] = {};
+
+                // Load existing explanations if they exist
+                initialData[modelId] = {
+                    llm: entryData.llm_explanations?.[modelId]?.content,
+                    combined: entryData.shapwithllm_explanations?.[modelId]?.content
+                };
+
                 initialRatings[modelId] = {
                     llm: 0,
                     combined: 0
                 };
             });
-            const modelInfos = savedModels.map((model: { provider: any; model: any; }, index: any) => ({
+
+            const modelInfos = savedModels.map((model: { provider: any; model: any; }) => ({
                 id: `${model.provider}-${model.model}`.toLowerCase(),
-                name: `${model.provider}/${model.model}`,
+                name: model.model,
                 provider: model.provider
             }));
-            setAvailableModels(modelInfos);
 
+            setAvailableModels(modelInfos);
             setExplanations(initialData);
             setRatings(initialRatings);
             setActiveModel(Object.keys(initialData)[0] || '');
+
+            // Load SHAP explanation if it exists
+            if (entryData.shap_plot_explanation?.content) {
+                setShapData({
+                    explanation: entryData.shap_plot_explanation.content,
+                    shapWords: entryData.shap_plot_explanation.top_words || []
+                });
+            }
 
         } catch (err) {
             setError("Failed to load data");
@@ -116,7 +137,9 @@ const ExplanationPage = () => {
                 explainer_type: 'shap',
                 predictedlabel: classification?.prediction,
                 confidence: classification?.confidence,
-                truelabel: classification?.actualLabel
+                truelabel: classification?.actualLabel,
+                classificationId:classificationId,
+
             }, { withCredentials: true });
 
             setShapData({
@@ -134,20 +157,19 @@ const ExplanationPage = () => {
     const generateLLMExplanation = async (modelId: string) => {
         setIsExplaining(true);
         const model = availableModels.find(m => m.id === modelId);
-        const [provider, modelName] = modelId.split('-');
+        if (!model) return;
 
         try {
-            // Generate LLM explanation
             const llmResponse = await axios.post('http://localhost:5000/api/explain', {
                 text: classification?.text,
-                provider: provider,
-                model: modelName,
+                provider: model.provider,
+                model: model.model,
                 explainer_type: 'llm',
-                resultId:resultId,
+                resultId,
                 predictedlabel: classification?.prediction,
                 confidence: classification?.confidence,
                 truelabel: classification?.actualLabel,
-                classificationId:classificationId,
+                classificationId
             }, { withCredentials: true });
 
             // Generate combined explanation if SHAP data exists
@@ -157,7 +179,7 @@ const ExplanationPage = () => {
                     text: classification?.text,
                     shapwords: shapData.shapWords,
                     provider: model?.provider,
-                    model: modelId,
+                    model: model.model,
                     label: classification?.prediction,
                     resultId:resultId,
                     confidence: classification?.confidence
