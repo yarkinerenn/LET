@@ -110,7 +110,7 @@ const DatasetView = () => {
         setClassifying(method);
         try {
             const response = await axios.post(
-                `http://localhost:5000/api/classify/${datasetId}`,
+                `http://localhost:5000/api/classify_sentiment/${datasetId}`,
                 { method:method,provider: provider, model: model },
                 { withCredentials: true }
             );

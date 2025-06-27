@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link,useNavigate } from 'react-router-dom';
-import { Container, Row, Col, Card, Table, Alert, Spinner, Button, Badge,Modal,Form } from 'react-bootstrap';
+import { Container, Row, Col, Card, Table, Alert, Spinner, Button, Badge,Modal,Form,Accordion } from 'react-bootstrap';
 import axios from 'axios';
 import {
     BarChart,
@@ -15,7 +15,97 @@ import {
     Cell,
     ResponsiveContainer
 } from 'recharts';
-
+const groqModels = [
+        { name: "allam-2-7b" },
+        { name: "deepseek-r1-distill-llama-70b" },
+        { name: "deepseek-r1-distill-qwen-32b" },
+        { name: "gemma2-9b-it" },
+        { name: "llama-3.1-8b-instant" },
+        { name: "llama-3.2-11b-vision-preview" },
+        { name: "llama-3.2-1b-preview" },
+        { name: "llama-3.2-3b-preview" },
+        { name: "llama-3.2-90b-vision-preview" },
+        { name: "llama-3.3-70b-specdec" },
+        { name: "llama-3.3-70b-versatile" },
+        { name: "llama-guard-3-8b" },
+        { name: "llama3-70b-8192" },
+        { name: "llama3-8b-8192" },
+        { name: "mistral-saba-24b" },
+        { name: "qwen-2.5-32b" },
+        { name: "qwen-2.5-coder-32b" },
+        { name: "qwen-qwq-32b" }
+    ];
+    const openrouterModels = [
+        { name: "deepseek/deepseek-r1-0528-qwen3-8b:free" },
+        { name: "deepseek-r1-0528" },
+        { name: "sarvam-m" },
+        { name: "devstral-small" },
+        { name: "gemma-3n-e4b-it" },
+        { name: "llama-3.3-8b-instruct" },
+        { name: "deephermes-3-mistral-24b-preview" },
+        { name: "phi-4-reasoning-plus" },
+        { name: "phi-4-reasoning" },
+        { name: "internvl3-14b" },
+        { name: "internvl3-2b" },
+        { name: "deepseek-prover-v2" },
+        { name: "qwen3-30b-a3b" },
+        { name: "qwen3-8b" },
+        { name: "qwen3-14b" },
+        { name: "qwen3-32b" },
+        { name: "qwen3-235b-a22b" },
+        { name: "deepseek-r1t-chimera" },
+        { name: "mai-ds-r1" },
+        { name: "glm-z1-32b" },
+        { name: "glm-4-32b" },
+        { name: "shisa-v2-llama3.3-70b" },
+        { name: "qwq-32b-arliai-rpr-v1" },
+        { name: "deepcoder-14b-preview" },
+        { name: "kimi-vl-a3b-thinking" },
+        { name: "llama-3.3-nemotron-super-49b-v1" },
+        { name: "llama-3.1-nemotron-ultra-253b-v1" },
+        { name: "llama-4-maverick" },
+        { name: "llama-4-scout" },
+        { name: "deepseek-v3-base" },
+        { name: "qwen2.5-vl-3b-instruct" },
+        { name: "gemini-2.5-pro-exp-03-25" },
+        { name: "qwen2.5-vl-32b-instruct" },
+        { name: "deepseek-chat-v3-0324" },
+        { name: "qwerky-72b" },
+        { name: "mistral-small-3.1-24b-instruct" },
+        { name: "olympiccoder-32b" },
+        { name: "gemma-3-1b-it" },
+        { name: "gemma-3-4b-it" },
+        { name: "gemma-3-12b-it" },
+        { name: "reka-flash-3" },
+        { name: "gemma-3-27b-it" },
+        { name: "deepseek-r1-zero" },
+        { name: "qwq-32b" },
+        { name: "moonlight-16b-a3b-instruct" },
+        { name: "deephermes-3-llama-3-8b-preview" },
+        { name: "dolphin3.0-r1-mistral-24b" },
+        { name: "dolphin3.0-mistral-24b" },
+        { name: "qwen2.5-vl-72b-instruct" },
+        { name: "mistral-small-24b-instruct-2501" },
+        { name: "deepseek-r1-distill-qwen-32b" },
+        { name: "deepseek-r1-distill-qwen-14b" },
+        { name: "deepseek-r1-distill-llama-70b" },
+        { name: "deepseek-r1" },
+        { name: "deepseek-chat" },
+        { name: "gemini-2.0-flash-exp" },
+        { name: "llama-3.3-70b-instruct" },
+        { name: "qwen-2.5-coder-32b-instruct" },
+        { name: "qwen-2.5-7b-instruct" },
+        { name: "llama-3.2-3b-instruct" },
+        { name: "llama-3.2-1b-instruct" },
+        { name: "llama-3.2-11b-vision-instruct" },
+        { name: "qwen-2.5-72b-instruct" },
+        { name: "qwen-2.5-vl-7b-instruct" },
+        { name: "llama-3.1-405b" },
+        { name: "llama-3.1-8b-instruct" },
+        { name: "mistral-nemo" },
+        { name: "gemma-2-9b-it" },
+        { name: "mistral-7b-instruct" }
+    ];
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
 interface ClassificationResult {
@@ -384,56 +474,85 @@ const handleSubmitModels = async () => {
                 </>
             )}
 
-        </Container><Modal show={showModelModal} onHide={() => setShowModelModal(false)}>
-            <Modal.Header closeButton>
-                <Modal.Title>Select 3 LLMs</Modal.Title>
-            </Modal.Header>
-            <Modal.Body>
-                <p>Choose 3 models from different providers:</p>
-                <div className="model-selection">
-                    {availableModels.map((model, index) => (
-                        <div key={index} className="mb-2">
-                            <input
-                                type="checkbox"
-                                id={`model-${index}`}
-                                checked={selectedModels.includes(`${model.provider}:${model.model}`)}
-                                onChange={(e) => {
-                                    const modelKey = `${model.provider}:${model.model}`;
-                                    let newSelected = [...selectedModels];
+        </Container>
+            // Replace the existing model modal inside ClassificationDashboard with this updated version:
+<Modal show={showModelModal} onHide={() => setShowModelModal(false)} size="lg">
+  <Modal.Header closeButton>
+    <Modal.Title>Select Models for Explanation</Modal.Title>
+  </Modal.Header>
+  <Modal.Body>
+    <p className="text-muted">Select models from different providers. You can choose multiple models.</p>
 
-                                    if (e.target.checked) {
-                                        // Only allow 3 selections
-                                        if (newSelected.length < 3) {
-                                            newSelected.push(modelKey);
-                                        }
-                                    } else {
-                                        newSelected = newSelected.filter(m => m !== modelKey);
-                                    }
-
-                                    setSelectedModels(newSelected);
-                                }}
-                                disabled={selectedModels.length >= 3 &&
-                                    !selectedModels.includes(`${model.provider}:${model.model}`)}/>
-                            <label htmlFor={`model-${index}`} className="ms-2">
-                                {model.provider} - {model.model}
-                            </label>
-                        </div>
-                    ))}
+    <Accordion defaultActiveKey="0">
+      <Accordion.Item eventKey="0">
+        <Accordion.Header>Groq ({selectedModels.filter(m => m.startsWith('groq:')).length} selected)</Accordion.Header>
+        <Accordion.Body>
+          <div className="row">
+            {groqModels.map((model, index) => {
+              const modelKey = `groq:${model.name}`;
+              return (
+                <div className="col-md-6 mb-2" key={modelKey}>
+                  <Form.Check
+                    type="checkbox"
+                    id={`groq-${index}`}
+                    label={model.name}
+                    checked={selectedModels.includes(modelKey)}
+                    onChange={(e) => {
+                      const updated = e.target.checked
+                        ? [...selectedModels, modelKey]
+                        : selectedModels.filter((m) => m !== modelKey);
+                      setSelectedModels(updated);
+                    }}
+                  />
                 </div>
-            </Modal.Body>
-            <Modal.Footer>
-                <Button variant="secondary" onClick={() => setShowModelModal(false)}>
-                    Cancel
-                </Button>
-                <Button
-                    variant="primary"
-                    onClick={handleSubmitModels}
-                    disabled={selectedModels.length !== 3}
-                >
-                    Submit
-                </Button>
-            </Modal.Footer>
-        </Modal></>
+              );
+            })}
+          </div>
+        </Accordion.Body>
+      </Accordion.Item>
+
+      <Accordion.Item eventKey="1">
+        <Accordion.Header>OpenRouter ({selectedModels.filter(m => m.startsWith('openrouter:')).length} selected)</Accordion.Header>
+        <Accordion.Body>
+          <div className="row">
+            {openrouterModels.map((model, index) => {
+              const modelKey = `openrouter:${model.name}`;
+              return (
+                <div className="col-md-6 mb-2" key={modelKey}>
+                  <Form.Check
+                    type="checkbox"
+                    id={`openrouter-${index}`}
+                    label={model.name}
+                    checked={selectedModels.includes(modelKey)}
+                    onChange={(e) => {
+                      const updated = e.target.checked
+                        ? [...selectedModels, modelKey]
+                        : selectedModels.filter((m) => m !== modelKey);
+                      setSelectedModels(updated);
+                    }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </Accordion.Body>
+      </Accordion.Item>
+    </Accordion>
+  </Modal.Body>
+  <Modal.Footer>
+    <Button variant="secondary" onClick={() => setShowModelModal(false)}>
+      Cancel
+    </Button>
+    <Button
+      variant="primary"
+      onClick={handleSubmitModels}
+      disabled={selectedModels.length === 0}
+    >
+      Submit
+    </Button>
+  </Modal.Footer>
+</Modal>
+        </>
     );
 };
 

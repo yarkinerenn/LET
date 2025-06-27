@@ -117,7 +117,7 @@ def add_explanationmodels_to_classficication(classification_id):
 
 
 
-@app.route('/api/classify/<dataset_id>', methods=['POST'])
+@app.route('/api/classify_sentiment/<dataset_id>', methods=['POST'])
 @login_required
 def classify_dataset(dataset_id):
     """Classify the whole dataset using either BERT or generative AI """
@@ -558,7 +558,7 @@ def import_hf_dataset():
 
     try:
         # Load dataset from Hugging Face
-        dataset = load_dataset(hf_dataset_name)
+        dataset = load_dataset(hf_dataset_name,trust_remote_code=True)
         df = dataset["train"].to_pandas()
 
         # Create file path within upload directory
