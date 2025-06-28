@@ -17,7 +17,7 @@ interface ClassificationEntry {
     importantWords?: { word: string; score: number }[];
     provider?: string;
     model?: string;
-    explanation_models?: Array<{provider: string, model: string}>; // Add this line
+    explanation_models?: Array<{provider: string, model: string}>;
 }
 
 interface ExplanationData {
@@ -38,8 +38,8 @@ interface ModelInfo {
 }
 
 const ExplanationPage = () => {
-    const [faithfulnessScore, setFaithfulnessScore] = useState<number | null>(null);
-    const [isFetchingFaithfulness, setIsFetchingFaithfulness] = useState(false);
+    const [faithfulnessScores, setFaithfulnessScores] = useState<Record<string, { llm: number | null, combined: number | null }>>({});
+    const [isFetchingFaithfulness, setIsFetchingFaithfulness] = useState<{ modelId: string, type: string } | null>(null);
     const [faithfulnessError, setFaithfulnessError] = useState<string | null>(null);
     const { datasetId, classificationId, resultId } = useParams();
     const navigate = useNavigate();
@@ -49,10 +49,7 @@ const ExplanationPage = () => {
     const [isExplaining, setIsExplaining] = useState(false);
     const [totalResults, setTotalResults] = useState(0);
     const [currentResultIndex, setCurrentResultIndex] = useState(0);
-
     const [availableModels, setAvailableModels] = useState<ModelInfo[]>([]);
-
-
     const [activeModel, setActiveModel] = useState('deepseek');
     const [explanations, setExplanations] = useState<Record<string, ExplanationData>>({});
     const [shapData, setShapData] = useState<ShapData>({});
@@ -61,211 +58,227 @@ const ExplanationPage = () => {
     const [isSubmittingRatings, setIsSubmittingRatings] = useState(false);
 
     useEffect(() => {
-    const fetchData = async () => {
+        const fetchData = async () => {
+            try {
+                setLoading(true);
+                setShapData({});
+                const [entryResponse, classificationResponse] = await Promise.all([
+                    axios.get(`http://localhost:5000/api/classificationentry/${classificationId}/${resultId}`, { withCredentials: true }),
+                    axios.get(`http://localhost:5000/api/classification/${classificationId}`, { withCredentials: true })
+                ]);
+
+                const entryData = entryResponse.data;
+                setClassification(entryData);
+                setTotalResults(classificationResponse.data.results?.length || 0);
+                setCurrentResultIndex(Number(resultId) || 0);
+
+                const savedModels = classificationResponse.data.explanation_models || [
+                    { provider: 'deepseek', model: 'deepseek' },
+                    { provider: 'openai', model: 'chatgpt' },
+                    { provider: 'mistral', model: 'mistral' }
+                ];
+
+                const initialData: Record<string, ExplanationData> = {};
+                const initialRatings: Record<string, Record<string, number>> = {};
+                const initialFaithfulnessScores: Record<string, { llm: number | null, combined: number | null }> = {};
+
+                savedModels.forEach((model: { provider: any; model: any; }) => {
+                    const modelId = `${model.provider}-${model.model}`.toLowerCase();
+
+                    initialData[modelId] = {
+                        llm: entryData.llm_explanations?.[model.model],
+                        combined: entryData.shapwithllm_explanations?.[model.model]
+                    };
+
+                    initialRatings[modelId] = {
+                        llm: 0,
+                        combined: 0
+                    };
+
+                    initialFaithfulnessScores[modelId] = {
+                        llm: null,
+                        combined: null
+                    };
+                });
+
+                const modelInfos = savedModels.map((model: { provider: any; model: any; }) => ({
+                    id: `${model.provider}-${model.model}`.toLowerCase(),
+                    model: model.model,
+                    provider: model.provider
+                }));
+
+                setAvailableModels(modelInfos);
+                setExplanations(initialData);
+                setRatings(initialRatings);
+                setFaithfulnessScores(initialFaithfulnessScores);
+                setActiveModel(Object.keys(initialData)[0] || '');
+
+                if (entryData.shap_plot_explanation) {
+                    setShapData({
+                        explanation: entryData.shap_plot_explanation
+                    });
+                }
+
+            } catch (err) {
+                setError("Failed to load data");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchData();
+    }, [classificationId, resultId]);
+
+    const generateShapExplanation = async () => {
+        setIsExplaining(true);
         try {
-            setLoading(true);
-            setShapData({});
-            // Fetch classification data
-            const [entryResponse, classificationResponse] = await Promise.all([
-                axios.get(`http://localhost:5000/api/classificationentry/${classificationId}/${resultId}`, { withCredentials: true }),
-                axios.get(`http://localhost:5000/api/classification/${classificationId}`, { withCredentials: true })
-            ]);
+            const shapResponse = await axios.post('http://localhost:5000/api/explain', {
+                text: classification?.text,
+                explainer_type: 'shap',
+                predictedlabel: classification?.prediction,
+                confidence: classification?.confidence,
+                truelabel: classification?.actualLabel,
+                classificationId: classificationId,
+                resultId: resultId,
+            }, { withCredentials: true });
 
-            const entryData = entryResponse.data;
-            setClassification(entryData);
-            setTotalResults(classificationResponse.data.results?.length || 0);
-            setCurrentResultIndex(Number(resultId) || 0);
+            const shapWords = shapResponse.data.top_words;
 
-            // Get saved explanation models or use default if none exist
-            const savedModels = classificationResponse.data.explanation_models || [
-                { provider: 'deepseek', model: 'deepseek' },
-                { provider: 'openai', model: 'chatgpt' },
-                { provider: 'mistral', model: 'mistral' }
-            ];
-            console.log(entryData);
-
-            // Initialize explanations and ratings for saved models
-            const initialData: Record<string, ExplanationData> = {};
-            const initialRatings: Record<string, Record<string, number>> = {};
-
-            savedModels.forEach((model: { provider: any; model: any; }) => {
-                const modelId = `${model.provider}-${model.model}`.toLowerCase();
-
-                // Load existing explanations if they exist
-                initialData[modelId] = {
-                    llm: entryData.llm_explanations?.[model.model],
-                    combined: entryData.shapwithllm_explanations?.[model.model]
-                };
-
-                initialRatings[modelId] = {
-                    llm: 0,
-                    combined: 0
-                };
+            setShapData({
+                explanation: shapResponse.data.explanation,
+                shapWords: shapWords
             });
 
-            const modelInfos = savedModels.map((model: { provider: any; model: any; }) => ({
-                id: `${model.provider}-${model.model}`.toLowerCase(),
-                model: model.model,
-                provider: model.provider
-            }));
-
-            setAvailableModels(modelInfos);
-            setExplanations(initialData);
-            setRatings(initialRatings);
-            setActiveModel(Object.keys(initialData)[0] || '');
-
-            // Load SHAP explanation if it exists
-            if (entryData.shap_plot_explanation) {
-                setShapData({
-                    explanation: entryData.shap_plot_explanation
-                });
-            }
-
+            return shapWords;
         } catch (err) {
-            setError("Failed to load data");
+            setError('Failed to generate SHAP explanation');
+            return null;
         } finally {
-            setLoading(false);
+            setIsExplaining(false);
         }
     };
 
-    fetchData();
-}, [classificationId, resultId]);
-
-    const generateShapExplanation = async () => {
-    setIsExplaining(true);
-    try {
-        const shapResponse = await axios.post('http://localhost:5000/api/explain', {
-            text: classification?.text,
-            explainer_type: 'shap',
-            predictedlabel: classification?.prediction,
-            confidence: classification?.confidence,
-            truelabel: classification?.actualLabel,
-            classificationId: classificationId,
-            resultId: resultId,
-        }, { withCredentials: true });
-
-        const shapWords = shapResponse.data.top_words;
-
-        setShapData({
-            explanation: shapResponse.data.explanation,
-            shapWords: shapWords
-        });
-
-        return shapWords; // Return SHAP words so caller always has them!
-    } catch (err) {
-        setError('Failed to generate SHAP explanation');
-        return null;
-    } finally {
-        setIsExplaining(false);
-    }
-};
-
     const generateLLMExplanation = async (modelId: string, shapWords?: string[]) => {
-    setIsExplaining(true);
-    const model = availableModels.find(m => m.id === modelId);
-    if (!model) {
-        console.error(`Model with ID "${modelId}" not found in availableModels.`);
-        setIsExplaining(false);
-        return;
-    }
-
-    try {
-        const llmResponse = await axios.post('http://localhost:5000/api/explain', {
-            text: classification?.text,
-            provider: model.provider,
-            model: model.model,
-            explainer_type: 'llm',
-            resultId: resultId,
-            predictedlabel: classification?.prediction,
-            confidence: classification?.confidence,
-            truelabel: classification?.actualLabel,
-            classificationId: classificationId
-        }, { withCredentials: true });
-
-        let combinedExplanation: null = null;
-
-        // Always use the shapWords parameter, never the state!
-        if (shapWords && shapWords.length > 0) {
-            const combinedResponse = await axios.post('http://localhost:5000/api/explain_withshap', {
-                text: classification?.text,
-                shapwords: shapWords,
-                provider: model?.provider,
-                model: model.model,
-                label: classification?.prediction,
-                resultId: resultId,
-                confidence: classification?.confidence,
-                classificationId: classificationId
-            }, { withCredentials: true });
-            combinedExplanation = combinedResponse.data;
-        }
-
-        // @ts-ignore
-        setExplanations(prev => ({
-            ...prev,
-            [modelId]: {
-                llm: llmResponse.data.explanation,
-                combined: combinedExplanation
-            }
-        }));
-    } catch (err) {
-        setError(`Failed to generate explanations for ${modelId}`);
-    } finally {
-        setIsExplaining(false);
-    }
-};
-
-    const generateAllExplanations = async () => {
-    setIsExplaining(true);
-    try {
-        let shapWords = shapData.shapWords;
-
-        if (!shapData.explanation) {
-            shapWords = await generateShapExplanation();
-            if (!shapWords) throw new Error('Failed to get SHAP words for explanation');
-        }
-
-        // Always pass shapWords from the variable, not from state
-        for (const model of availableModels) {
-            await generateLLMExplanation(model.id, shapWords);
-        }
-    } catch (err) {
-        setError('Failed to generate all explanations');
-    } finally {
-        setIsExplaining(false);
-    }
-};
-
-    const get_faithfulness = async (modelId: string) => {
-    setIsFetchingFaithfulness(true);
-    setFaithfulnessError(null);
-    setFaithfulnessScore(null);
-
-    try {
+        setIsExplaining(true);
         const model = availableModels.find(m => m.id === modelId);
         if (!model) {
-            setFaithfulnessError("Model not found.");
+            console.error(`Model with ID "${modelId}" not found in availableModels.`);
+            setIsExplaining(false);
             return;
         }
 
-        const payload = {
-            ground_question: classification?.text,   // or the actual ground question if different
-            ground_explanation: classification?.llm_explanations?.[model.model] || "", // or other field
-            ground_label: classification?.actualLabel,
-            predicted_explanation: explanations[modelId]?.llm || "",
-            predicted_label: classification?.prediction,
-            target_model: model.model,
-            // Optionally add context, groq, target_model if needed
-        };
+        try {
+            const llmResponse = await axios.post('http://localhost:5000/api/explain', {
+                text: classification?.text,
+                provider: model.provider,
+                model: model.model,
+                explainer_type: 'llm',
+                resultId: resultId,
+                predictedlabel: classification?.prediction,
+                confidence: classification?.confidence,
+                truelabel: classification?.actualLabel,
+                classificationId: classificationId
+            }, { withCredentials: true });
 
-        const response = await axios.post("http://localhost:5000/api/faithfulness", payload, { withCredentials: true });
+            let combinedExplanation: null = null;
 
-        setFaithfulnessScore(response.data.faithfulness_score);
-    } catch (err: any) {
-        setFaithfulnessError('Failed to compute faithfulness');
-    } finally {
-        setIsFetchingFaithfulness(false);
-    }
-};
+            if (shapWords && shapWords.length > 0) {
+                const combinedResponse = await axios.post('http://localhost:5000/api/explain_withshap', {
+                    text: classification?.text,
+                    shapwords: shapWords,
+                    provider: model?.provider,
+                    model: model.model,
+                    label: classification?.prediction,
+                    resultId: resultId,
+                    confidence: classification?.confidence,
+                    classificationId: classificationId
+                }, { withCredentials: true });
+                combinedExplanation = combinedResponse.data;
+            }
+
+            // @ts-ignore
+            setExplanations(prev => ({
+                ...prev,
+                [modelId]: {
+                    llm: llmResponse.data.explanation,
+                    combined: combinedExplanation
+                }
+            }));
+
+            // Reset faithfulness scores when generating new explanations
+            setFaithfulnessScores(prev => ({
+                ...prev,
+                [modelId]: {
+                    llm: null,
+                    combined: null
+                }
+            }));
+        } catch (err) {
+            setError(`Failed to generate explanations for ${modelId}`);
+        } finally {
+            setIsExplaining(false);
+        }
+    };
+
+    const generateAllExplanations = async () => {
+        setIsExplaining(true);
+        try {
+            let shapWords = shapData.shapWords;
+
+            if (!shapData.explanation) {
+                shapWords = await generateShapExplanation();
+                if (!shapWords) throw new Error('Failed to get SHAP words for explanation');
+            }
+
+            for (const model of availableModels) {
+                await generateLLMExplanation(model.id, shapWords);
+            }
+        } catch (err) {
+            setError('Failed to generate all explanations');
+        } finally {
+            setIsExplaining(false);
+        }
+    };
+
+    const get_faithfulness = async (modelId: string, type: 'llm' | 'combined') => {
+        setIsFetchingFaithfulness({ modelId, type });
+        setFaithfulnessError(null);
+
+        try {
+            const model = availableModels.find(m => m.id === modelId);
+            if (!model) {
+                setFaithfulnessError("Model not found.");
+                return;
+            }
+
+            const explanationToEvaluate = type === 'llm'
+                ? explanations[modelId]?.llm || ""
+                : explanations[modelId]?.combined || "";
+
+            const payload = {
+                ground_question: classification?.text,
+                ground_explanation: classification?.llm_explanations?.[model.model] || "",
+                ground_label: classification?.actualLabel,
+                predicted_explanation: explanationToEvaluate,
+                predicted_label: classification?.prediction,
+                target_model: model.model,
+            };
+
+            const response = await axios.post("http://localhost:5000/api/faithfulness", payload, { withCredentials: true });
+
+            setFaithfulnessScores(prev => ({
+                ...prev,
+                [modelId]: {
+                    ...(prev[modelId] || { llm: null, combined: null }),
+                    [type]: response.data.faithfulness_score
+                }
+            }));
+        } catch (err: any) {
+            setFaithfulnessError(`Failed to compute ${type} faithfulness`);
+        } finally {
+            setIsFetchingFaithfulness(null);
+        }
+    };
 
     const handleRatingChange = (modelId: string, type: string, rating: number) => {
         setRatings(prev => ({
@@ -287,6 +300,7 @@ const ExplanationPage = () => {
                     resultId,
                     ratings,
                     shapRating,
+                    faithfulnessScores,
                     timestamp: new Date().toISOString()
                 },
                 { withCredentials: true }
@@ -336,7 +350,6 @@ const ExplanationPage = () => {
 
     return (
         <Container className="py-4 explanation-page" fluid>
-            {/* Navigation Header */}
             <div className="d-flex justify-content-between align-items-center mb-4">
                 <Button
                     variant="outline-secondary"
@@ -368,7 +381,6 @@ const ExplanationPage = () => {
                 </div>
             </div>
 
-            {/* Classification Summary */}
             {classification && (
                 <Card className="mb-4">
                     <Card.Body>
@@ -411,9 +423,7 @@ const ExplanationPage = () => {
                 </Card>
             )}
 
-            {/* Main Layout */}
             <Row className="g-4">
-                {/* Left Column - SHAP Visualization */}
                 <Col lg={4}>
                     <Card className="h-100 explanation-card border-info">
                         <Card.Header className="bg-info text-white d-flex justify-content-between align-items-center">
@@ -454,7 +464,6 @@ const ExplanationPage = () => {
                     </Card>
                 </Col>
 
-                {/* Right Column - LLM Explanations */}
                 <Col lg={8}>
                     <Card className="h-100">
                         <Card.Header>
@@ -487,7 +496,6 @@ const ExplanationPage = () => {
                             </div>
                         </Card.Header>
                         <Card.Body className="p-0">
-                            {/* Model Selection Tabs */}
                             <Tabs
                                 activeKey={activeModel}
                                 onSelect={(k) => setActiveModel(k as string)}
@@ -506,7 +514,6 @@ const ExplanationPage = () => {
                                     >
                                         <div className="p-4">
                                             <Row className="g-4">
-                                                {/* LLM Explanation */}
                                                 <Col md={6}>
                                                     <div className="explanation-section">
                                                         <h6 className="text-primary mb-3">Direct Explanation</h6>
@@ -521,28 +528,36 @@ const ExplanationPage = () => {
                                                                 </div>
                                                             )}
                                                         </div>
-                                                        {/* Faithfulness button and score */}
                                                         <div className="d-flex align-items-center gap-3 my-3">
-                                                          <Button
-                                                            size="sm"
-                                                            variant="outline-info"
-                                                            onClick={() => get_faithfulness(activeModel)}
-                                                            disabled={isFetchingFaithfulness || !explanations[activeModel]?.llm}
-                                                          >
-                                                            {isFetchingFaithfulness ? <Spinner size="sm" /> : "Compute Faithfulness"}
-                                                          </Button>
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline-info"
+                                                                onClick={() => get_faithfulness(activeModel, 'llm')}
+                                                                disabled={
+                                                                    (isFetchingFaithfulness?.modelId === activeModel &&
+                                                                    isFetchingFaithfulness?.type === 'llm') ||
+                                                                    !explanations[activeModel]?.llm
+                                                                }
+                                                            >
+                                                                {(isFetchingFaithfulness?.modelId === activeModel &&
+                                                                  isFetchingFaithfulness?.type === 'llm') ? (
+                                                                    <Spinner size="sm" />
+                                                                ) : "Compute Faithfulness"}
+                                                            </Button>
 
-                                                          {faithfulnessScore !== null && (
-                                                            <div className="d-flex align-items-center">
-                                                              <span className="badge rounded-pill bg-info fs-6 px-3 py-2">
-                                                                Faithfulness: {faithfulnessScore.toFixed(2)}
-                                                              </span>
-                                                            </div>
-                                                          )}
+                                                            {faithfulnessScores[activeModel]?.llm !== null && (
+                                                                <div className="d-flex align-items-center">
+                                                                    <span className="badge rounded-pill bg-info fs-6 px-3 py-2">
+                                                                        Faithfulness: {faithfulnessScores[activeModel]?.llm?.toFixed(2)}
+                                                                    </span>
+                                                                </div>
+                                                            )}
 
-                                                          {faithfulnessError && (
-                                                            <span className="text-danger ms-2">{faithfulnessError}</span>
-                                                          )}
+                                                            {faithfulnessError &&
+                                                             isFetchingFaithfulness?.modelId === activeModel &&
+                                                             isFetchingFaithfulness?.type === 'llm' && (
+                                                                <span className="text-danger ms-2">{faithfulnessError}</span>
+                                                            )}
                                                         </div>
                                                         <RatingSection
                                                             title="Direct Explanation"
@@ -553,12 +568,9 @@ const ExplanationPage = () => {
                                                     </div>
                                                 </Col>
 
-                                                {/* Combined Analysis */}
                                                 <Col md={6}>
                                                     <div className="explanation-section">
-                                                        <h6 className="text-success mb-3">
-                                                            SHAP-Enhanced Analysis
-                                                        </h6>
+                                                        <h6 className="text-success mb-3">SHAP-Enhanced Analysis</h6>
                                                         <div className="explanation-content mb-3">
                                                             {explanations[activeModel]?.combined ? (
                                                                 <div className="p-3 bg-light rounded">
@@ -571,6 +583,37 @@ const ExplanationPage = () => {
                                                                         "Generate combined analysis"
                                                                     }
                                                                 </div>
+                                                            )}
+                                                        </div>
+                                                        <div className="d-flex align-items-center gap-3 my-3">
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline-info"
+                                                                onClick={() => get_faithfulness(activeModel, 'combined')}
+                                                                disabled={
+                                                                    (isFetchingFaithfulness?.modelId === activeModel &&
+                                                                    isFetchingFaithfulness?.type === 'combined') ||
+                                                                    !explanations[activeModel]?.combined
+                                                                }
+                                                            >
+                                                                {(isFetchingFaithfulness?.modelId === activeModel &&
+                                                                  isFetchingFaithfulness?.type === 'combined') ? (
+                                                                    <Spinner size="sm" />
+                                                                ) : "Compute Faithfulness"}
+                                                            </Button>
+
+                                                            {faithfulnessScores[activeModel]?.combined !== null && (
+                                                                <div className="d-flex align-items-center">
+                                                                    <span className="badge rounded-pill bg-info fs-6 px-3 py-2">
+                                                                        Faithfulness: {faithfulnessScores[activeModel]?.combined?.toFixed(2)}
+                                                                    </span>
+                                                                </div>
+                                                            )}
+
+                                                            {faithfulnessError &&
+                                                             isFetchingFaithfulness?.modelId === activeModel &&
+                                                             isFetchingFaithfulness?.type === 'combined' && (
+                                                                <span className="text-danger ms-2">{faithfulnessError}</span>
                                                             )}
                                                         </div>
                                                         <RatingSection
@@ -591,7 +634,6 @@ const ExplanationPage = () => {
                 </Col>
             </Row>
 
-            {/* Submit Ratings */}
             <div className="d-flex justify-content-end mt-4">
                 <Button
                     variant="success"
@@ -610,7 +652,6 @@ const ExplanationPage = () => {
     );
 };
 
-// Rating Component
 interface RatingSectionProps {
     title: string;
     value: number;
