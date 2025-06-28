@@ -64,7 +64,7 @@ const ExplanationPage = () => {
     const fetchData = async () => {
         try {
             setLoading(true);
-
+            setShapData({});
             // Fetch classification data
             const [entryResponse, classificationResponse] = await Promise.all([
                 axios.get(`http://localhost:5000/api/classificationentry/${classificationId}/${resultId}`, { withCredentials: true }),
@@ -132,108 +132,108 @@ const ExplanationPage = () => {
 }, [classificationId, resultId]);
 
     const generateShapExplanation = async () => {
-        setIsExplaining(true);
-        try {
-            const shapResponse = await axios.post('http://localhost:5000/api/explain', {
-                text: classification?.text,
-                explainer_type: 'shap',
-                predictedlabel: classification?.prediction,
-                confidence: classification?.confidence,
-                truelabel: classification?.actualLabel,
-                classificationId:classificationId,
-                resultId:resultId,
+    setIsExplaining(true);
+    try {
+        const shapResponse = await axios.post('http://localhost:5000/api/explain', {
+            text: classification?.text,
+            explainer_type: 'shap',
+            predictedlabel: classification?.prediction,
+            confidence: classification?.confidence,
+            truelabel: classification?.actualLabel,
+            classificationId: classificationId,
+            resultId: resultId,
+        }, { withCredentials: true });
 
-            }, { withCredentials: true });
+        const shapWords = shapResponse.data.top_words;
 
-            setShapData({
-                explanation: shapResponse.data.explanation,
-                shapWords: shapResponse.data.top_words
-            });
-            console.log(shapResponse.data.top_words,'shaping ');
+        setShapData({
+            explanation: shapResponse.data.explanation,
+            shapWords: shapWords
+        });
 
+        return shapWords; // Return SHAP words so caller always has them!
+    } catch (err) {
+        setError('Failed to generate SHAP explanation');
+        return null;
+    } finally {
+        setIsExplaining(false);
+    }
+};
 
-        } catch (err) {
-            setError('Failed to generate SHAP explanation');
-        } finally {
-            setIsExplaining(false);
-        }
-    };
-
-    const generateLLMExplanation = async (modelId: string) => {
-        setIsExplaining(true);
-        const model = availableModels.find(m => m.id === modelId);
-        if (!model) {
+    const generateLLMExplanation = async (modelId: string, shapWords?: string[]) => {
+    setIsExplaining(true);
+    const model = availableModels.find(m => m.id === modelId);
+    if (!model) {
         console.error(`Model with ID "${modelId}" not found in availableModels.`);
+        setIsExplaining(false);
         return;
-        }
+    }
 
-        setIsExplaining(true);
-        console.log(model, '→ sending to backend');
+    try {
+        const llmResponse = await axios.post('http://localhost:5000/api/explain', {
+            text: classification?.text,
+            provider: model.provider,
+            model: model.model,
+            explainer_type: 'llm',
+            resultId: resultId,
+            predictedlabel: classification?.prediction,
+            confidence: classification?.confidence,
+            truelabel: classification?.actualLabel,
+            classificationId: classificationId
+        }, { withCredentials: true });
 
-        try {
-            const llmResponse = await axios.post('http://localhost:5000/api/explain', {
+        let combinedExplanation: null = null;
+
+        // Always use the shapWords parameter, never the state!
+        if (shapWords && shapWords.length > 0) {
+            const combinedResponse = await axios.post('http://localhost:5000/api/explain_withshap', {
                 text: classification?.text,
-                provider: model.provider,
+                shapwords: shapWords,
+                provider: model?.provider,
                 model: model.model,
-                explainer_type: 'llm',
-                resultId:resultId,
-                predictedlabel: classification?.prediction,
+                label: classification?.prediction,
+                resultId: resultId,
                 confidence: classification?.confidence,
-                truelabel: classification?.actualLabel,
-                classificationId:classificationId
+                classificationId: classificationId
             }, { withCredentials: true });
-
-            // Generate combined explanation if SHAP data exists
-            let combinedExplanation: null = null;
-            console.log(shapData.shapWords);
-            if (shapData.shapWords) {
-                const combinedResponse = await axios.post('http://localhost:5000/api/explain_withshap', {
-                    text: classification?.text,
-                    shapwords: shapData.shapWords,
-                    provider: model?.provider,
-                    model: model.model,
-                    label: classification?.prediction,
-                    resultId:resultId,
-                    confidence: classification?.confidence,
-                    classificationId:classificationId
-                }, { withCredentials: true });
-                combinedExplanation = combinedResponse.data;
-            }
-
-            // @ts-ignore
-            setExplanations(prev => ({
-                ...prev,
-                [modelId]: {
-                    llm: llmResponse.data.explanation,
-                    combined: combinedExplanation
-                }
-            }));
-
-        } catch (err) {
-            setError(`Failed to generate explanations for ${modelId}`);
-        } finally {
-            setIsExplaining(false);
+            combinedExplanation = combinedResponse.data;
         }
-    };
+
+        // @ts-ignore
+        setExplanations(prev => ({
+            ...prev,
+            [modelId]: {
+                llm: llmResponse.data.explanation,
+                combined: combinedExplanation
+            }
+        }));
+    } catch (err) {
+        setError(`Failed to generate explanations for ${modelId}`);
+    } finally {
+        setIsExplaining(false);
+    }
+};
 
     const generateAllExplanations = async () => {
-        setIsExplaining(true);
-        try {
-            // First generate SHAP if not exists
-            if (!shapData.explanation) {
-                await generateShapExplanation();
-            }
+    setIsExplaining(true);
+    try {
+        let shapWords = shapData.shapWords;
 
-            // Then generate LLM explanations for all models
-            for (const model of availableModels) {
-                await generateLLMExplanation(model.id);
-            }
-        } catch (err) {
-            setError('Failed to generate all explanations');
-        } finally {
-            setIsExplaining(false);
+        if (!shapData.explanation) {
+            shapWords = await generateShapExplanation();
+            if (!shapWords) throw new Error('Failed to get SHAP words for explanation');
         }
-    };
+
+        // Always pass shapWords from the variable, not from state
+        for (const model of availableModels) {
+            await generateLLMExplanation(model.id, shapWords);
+        }
+    } catch (err) {
+        setError('Failed to generate all explanations');
+    } finally {
+        setIsExplaining(false);
+    }
+};
 
     const get_faithfulness = async (modelId: string) => {
     setIsFetchingFaithfulness(true);
