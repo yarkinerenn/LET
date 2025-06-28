@@ -38,6 +38,9 @@ interface ModelInfo {
 }
 
 const ExplanationPage = () => {
+    const [faithfulnessScore, setFaithfulnessScore] = useState<number | null>(null);
+    const [isFetchingFaithfulness, setIsFetchingFaithfulness] = useState(false);
+    const [faithfulnessError, setFaithfulnessError] = useState<string | null>(null);
     const { datasetId, classificationId, resultId } = useParams();
     const navigate = useNavigate();
     const [classification, setClassification] = useState<ClassificationEntry | null>(null);
@@ -231,6 +234,38 @@ const ExplanationPage = () => {
             setIsExplaining(false);
         }
     };
+
+    const get_faithfulness = async (modelId: string) => {
+    setIsFetchingFaithfulness(true);
+    setFaithfulnessError(null);
+    setFaithfulnessScore(null);
+
+    try {
+        const model = availableModels.find(m => m.id === modelId);
+        if (!model) {
+            setFaithfulnessError("Model not found.");
+            return;
+        }
+
+        const payload = {
+            ground_question: classification?.text,   // or the actual ground question if different
+            ground_explanation: classification?.llm_explanations?.[model.model] || "", // or other field
+            ground_label: classification?.actualLabel,
+            predicted_explanation: explanations[modelId]?.llm || "",
+            predicted_label: classification?.prediction,
+            target_model: model.model,
+            // Optionally add context, groq, target_model if needed
+        };
+
+        const response = await axios.post("http://localhost:5000/api/faithfulness", payload, { withCredentials: true });
+
+        setFaithfulnessScore(response.data.faithfulness_score);
+    } catch (err: any) {
+        setFaithfulnessError('Failed to compute faithfulness');
+    } finally {
+        setIsFetchingFaithfulness(false);
+    }
+};
 
     const handleRatingChange = (modelId: string, type: string, rating: number) => {
         setRatings(prev => ({
@@ -474,9 +509,7 @@ const ExplanationPage = () => {
                                                 {/* LLM Explanation */}
                                                 <Col md={6}>
                                                     <div className="explanation-section">
-                                                        <h6 className="text-primary mb-3">
-                                                            Direct Explanation
-                                                        </h6>
+                                                        <h6 className="text-primary mb-3">Direct Explanation</h6>
                                                         <div className="explanation-content mb-3">
                                                             {explanations[activeModel]?.llm ? (
                                                                 <div className="p-3 bg-light rounded">
@@ -487,6 +520,29 @@ const ExplanationPage = () => {
                                                                     No explanation generated yet
                                                                 </div>
                                                             )}
+                                                        </div>
+                                                        {/* Faithfulness button and score */}
+                                                        <div className="d-flex align-items-center gap-3 my-3">
+                                                          <Button
+                                                            size="sm"
+                                                            variant="outline-info"
+                                                            onClick={() => get_faithfulness(activeModel)}
+                                                            disabled={isFetchingFaithfulness || !explanations[activeModel]?.llm}
+                                                          >
+                                                            {isFetchingFaithfulness ? <Spinner size="sm" /> : "Compute Faithfulness"}
+                                                          </Button>
+
+                                                          {faithfulnessScore !== null && (
+                                                            <div className="d-flex align-items-center">
+                                                              <span className="badge rounded-pill bg-info fs-6 px-3 py-2">
+                                                                Faithfulness: {faithfulnessScore.toFixed(2)}
+                                                              </span>
+                                                            </div>
+                                                          )}
+
+                                                          {faithfulnessError && (
+                                                            <span className="text-danger ms-2">{faithfulnessError}</span>
+                                                          )}
                                                         </div>
                                                         <RatingSection
                                                             title="Direct Explanation"

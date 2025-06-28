@@ -16,7 +16,7 @@ import {
     ResponsiveContainer
 } from 'recharts';
 const groqModels = [
-        { name: "allam-2-7b" },
+        { name: " llama3-70b" },
         { name: "deepseek-r1-distill-llama-70b" },
         { name: "deepseek-r1-distill-qwen-32b" },
         { name: "gemma2-9b-it" },

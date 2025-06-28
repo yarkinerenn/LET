@@ -10,6 +10,7 @@ from transformers import pipeline,AutoModelForSequenceClassification,AutoTokeniz
 from dotenv import load_dotenv
 from openai import OpenAI
 import os
+from LExT.metrics.faithfulness import faithfulness
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 from tqdm import tqdm
 import numpy as np
@@ -114,6 +115,46 @@ def add_explanationmodels_to_classficication(classification_id):
         "message": "Explanation models added successfully",
         "classification_id": classification_id
     }), 200
+
+
+@app.route('/api/faithfulness', methods=['POST'])
+@login_required
+def faithfulness_endpoint():
+    # Parse POST data
+    data = request.json
+    print(data)
+
+    # Extract fields from request
+    question = data.get("ground_question")
+    ground_explanation = data.get("ground_explanation")
+    ground_label = data.get("ground_label")
+    explanation = data.get("predicted_explanation")
+    label = data.get("predicted_label")
+    context = data.get("ground_context", None)    # Optional: use if your faithfulness function supports it
+    groq = get_user_api_key_groq()                     # Or however your code names these
+    target_model = 'llama3:8b'
+
+    # Prepare row_reference for tracking all info/results
+    row_reference = {
+        "ground_question": question,
+        "ground_explanation": ground_explanation,
+        "ground_label": ground_label,
+        "predicted_explanation": explanation,
+        "predicted_label": label,
+        "ground_context": context,
+    }
+
+    # Compute faithfulness score
+    # Adjust the arguments below to match your actual faithfulness() function's signature!
+    score = faithfulness(
+        explanation, label, question, ground_label, context, groq, target_model, row_reference
+    )
+
+    # Return as JSON (including the whole row_reference if you want details)
+    return jsonify({
+        "faithfulness_score": score,
+        "details": row_reference
+    })
 
 
 
