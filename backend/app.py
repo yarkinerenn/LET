@@ -157,34 +157,39 @@ def faithfulness_endpoint():
     })
 
 
+CLASSIFICATION_METHODS = ['bert', 'llm']
 
-@app.route('/api/classify_sentiment/<dataset_id>', methods=['POST'])
+@app.route('/api/classify/<dataset_id>', methods=['POST'])
 @login_required
 def classify_dataset(dataset_id):
-    """Classify the whole dataset using either BERT or generative AI """
-    # Validate request data
+    """Classify the whole dataset (sentiment, legal/casehold, etc) using BERT or generative AI """
     data = request.json
     if not data:
         return jsonify({"error": "No JSON data provided"}), 400
 
     try:
-        # Extract and validate parameters
+        # --- Extract parameters ---
         method = data.get('method')
+        data_type = data.get('dataType', 'sentiment')
+        if data_type == 'legal':
+            text_column = data.get('text_column', 'citing_prompt')
+            label_column = data.get('label_column', 'label')
+        else:
+            text_column = data.get('text_column', 'text')
+            label_column = data.get('label_column', 'label')
+        print(text_column, label_column)
         if method not in CLASSIFICATION_METHODS:
             return jsonify({"error": f"Invalid method. Must be one of: {CLASSIFICATION_METHODS}"}), 400
 
         user_doc = mongo.db.users.find_one({"_id": ObjectId(current_user.id)})
         provider = user_doc.get('preferred_provider', 'openai')
         model_name = user_doc.get('preferred_model', 'gpt-3.5-turbo')
-        text_column = data.get('text_column', 'text')
-        label_column = data.get('label_column','label')
-        print(provider)
-        # Get dataset metadata
+
         dataset = mongo.db.datasets.find_one({"_id": ObjectId(dataset_id)})
         if not dataset:
             return jsonify({"error": "Dataset not found"}), 404
 
-        # Load dataset with error handling
+        # --- Load dataset ---
         try:
             df = pd.read_csv(dataset['filepath'])
 
@@ -195,7 +200,7 @@ def classify_dataset(dataset_id):
         except Exception as e:
             return jsonify({"error": f"Failed to load dataset: {str(e)}"}), 500
 
-        # Initialize classification client
+        # --- Init client ---
         client = None
         if method == 'llm':
             if provider == 'openai':
@@ -216,113 +221,164 @@ def classify_dataset(dataset_id):
             else:
                 return jsonify({"error": "Invalid LLM provider"}), 400
 
+        # --- Process rows ---
         results = []
-        stats = {
-            "total": 0,
-            "positive": 0,
-            "negative": 0
-        }
+        stats = {"total": 0}
+        if data_type == "sentiment":
+            stats.update({"positive": 0, "negative": 0})
+        elif data_type == "legal":
+            stats.update({"correct": 0, "incorrect": 0})
 
-        # Process samples (limiting to first 100 for demo)
+        # For demo/sample, limit to first 50
         df = df.sample(frac=1, random_state=42).reset_index(drop=True)
-        samples = df.head(500).iterrows()
-        for _, row in tqdm(samples, total=500, desc="Classifying"):
+        samples = df.head(10).iterrows()
+
+        def parse_casehold_label(content):
+            content = content.strip()
+            # Prefer exact match at start
+            for i in range(5):
+                if content.startswith(str(i)):
+                    return i
+            # fallback: look for digit
+            for i in range(5):
+                if str(i) in content:
+                    return i
+            return None
+
+        for _, row in tqdm(samples, total=10, desc="Classifying"):
             try:
-                text = str(row[text_column])# Truncate long texts
-
-                if method == 'bert':
-                    label, score = classify_with_chunks(text, classifier, tokenizer)
-                else:
-                    # LLM classification
-                    if provider in ['openai', 'deepseek']:
+                # --- Sentiment ---
+                if data_type == "sentiment":
+                    text = str(row[text_column])
+                    prompt = f"Classify this text's sentiment as only POSITIVE or NEGATIVE: {text}"
+                    def parse_label(content):
+                        uc = content.upper()
+                        return "POSITIVE" if "POS" in uc else "NEGATIVE"
+                    if method == "bert":
+                        label, score = classify_with_chunks(text, classifier, tokenizer)
+                    else:
                         response = client.chat.completions.create(
                             model=model_name,
                             messages=[{
                                 "role": "user",
-                                "content": f"Classify this text's sentiment as only POSITIVE or NEGATIVE: {text}"
+                                "content": prompt
                             }],
                             max_tokens=10
                         )
-                        label = response.choices[0].message.content.strip().upper()
-                    else:  # groq
+                        label = parse_label(response.choices[0].message.content.strip())
+                        score = 1.0
+                    result_data = {
+                        "text": text,
+                        "label": label,
+                        "score": score,
+                        "original_data": row.to_dict(),
+                        "llm_explanation": "",
+                        "shap_plot_explanation": "",
+                        "shapwithllm_explanation": "",
+                    }
+                    if label_column:
+                        result_data["actualLabel"] = str(row[label_column]).strip().upper()
+                    results.append(result_data)
+                    stats["total"] += 1
+                    if label == "POSITIVE":
+                        stats["positive"] += 1
+                    else:
+                        stats["negative"] += 1
+
+                # --- Legal / CaseHold style ---
+                elif data_type == "legal":
+                    context = str(row[text_column])
+                    choices = [row.get(f'holding_{i}', '') for i in range(5)]
+                    prompt = f"Legal Scenario:\n{context}\n\nSelect the holding that is most supported by the legal scenario above.\n"
+                    for idx, holding in enumerate(choices):
+                        prompt += f"{idx}: {holding}\n"
+                    prompt += "\nReply with the number (0, 1, 2, 3, or 4) only."
+
+                    if method == "bert":
+                        label, score = None, 0.0  # or implement MCQ BERT logic
+                    else:
                         response = client.chat.completions.create(
+                            model=model_name,
                             messages=[{
                                 "role": "user",
-                                "content": f"Respond with only POSITIVE or NEGATIVE for this text: {text}"
+                                "content": prompt
                             }],
-                            model=model_name,
                             max_tokens=10
                         )
-                        label = response.choices[0].message.content.strip().upper()
+                        pred = parse_casehold_label(response.choices[0].message.content)
+                        label = pred if pred is not None else -1
+                        score = 1.0
 
-                    # Normalize label
-                    label = "POSITIVE" if "POS" in label else "NEGATIVE"
-                    score = 1.0
+                    result_data = {
+                        "citing_prompt": context,
+                        "choices": choices,
+                        "label": label,
+                        "score": score,
+                        "original_data": row.to_dict(),
+                        "llm_explanation": "",
+                        "shap_plot_explanation": "",
+                        "shapwithllm_explanation": "",
+                    }
+                    if label_column:
+                        result_data["actualLabel"] = int(row[label_column])
+                    results.append(result_data)
+                    stats["total"] += 1
+                    if "actualLabel" in result_data and label == result_data["actualLabel"]:
+                        stats["correct"] += 1
+                    else:
+                        stats["incorrect"] += 1
 
-                # Store result
-                result_data = {
-                    "text": text,
-                    "label": label,
-                    "score": score,
-                    "original_data": row.to_dict(),
-                    "llm_explanation": "",
-                    "shap_plot_explanation":"",
-                    "shapwithllm_explanation": "",
-
-                }
-
-                if label_column:
-                    result_data["actualLabel"] = str(row[label_column]).strip().upper()
-
-                results.append(result_data)
-
-                # Update stats
-                stats["total"] += 1
-                if label == "POSITIVE":
-                    stats["positive"] += 1
                 else:
-                    stats["negative"] += 1
+                    return jsonify({"error": "Invalid data_type"}), 400
 
             except Exception as e:
                 print(f"Error processing row: {str(e)}")
                 continue
 
-        # Calculate metrics if ground truth available
+        # --- Metrics ---
         if label_column:
             try:
-                # Convert labels to integers (0/1)
-                y_true = df[label_column].head(len(results)).astype(int)
-                y_pred = [1 if r['label'] == 'POSITIVE' else 0 for r in results]
+                y_true = df[label_column].head(len(results))
+                y_pred = [r['label'] for r in results]
 
-                # Calculate binary metrics
-                stats["accuracy"] = accuracy_score(y_true, y_pred)
-                stats["precision"] = precision_score(y_true, y_pred, pos_label=1, zero_division=0)
-                stats["recall"] = recall_score(y_true, y_pred, pos_label=1, zero_division=0)
-                stats["f1_score"] = f1_score(y_true, y_pred, pos_label=1, zero_division=0)
+                if data_type == "sentiment":
+                    # Convert to binary (1 = POSITIVE, 0 = NEGATIVE)
+                    y_true_bin = y_true.astype(str).str.upper().map(lambda x: 1 if x == 'POSITIVE' or x == '1' else 0)
+                    y_pred_bin = [1 if l == 'POSITIVE' else 0 for l in y_pred]
+                    stats["accuracy"] = accuracy_score(y_true_bin, y_pred_bin)
+                    stats["precision"] = precision_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+                    stats["recall"] = recall_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+                    stats["f1_score"] = f1_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+                    tn, fp, fn, tp = confusion_matrix(y_true_bin, y_pred_bin).ravel()
+                    stats["confusion_matrix"] = {
+                        "true_negative": int(tn),
+                        "false_positive": int(fp),
+                        "false_negative": int(fn),
+                        "true_positive": int(tp)
+                    }
 
-                # Confusion matrix
-                tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
-                stats["confusion_matrix"] = {
-                    "true_negative": int(tn),
-                    "false_positive": int(fp),
-                    "false_negative": int(fn),
-                    "true_positive": int(tp)
-                }
+                    for i, result in enumerate(results):
+                        result["actualLabel"] = int(y_true_bin.iloc[i]) if i < len(y_true_bin) else None
 
-                # Add to results for frontend display
-                for i, result in enumerate(results):
-                    result["actualLabel"] = int(y_true.iloc[i]) if i < len(y_true) else None
+                elif data_type == "legal":
+                    # Compare index predictions to actual labels
+                    y_true_legal = y_true.astype(int)
+                    accuracy = sum(y_true_legal.iloc[i] == y_pred[i] for i in range(len(y_true_legal))) / len(y_true_legal)
+                    stats["accuracy"] = accuracy
+                    for i, result in enumerate(results):
+                        result["actualLabel"] = int(y_true_legal.iloc[i]) if i < len(y_true_legal) else None
 
             except Exception as e:
                 print(f"Error calculating metrics: {str(e)}")
 
-        # Store results
+        # --- Store results in DB ---
         classification_data = {
             "dataset_id": ObjectId(dataset_id),
             "user_id": ObjectId(current_user.id),
             "method": method,
             "provider": provider if method == 'llm' else None,
             "model": model_name if method == 'llm' else None,
+            "data_type": data_type,
             "results": results,
             "created_at": datetime.now(),
             "stats": stats
@@ -338,6 +394,7 @@ def classify_dataset(dataset_id):
         }), 200
 
     except Exception as e:
+        traceback.print_exc()
         print(f"Classification error: {str(e)}")
 
         return jsonify({
@@ -798,6 +855,9 @@ def update_preferred_classification():
     data = request.json
     preferred_provider = data.get('preferred_provider', 'openai')
     preferred_model = data.get('preferred_model', 'gpt-3.5-turbo')
+    if preferred_model == '':
+        print('now it is gpt')
+        preferred_model = 'gpt-3.5-turbo'
 
     mongo.db.users.update_one(
         {'_id': ObjectId(current_user.id)},

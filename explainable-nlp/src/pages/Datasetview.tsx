@@ -32,7 +32,7 @@ const DatasetView = () => {
     const [loadingClassifications, setLoadingClassifications] = useState(false);
     const [classifications, setClassifications] = useState<ClassificationItem[]>([]);
     const { provider, model } = useProvider();
-
+    const [dataType, setDataType] = useState<'sentiment' | 'legal'>('sentiment');
     // Pagination states
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(20);
@@ -110,8 +110,8 @@ const DatasetView = () => {
         setClassifying(method);
         try {
             const response = await axios.post(
-                `http://localhost:5000/api/classify_sentiment/${datasetId}`,
-                { method:method,provider: provider, model: model },
+                `http://localhost:5000/api/classify/${datasetId}`,
+                { method:method,provider: provider, model: model ,dataType: dataType },
                 { withCredentials: true }
             );
 
@@ -163,10 +163,25 @@ const DatasetView = () => {
         <Container fluid>
             <Row className="py-4">
                 {/* Classification Sidebar */}
+
                 <Col md={4} className="border-end border-2">
+
                     <Card className="border-0">
                         <Card.Body>
+
                             <Card.Title className="mb-4">Classification Methods</Card.Title>
+                            <div className="mb-3 d-flex align-items-center gap-3">
+                      <span className="fw-semibold">Select Data Type:</span>
+                      <select
+                        className="form-select w-auto"
+                        value={dataType}
+                        onChange={e => setDataType(e.target.value as 'sentiment' | 'legal')}
+                        style={{ minWidth: 180 }}
+                      >
+                        <option value="sentiment">Sentiment Analysis</option>
+                        <option value="legal">Legal</option>
+                      </select>
+                    </div>
                             <div className="d-grid gap-3">
                                 <Button
                                     variant="primary"
@@ -240,12 +255,12 @@ const DatasetView = () => {
 
                                                         {classification.method === "llm" && (
                                                             <div className="mb-3">
-                <span className="text-muted" style={{ fontSize: '0.85rem' }}>
-                  Model:
-                </span>
+                                                            <span className="text-muted" style={{ fontSize: '0.85rem' }}>
+                                                              Model:
+                                                            </span>
                                                                 <span className="ms-2 fw-semibold">
-                  {classification.provider} / {classification.model}
-                </span>
+                                                              {classification.provider} / {classification.model}
+                                                            </span>
                                                             </div>
                                                         )}
 
