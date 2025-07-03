@@ -18,6 +18,8 @@ interface ClassificationEntry {
     provider?: string;
     model?: string;
     explanation_models?: Array<{provider: string, model: string}>;
+    data_type?: string;
+    holdings?: string[] | null;
 }
 
 interface ExplanationData {
@@ -36,6 +38,7 @@ interface ModelInfo {
     name: string;
     provider: string;
 }
+
 
 const ExplanationPage = () => {
     const [faithfulnessScores, setFaithfulnessScores] = useState<Record<string, { llm: number | null, combined: number | null }>>({});
@@ -56,6 +59,7 @@ const ExplanationPage = () => {
     const [ratings, setRatings] = useState<Record<string, Record<string, number>>>({});
     const [shapRating, setShapRating] = useState(0);
     const [isSubmittingRatings, setIsSubmittingRatings] = useState(false);
+    const isLegal = classification?.data_type === 'legal' || !!classification?.holdings;
 
     useEffect(() => {
         const fetchData = async () => {
@@ -384,42 +388,72 @@ const ExplanationPage = () => {
             {classification && (
                 <Card className="mb-4">
                     <Card.Body>
-                        <Row>
-                            <Col md={8}>
-                                <h5>Original Text</h5>
-                                <div className="original-text p-3 bg-light rounded">
-                                    {classification.text}
-                                </div>
-                                <div className="text-muted small mt-2">
-                                    Confidence: {(classification.confidence * 100).toFixed(1)}%
-                                </div>
-                            </Col>
-                            <Col md={4}>
-                                <div className="d-flex flex-column gap-3">
-                                    <div className="text-center">
-                                        <div className="text-muted small">Prediction</div>
-                                        <Badge
-                                            pill
-                                            bg={classification.prediction === 'POSITIVE' ? 'success' : 'danger'}
-                                            className="px-3 py-2 fs-6"
-                                        >
-                                            {classification.prediction}
-                                        </Badge>
-                                    </div>
-                                    <div className="text-center">
-                                        <div className="text-muted small">Actual Label</div>
-                                        <Badge
-                                            pill
-                                            bg={classification.actualLabel === 1 ? 'success' : 'danger'}
-                                            className="px-3 py-2 fs-6"
-                                        >
-                                            {classification.actualLabel === 1 ? 'POSITIVE' : 'NEGATIVE'}
-                                        </Badge>
-                                    </div>
-                                </div>
-                            </Col>
-                        </Row>
-                    </Card.Body>
+  <Row>
+    <Col md={8}>
+      <h5>{isLegal ? "Citing Prompt" : "Original Text"}</h5>
+      <div className="original-text p-3 bg-light rounded" style={{whiteSpace: 'pre-wrap'}}>
+        {classification.text}
+      </div>
+      {isLegal && classification.holdings && (
+        <>
+          <h6 className="mt-4">Holdings:</h6>
+          <ul style={{paddingLeft: '1.2em'}}>
+            {classification.holdings.map((h: string, i: number) => {
+              // Show prediction/actual coloring
+              // @ts-ignore
+                const isPredicted = classification.prediction === i;
+              const isActual = classification.actualLabel === i;
+              return (
+                <li
+                  key={i}
+                  style={{
+                    background: isPredicted ? '#d1e7dd' : isActual ? '#f8d7da' : undefined,
+                    fontWeight: isPredicted || isActual ? 'bold' : undefined,
+                    borderRadius: 4,
+                    padding: 6,
+                    marginBottom: 4
+                  }}
+                >
+                  <span style={{marginRight: 6, fontWeight: 'bold'}}> {i}: </span>
+                  {h}
+                  {isPredicted && <Badge bg="success" className="ms-2">Predicted</Badge>}
+                  {isActual && <Badge bg="danger" className="ms-2">Actual</Badge>}
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
+      <div className="text-muted small mt-2">
+        Confidence: {(classification.confidence * 100).toFixed(1)}%
+      </div>
+    </Col>
+    <Col md={4}>
+      <div className="d-flex flex-column gap-3">
+        <div className="text-center">
+          <div className="text-muted small">Prediction</div>
+          <Badge
+            pill
+            bg={isLegal ? "info" : classification.prediction === 'POSITIVE' ? 'success' : 'danger'}
+            className="px-3 py-2 fs-6"
+          >
+            {isLegal ? `Holding ${classification.prediction}` : classification.prediction}
+          </Badge>
+        </div>
+        <div className="text-center">
+          <div className="text-muted small">Actual Label</div>
+          <Badge
+            pill
+            bg={isLegal ? "primary" : classification.actualLabel === 1 ? 'success' : 'danger'}
+            className="px-3 py-2 fs-6"
+          >
+            {isLegal ? `Holding ${classification.actualLabel}` : (classification.actualLabel === 1 ? 'POSITIVE' : 'NEGATIVE')}
+          </Badge>
+        </div>
+      </div>
+    </Col>
+  </Row>
+</Card.Body>
                 </Card>
             )}
 

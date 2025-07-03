@@ -1724,8 +1724,18 @@ def get_classificationentry(classification_id, result_id):
             return jsonify({"error": "Classification not found"}), 404
 
         result = classification['results'][int(result_id)]
-        return jsonify({
-            "text": result['text'],
+        # Universal way to extract the main text field
+        entry_text = result.get('text') or result.get('citing_prompt') or ''
+
+        # For legal, you might want to send all holdings (if they exist)
+        holdings = []
+        for i in range(5):
+            holding_key = f'holding_{i}'
+            if holding_key in result.get('original_data', {}):
+                holdings.append(result['original_data'][holding_key])
+
+        response_data = {
+            "text": entry_text,
             "prediction": result['label'],
             "confidence": result['score'],
             "actualLabel": result.get('actualLabel'),
@@ -1738,12 +1748,19 @@ def get_classificationentry(classification_id, result_id):
             "model": classification.get('model'),
             "llm_explanations": result.get("llm_explanations", {}),
             "shap_plot_explanation": result.get("shap_plot_explanation"),
-            "shapwithllm_explanations": result.get("shapwithllm_explanations", {})
-        })
+            "shapwithllm_explanations": result.get("shapwithllm_explanations", {}),
+            # Optionally add these for legal:
+            "holdings": holdings if holdings else None,
+            "data_type": classification.get('data_type')
+        }
+
+        return jsonify(response_data)
 
     except IndexError:
         return jsonify({"error": "Result not found"}), 404
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 @app.route('/api/predictions/<prediction_id>', methods=['GET'])
 @login_required
