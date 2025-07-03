@@ -182,7 +182,8 @@ const ExplanationPage = () => {
                 predictedlabel: classification?.prediction,
                 confidence: classification?.confidence,
                 truelabel: classification?.actualLabel,
-                classificationId: classificationId
+                classificationId: classificationId,
+                datatype: classification?.data_type
             }, { withCredentials: true });
 
             let combinedExplanation: null = null;

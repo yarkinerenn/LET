@@ -656,7 +656,7 @@ def import_hf_dataset():
 
     try:
         # Load dataset from Hugging Face
-        dataset = load_dataset(hf_dataset_name,trust_remote_code=True)
+        dataset = load_dataset(hf_dataset_name,'pqa_labeled',trust_remote_code=True)
         df = dataset["train"].to_pandas()
 
         # Create file path within upload directory
@@ -1197,6 +1197,7 @@ def explain_prediction():
         print(data)
         prediction_id = data.get('predictionId','fromdata')
         classificationId=data.get('classificationId','empty')
+        datatype=data.get('datatype','sentiment')
         if classificationId == 'empty':
             print('empty')
             provider = user_doc.get('preferred_providerex', 'openai')
@@ -1229,7 +1230,7 @@ def explain_prediction():
 
                 return jsonify({'explanation': explanation_data,'explainer_type': explainer_type , 'top_words': top_words})
             else:
-                explanation_text = generate_llm_explanationofdataset(text, predictedlabel,truelabel, confidence,provider,model)
+                explanation_text = generate_llm_explanationofdataset(text, predictedlabel,truelabel, confidence,provider,model,datatype)
                 save_explanation_to_db(classificationId,current_user.id,resultId,'llm',explanation_text,model)
 
                 return jsonify({"explanation": explanation_text,'explainer_type': explainer_type})
@@ -1344,11 +1345,32 @@ def generate_llm_explanation(text, label, score,provider,model):
     except Exception as e:
             print(f"Error: {e}")
             return f"Error: {str(e)}"
-def generate_llm_explanationofdataset(text, label,truelabel, score,provider,model):
+def generate_llm_explanationofdataset(text, label,truelabel, score,provider,model,datatype):
     """Generete generative AI explanation of singel instances in the dataset"""
 
 
     try:
+        myprompt=''
+        if datatype == 'legal':
+            myprompt=f"""
+                Explain why this holding is correct for the legal statement :
+                
+                Statement: {text}
+                holding: {label} 
+                
+                Focus on key words and overall tone.
+                Keep explanation under 3 sentences.
+            """
+        elif datatype == 'sentiment':
+             myprompt=f"""
+                Explain this sentiment analysis result in simple terms:
+                
+                Text: {text}
+                Sentiment: {label} ({score}% confidence)
+                
+                Focus on key words and overall tone.
+                Keep explanation under 3 sentences.
+            """
         if provider == 'openai':
 
             openai_api_key = get_user_api_key_openai()
@@ -1358,15 +1380,7 @@ def generate_llm_explanationofdataset(text, label,truelabel, score,provider,mode
 
             client = OpenAI(api_key=openai_api_key)
 
-            prompt = f"""
-                Explain this sentiment analysis result in simple terms:
-                
-                Text: {text}
-                Sentiment: {label} ({score}% confidence)
-                
-                Focus on key words and overall tone.
-                Keep explanation under 3 sentences.
-            """
+            prompt = myprompt
 
             response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
@@ -1384,19 +1398,10 @@ def generate_llm_explanationofdataset(text, label,truelabel, score,provider,mode
             client = OpenAI(  base_url="https://openrouter.ai/api/v1",
                               api_key=openai_api_key)
 
-            prompt = f"""
-                Explain this sentiment analysis result in simple terms:
-                
-                Text: {text}
-                Sentiment: {label} ({score}% confidence)
-                
-                Focus on key words and overall tone.
-                Keep explanation under 3 sentences.
-            """
 
             response = client.chat.completions.create(
                 model=model,
-                messages=[{"role": "user", "content": prompt}]
+                messages=[{"role": "user", "content": myprompt}]
             )
 
             explanation = response.choices[0].message.content
@@ -1412,15 +1417,7 @@ def generate_llm_explanationofdataset(text, label,truelabel, score,provider,mode
                 messages=[
                     {
                         "role": "user",
-                        "content":f"""
-                Explain this sentiment analysis result in simple terms:
-                
-                Text: {text}
-                Sentiment: {label} ({score}% confidence)
-                
-                Focus on key words and overall tone.
-                Keep explanation under 3 sentences.
-            """,
+                        "content":myprompt,
                     }
                 ],
                 model=model,

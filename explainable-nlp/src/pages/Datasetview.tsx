@@ -32,7 +32,7 @@ const DatasetView = () => {
     const [loadingClassifications, setLoadingClassifications] = useState(false);
     const [classifications, setClassifications] = useState<ClassificationItem[]>([]);
     const { provider, model } = useProvider();
-    const [dataType, setDataType] = useState<'sentiment' | 'legal'>('sentiment');
+    const [dataType, setDataType] = useState<'sentiment' | 'legal'|'medical'>('sentiment');
     // Pagination states
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(20);
@@ -175,11 +175,13 @@ const DatasetView = () => {
                       <select
                         className="form-select w-auto"
                         value={dataType}
-                        onChange={e => setDataType(e.target.value as 'sentiment' | 'legal')}
+                        onChange={e => setDataType(e.target.value as 'sentiment' | 'legal'|'medical')}
                         style={{ minWidth: 180 }}
                       >
                         <option value="sentiment">Sentiment Analysis</option>
                         <option value="legal">Legal</option>
+                          <option value="medical">Medical</option>
+
                       </select>
                     </div>
                             <div className="d-grid gap-3">
