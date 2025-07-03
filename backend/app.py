@@ -1751,7 +1751,9 @@ def get_classificationentry(classification_id, result_id):
             "shapwithllm_explanations": result.get("shapwithllm_explanations", {}),
             # Optionally add these for legal:
             "holdings": holdings if holdings else None,
-            "data_type": classification.get('data_type')
+            "data_type": classification.get('data_type'),
+            "method": classification.get('method'),
+
         }
 
         return jsonify(response_data)

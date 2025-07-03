@@ -1,3 +1,5 @@
+
+
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Container, Row, Col, Card, Table, Alert, Spinner, Button, Badge, Modal, Form, Accordion } from 'react-bootstrap';
@@ -47,6 +49,11 @@ interface ClassificationData {
   created_at: string;
   stats: ClassificationStats;
   data_type?: string; // 'sentiment' or 'legal'
+}
+function toSentiment(val: string | number | undefined): "POSITIVE" | "NEGATIVE" | undefined {
+  if (val === 1 || val === "POSITIVE") return "POSITIVE";
+  if (val === 0 || val === "NEGATIVE") return "NEGATIVE";
+  return undefined;
 }
 
 const ClassificationDashboard = () => {
@@ -217,9 +224,10 @@ const ClassificationDashboard = () => {
             )}
           </Row>
 
-          {/* Pie Chart */}
+          {/* Pie Chart and Bar Chart */}
           <Row className="mb-4">
             {dataType === "sentiment" && (
+              <>
                 <Col md={6}>
                   <Card className="h-100">
                     <Card.Body>
@@ -245,10 +253,30 @@ const ClassificationDashboard = () => {
                     </Card.Body>
                   </Card>
                 </Col>
-              )}
-            <Col md={6}>
-              {/* You can add BarChart or more stats here */}
-            </Col>
+                <Col md={6}>
+                  <Card>
+                    <Card.Body>
+                      <Card.Title>Performance Metrics</Card.Title>
+                      <ResponsiveContainer width="100%" height={250}>
+                        <BarChart
+                          data={[
+                            { name: "F1 Score", value: stats?.f1_score || 0 },
+                            { name: "Precision", value: stats?.precision || 0 },
+                            { name: "Recall", value: stats?.recall || 0 },
+                          ]}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="name" />
+                          <YAxis domain={[0, 1]} />
+                          <Tooltip />
+                          <Bar dataKey="value" fill="#8884d8" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </Card.Body>
+                  </Card>
+                </Col>
+              </>
+            )}
           </Row>
 
           {/* Predictions Table */}
@@ -265,7 +293,7 @@ const ClassificationDashboard = () => {
                             <th>Text</th>
                             <th>Prediction</th>
                             <th>Confidence</th>
-                            {classification?.results[0]?.actualLabel && <th>Actual Label</th>}
+                            {classification?.results[0]?.actualLabel !== undefined && <th>Actual Label</th>}
                           </>
                         ) : (
                           <>
@@ -280,7 +308,9 @@ const ClassificationDashboard = () => {
                     <tbody>
                       {paginatedResults?.map((result, index) => {
                         if (dataType === 'sentiment') {
-                          const isMismatch = result.actualLabel && result.label !== result.actualLabel;
+                          const isMismatch =
+                            result.actualLabel !== undefined &&
+                            toSentiment(result.label) !== toSentiment(result.actualLabel);
                           return (
                             <tr
                               key={index}
@@ -290,13 +320,17 @@ const ClassificationDashboard = () => {
                             >
                               <td className="text-truncate" style={{ maxWidth: '300px' }}>{result.text}</td>
                               <td>
-                                <Badge bg={result.label === 'POSITIVE' ? 'success' : 'danger'}>{result.label}</Badge>
+                                <Badge bg={toSentiment(result.label) === 'POSITIVE' ? 'success' : 'danger'}>
+                                  {toSentiment(result.label)}
+                                </Badge>
                               </td>
                               <td>{(result.score * 100).toFixed(1)}%</td>
-                              {result.actualLabel && (
+                              {result.actualLabel !== undefined && (
                                 <td>
-                                  <Badge bg={result.actualLabel === 'POSITIVE' ? 'success' : 'danger'}>
-                                    {result.actualLabel}
+                                  <Badge
+                                    bg={toSentiment(result.actualLabel) === 'POSITIVE' ? 'success' : 'danger'}
+                                  >
+                                    {toSentiment(result.actualLabel)}
                                   </Badge>
                                 </td>
                               )}

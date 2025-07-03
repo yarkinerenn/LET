@@ -20,6 +20,7 @@ interface ClassificationEntry {
     explanation_models?: Array<{provider: string, model: string}>;
     data_type?: string;
     holdings?: string[] | null;
+    method?: string;
 }
 
 interface ExplanationData {
@@ -352,338 +353,363 @@ const ExplanationPage = () => {
         );
     }
 
+    // @ts-ignore
+    // @ts-ignore
+    // @ts-ignore
+    // @ts-ignore
     return (
-        <Container className="py-4 explanation-page" fluid>
-            <div className="d-flex justify-content-between align-items-center mb-4">
-                <Button
-                    variant="outline-secondary"
-                    onClick={() => navigate(`/datasets/${datasetId}/classifications/${classificationId}`)}
-                >
-                    ← Back to Classification
-                </Button>
+  <Container className="py-4 explanation-page" fluid>
+    <div className="d-flex justify-content-between align-items-center mb-4">
+      <Button
+        variant="outline-secondary"
+        onClick={() => navigate(`/datasets/${datasetId}/classifications/${classificationId}`)}
+      >
+        ← Back to Classification
+      </Button>
 
-                <div className="d-flex align-items-center gap-3">
-                    <div className="text-muted">
-                        Result {currentResultIndex + 1} of {totalResults}
-                    </div>
-                    <div className="d-flex gap-2">
-                        <Button
-                            variant="outline-primary"
-                            onClick={handlePrevious}
-                            disabled={currentResultIndex === 0}
-                        >
-                            ← Previous
-                        </Button>
-                        <Button
-                            variant="outline-primary"
-                            onClick={handleNext}
-                            disabled={currentResultIndex >= totalResults - 1}
-                        >
-                            Next →
-                        </Button>
-                    </div>
+      <div className="d-flex align-items-center gap-3">
+        <div className="text-muted">
+          Result {currentResultIndex + 1} of {totalResults}
+        </div>
+        <div className="d-flex gap-2">
+          <Button
+            variant="outline-primary"
+            onClick={handlePrevious}
+            disabled={currentResultIndex === 0}
+          >
+            ← Previous
+          </Button>
+          <Button
+            variant="outline-primary"
+            onClick={handleNext}
+            disabled={currentResultIndex >= totalResults - 1}
+          >
+            Next →
+          </Button>
+        </div>
+      </div>
+    </div>
+
+    {classification && (
+      <Card className="mb-4">
+        <Card.Body>
+          <Row>
+            <Col md={8}>
+              <h5>
+                {classification?.data_type === "legal"
+                  ? "Citing Prompt"
+                  : "Original Text"}
+              </h5>
+              <div className="original-text p-3 bg-light rounded" style={{ whiteSpace: 'pre-line' }}>
+                {classification?.data_type === "legal"
+                  ? classification.text // This is usually the citing prompt for legal
+                  : classification.text}
+              </div>
+              <div className="text-muted small mt-2">
+                Confidence: {(classification.confidence * 100).toFixed(1)}%
+              </div>
+            </Col>
+            <Col md={4}>
+              <div className="d-flex flex-column gap-3">
+                {/* Prediction */}
+                <div className="text-center">
+                  <div className="text-muted small">Prediction</div>
+                  <Badge
+                    pill
+                    bg={
+                      classification?.data_type === "legal"
+
+                        ? (Number(classification.prediction) === Number(classification.actualLabel) ? "success" : "danger")
+                          // @ts-ignore
+                        : (classification?.prediction === 1 || classification?.prediction === "POSITIVE" ? "success" : "danger")
+                    }
+                    className="px-3 py-2 fs-6"
+                  >
+                    {classification?.data_type === "legal"
+                        // @ts-ignore
+                      ? String(classification?.actualLabel + 1)
+                        // @ts-ignore
+                      : (classification?.prediction === 1 || classification?.prediction === "POSITIVE" ? "POSITIVE" : "NEGATIVE")}
+                  </Badge>
+                  {/* Show holding text if legal */}
+
                 </div>
-            </div>
+                {/* Actual */}
+                <div className="text-center">
+                  <div className="text-muted small">Actual Label</div>
+                  <Badge
+                    pill
+                    bg={
+                      classification?.data_type === "legal"
+                        ? "primary"
+                          // @ts-ignore
+                        : (classification?.actualLabel === 1 || classification?.actualLabel === "POSITIVE" ? "success" : "danger")
+                    }
+                    className="px-3 py-2 fs-6"
+                  >
+                    {classification?.data_type === "legal"
+                        // @ts-ignore
+                      ? String(classification?.actualLabel + 1)
+                        // @ts-ignore
+                      : (classification?.actualLabel === 1 || classification?.actualLabel === "POSITIVE" ? "POSITIVE" : "NEGATIVE")}
+                  </Badge>
+                  {/* Show holding text if legal */}
 
-            {classification && (
-                <Card className="mb-4">
-                    <Card.Body>
-  <Row>
-    <Col md={8}>
-      <h5>{isLegal ? "Citing Prompt" : "Original Text"}</h5>
-      <div className="original-text p-3 bg-light rounded" style={{whiteSpace: 'pre-wrap'}}>
-        {classification.text}
-      </div>
-      {isLegal && classification.holdings && (
-        <>
-          <h6 className="mt-4">Holdings:</h6>
-          <ul style={{paddingLeft: '1.2em'}}>
-            {classification.holdings.map((h: string, i: number) => {
-              // Show prediction/actual coloring
-              // @ts-ignore
-                const isPredicted = classification.prediction === i;
-              const isActual = classification.actualLabel === i;
-              return (
-                <li
-                  key={i}
-                  style={{
-                    background: isPredicted ? '#d1e7dd' : isActual ? '#f8d7da' : undefined,
-                    fontWeight: isPredicted || isActual ? 'bold' : undefined,
-                    borderRadius: 4,
-                    padding: 6,
-                    marginBottom: 4
-                  }}
-                >
-                  <span style={{marginRight: 6, fontWeight: 'bold'}}> {i}: </span>
-                  {h}
-                  {isPredicted && <Badge bg="success" className="ms-2">Predicted</Badge>}
-                  {isActual && <Badge bg="danger" className="ms-2">Actual</Badge>}
-                </li>
-              );
-            })}
-          </ul>
-        </>
-      )}
-      <div className="text-muted small mt-2">
-        Confidence: {(classification.confidence * 100).toFixed(1)}%
-      </div>
-    </Col>
-    <Col md={4}>
-      <div className="d-flex flex-column gap-3">
-        <div className="text-center">
-          <div className="text-muted small">Prediction</div>
-          <Badge
-            pill
-            bg={isLegal ? "info" : classification.prediction === 'POSITIVE' ? 'success' : 'danger'}
-            className="px-3 py-2 fs-6"
-          >
-            {isLegal ? `Holding ${classification.prediction}` : classification.prediction}
-          </Badge>
-        </div>
-        <div className="text-center">
-          <div className="text-muted small">Actual Label</div>
-          <Badge
-            pill
-            bg={isLegal ? "primary" : classification.actualLabel === 1 ? 'success' : 'danger'}
-            className="px-3 py-2 fs-6"
-          >
-            {isLegal ? `Holding ${classification.actualLabel}` : (classification.actualLabel === 1 ? 'POSITIVE' : 'NEGATIVE')}
-          </Badge>
-        </div>
-      </div>
-    </Col>
-  </Row>
-</Card.Body>
-                </Card>
-            )}
+                </div>
+              </div>
+            </Col>
+          </Row>
 
-            <Row className="g-4">
-                <Col lg={4}>
-                    <Card className="h-100 explanation-card border-info">
-                        <Card.Header className="bg-info text-white d-flex justify-content-between align-items-center">
-                            <Card.Title className="mb-0">
-                                SHAP Analysis
-                            </Card.Title>
-                            <Button
-                                size="sm"
-                                variant="light"
-                                onClick={generateShapExplanation}
-                                disabled={isExplaining}
-                            >
-                                {isExplaining ? (
-                                    <Spinner size="sm" animation="border" />
-                                ) : shapData.explanation ? 'Regenerate' : 'Generate'}
-                            </Button>
-                        </Card.Header>
-                        <Card.Body>
-                            {shapData.explanation ? (
-                                <div
-                                    dangerouslySetInnerHTML={{ __html: shapData.explanation }}
-                                    className="shap-visualization"
-                                />
-                            ) : (
-                                <div className="text-muted text-center py-5">
-                                    <p>Click "Generate" to create SHAP visualization</p>
-                                </div>
-                            )}
-                        </Card.Body>
-                        <Card.Footer>
-                            <RatingSection
-                                title="SHAP Analysis"
-                                value={shapRating}
-                                onChange={setShapRating}
-                                disabled={!shapData.explanation}
-                            />
-                        </Card.Footer>
-                    </Card>
-                </Col>
-
-                <Col lg={8}>
-                    <Card className="h-100">
-                        <Card.Header>
-                            <div className="d-flex justify-content-between align-items-center">
-                                <Card.Title className="mb-0">
-                                    <span className="me-2">🤖</span>
-                                    LLM Explanations
-                                </Card.Title>
-                                <div className="d-flex gap-2">
-                                    <Button
-                                        size="sm"
-                                        variant="outline-primary"
-                                        onClick={() => generateLLMExplanation(activeModel)}
-                                        disabled={isExplaining}
-                                    >
-                                        Generate Current
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        variant="primary"
-                                        onClick={generateAllExplanations}
-                                        disabled={isExplaining}
-                                    >
-                                        {isExplaining ? (
-                                            <Spinner size="sm" className="me-2" />
-                                        ) : null}
-                                        Generate All
-                                    </Button>
-                                </div>
-                            </div>
-                        </Card.Header>
-                        <Card.Body className="p-0">
-                            <Tabs
-                                activeKey={activeModel}
-                                onSelect={(k) => setActiveModel(k as string)}
-                                className="model-tabs border-bottom-0"
-                                fill
-                            >
-                                {availableModels.map(model => (
-                                    <Tab
-                                        key={model.id}
-                                        eventKey={model.id}
-                                        title={
-                                            <div className="d-flex align-items-center justify-content-center gap-2">
-                                                {model.model}
-                                            </div>
-                                        }
-                                    >
-                                        <div className="p-4">
-                                            <Row className="g-4">
-                                                <Col md={6}>
-                                                    <div className="explanation-section">
-                                                        <h6 className="text-primary mb-3">Direct Explanation</h6>
-                                                        <div className="explanation-content mb-3">
-                                                            {explanations[activeModel]?.llm ? (
-                                                                <div className="p-3 bg-light rounded">
-                                                                    {explanations[activeModel].llm}
-                                                                </div>
-                                                            ) : (
-                                                                <div className="text-muted text-center py-4 border rounded">
-                                                                    No explanation generated yet
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                        <div className="d-flex align-items-center gap-3 my-3">
-                                                            <Button
-                                                                size="sm"
-                                                                variant="outline-info"
-                                                                onClick={() => get_faithfulness(activeModel, 'llm')}
-                                                                disabled={
-                                                                    (isFetchingFaithfulness?.modelId === activeModel &&
-                                                                    isFetchingFaithfulness?.type === 'llm') ||
-                                                                    !explanations[activeModel]?.llm
-                                                                }
-                                                            >
-                                                                {(isFetchingFaithfulness?.modelId === activeModel &&
-                                                                  isFetchingFaithfulness?.type === 'llm') ? (
-                                                                    <Spinner size="sm" />
-                                                                ) : "Compute Faithfulness"}
-                                                            </Button>
-
-                                                            {faithfulnessScores[activeModel]?.llm !== null && (
-                                                                <div className="d-flex align-items-center">
-                                                                    <span className="badge rounded-pill bg-info fs-6 px-3 py-2">
-                                                                        Faithfulness: {faithfulnessScores[activeModel]?.llm?.toFixed(2)}
-                                                                    </span>
-                                                                </div>
-                                                            )}
-
-                                                            {faithfulnessError &&
-                                                             isFetchingFaithfulness?.modelId === activeModel &&
-                                                             isFetchingFaithfulness?.type === 'llm' && (
-                                                                <span className="text-danger ms-2">{faithfulnessError}</span>
-                                                            )}
-                                                        </div>
-                                                        <RatingSection
-                                                            title="Direct Explanation"
-                                                            value={ratings[activeModel]?.llm || 0}
-                                                            onChange={(rating: number) => handleRatingChange(activeModel, 'llm', rating)}
-                                                            disabled={!explanations[activeModel]?.llm}
-                                                        />
-                                                    </div>
-                                                </Col>
-
-                                                <Col md={6}>
-                                                    <div className="explanation-section">
-                                                        <h6 className="text-success mb-3">SHAP-Enhanced Analysis</h6>
-                                                        <div className="explanation-content mb-3">
-                                                            {explanations[activeModel]?.combined ? (
-                                                                <div className="p-3 bg-light rounded">
-                                                                    {explanations[activeModel].combined}
-                                                                </div>
-                                                            ) : (
-                                                                <div className="text-muted text-center py-4 border rounded">
-                                                                    {!shapData.shapWords ?
-                                                                        "Generate SHAP analysis first" :
-                                                                        "Generate combined analysis"
-                                                                    }
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                        <div className="d-flex align-items-center gap-3 my-3">
-                                                            <Button
-                                                                size="sm"
-                                                                variant="outline-info"
-                                                                onClick={() => get_faithfulness(activeModel, 'combined')}
-                                                                disabled={
-                                                                    (isFetchingFaithfulness?.modelId === activeModel &&
-                                                                    isFetchingFaithfulness?.type === 'combined') ||
-                                                                    !explanations[activeModel]?.combined
-                                                                }
-                                                            >
-                                                                {(isFetchingFaithfulness?.modelId === activeModel &&
-                                                                  isFetchingFaithfulness?.type === 'combined') ? (
-                                                                    <Spinner size="sm" />
-                                                                ) : "Compute Faithfulness"}
-                                                            </Button>
-
-                                                            {faithfulnessScores[activeModel]?.combined !== null && (
-                                                                <div className="d-flex align-items-center">
-                                                                    <span className="badge rounded-pill bg-info fs-6 px-3 py-2">
-                                                                        Faithfulness: {faithfulnessScores[activeModel]?.combined?.toFixed(2)}
-                                                                    </span>
-                                                                </div>
-                                                            )}
-
-                                                            {faithfulnessError &&
-                                                             isFetchingFaithfulness?.modelId === activeModel &&
-                                                             isFetchingFaithfulness?.type === 'combined' && (
-                                                                <span className="text-danger ms-2">{faithfulnessError}</span>
-                                                            )}
-                                                        </div>
-                                                        <RatingSection
-                                                            title="Combined Analysis"
-                                                            value={ratings[activeModel]?.combined || 0}
-                                                            onChange={(rating: number) => handleRatingChange(activeModel, 'combined', rating)}
-                                                            disabled={!explanations[activeModel]?.combined}
-                                                        />
-                                                    </div>
-                                                </Col>
-                                            </Row>
-                                        </div>
-                                    </Tab>
-                                ))}
-                            </Tabs>
-                        </Card.Body>
-                    </Card>
-                </Col>
+          {/* Show holdings if it's a legal entry */}
+          {classification?.data_type === "legal" && Array.isArray(classification?.holdings) && (
+            <Row className="mt-4">
+              <Col>
+                <h6>All Holdings:</h6>
+                <ol>
+                  {classification.holdings.map((h, i) => (
+                    <li key={i}><strong></strong> {h}</li>
+                  ))}
+                </ol>
+              </Col>
             </Row>
+          )}
+        </Card.Body>
+      </Card>
+    )}
 
-            <div className="d-flex justify-content-end mt-4">
+
+    <Row className="g-4">
+      {/* SHAP Analysis only for non-LLM */}
+      {classification?.method !== "llm" && (
+        <Col lg={4}>
+          <Card className="h-100 explanation-card border-info">
+            <Card.Header className="bg-info text-white d-flex justify-content-between align-items-center">
+              <Card.Title className="mb-0">
+                SHAP Analysis
+              </Card.Title>
+              <Button
+                size="sm"
+                variant="light"
+                onClick={generateShapExplanation}
+                disabled={isExplaining}
+              >
+                {isExplaining ? (
+                  <Spinner size="sm" animation="border" />
+                ) : shapData.explanation ? 'Regenerate' : 'Generate'}
+              </Button>
+            </Card.Header>
+            <Card.Body>
+              {shapData.explanation ? (
+                <div
+                  dangerouslySetInnerHTML={{ __html: shapData.explanation }}
+                  className="shap-visualization"
+                />
+              ) : (
+                <div className="text-muted text-center py-5">
+                  <p>Click "Generate" to create SHAP visualization</p>
+                </div>
+              )}
+            </Card.Body>
+            <Card.Footer>
+              <RatingSection
+                title="SHAP Analysis"
+                value={shapRating}
+                onChange={setShapRating}
+                disabled={!shapData.explanation}
+              />
+            </Card.Footer>
+          </Card>
+        </Col>
+      )}
+
+      {/* LLM/SHAP-Enhanced Explanations */}
+      <Col lg={classification?.method === "llm" ? 12 : 8}>
+        <Card className="h-100">
+          <Card.Header>
+            <div className="d-flex justify-content-between align-items-center">
+              <Card.Title className="mb-0">
+                <span className="me-2">🤖</span>
+                LLM Explanations
+              </Card.Title>
+              <div className="d-flex gap-2">
                 <Button
-                    variant="success"
-                    size="lg"
-                    onClick={submitRatings}
-                    disabled={isSubmittingRatings || !hasRatings()}
-                    className="submit-ratings-btn"
+                  size="sm"
+                  variant="outline-primary"
+                  onClick={() => generateLLMExplanation(activeModel)}
+                  disabled={isExplaining}
                 >
-                    {isSubmittingRatings ? (
-                        <Spinner size="sm" className="me-2" />
-                    ) : null}
-                    Submit All Ratings ({Object.keys(ratings).length * 2 + 1} explanations)
+                  Generate Current
                 </Button>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={generateAllExplanations}
+                  disabled={isExplaining}
+                >
+                  {isExplaining ? (
+                    <Spinner size="sm" className="me-2" />
+                  ) : null}
+                  Generate All
+                </Button>
+              </div>
             </div>
-        </Container>
-    );
+          </Card.Header>
+          <Card.Body className="p-0">
+            <Tabs
+              activeKey={activeModel}
+              onSelect={(k) => setActiveModel(k as string)}
+              className="model-tabs border-bottom-0"
+              fill
+            >
+              {availableModels.map(model => (
+                <Tab
+                  key={model.id}
+                  eventKey={model.id}
+                  title={
+                    <div className="d-flex align-items-center justify-content-center gap-2">
+                      {model.model}
+                    </div>
+                  }
+                >
+                  <div className="p-4">
+                    <Row className="g-4">
+                      {/* Direct Explanation always shown */}
+                      <Col md={classification?.method === 'llm' ? 12 : 6}>
+                        <div className="explanation-section">
+                          <h6 className="text-primary mb-3">Direct Explanation</h6>
+                          <div className="explanation-content mb-3">
+                            {explanations[activeModel]?.llm ? (
+                              <div className="p-3 bg-light rounded">
+                                {explanations[activeModel].llm}
+                              </div>
+                            ) : (
+                              <div className="text-muted text-center py-4 border rounded">
+                                No explanation generated yet
+                              </div>
+                            )}
+                          </div>
+                          {/* (Faithfulness + rating for direct) */}
+                          <div className="d-flex align-items-center gap-3 my-3">
+                            <Button
+                              size="sm"
+                              variant="outline-info"
+                              onClick={() => get_faithfulness(activeModel, 'llm')}
+                              disabled={
+                                (isFetchingFaithfulness?.modelId === activeModel &&
+                                  isFetchingFaithfulness?.type === 'llm') ||
+                                !explanations[activeModel]?.llm
+                              }
+                            >
+                              {(isFetchingFaithfulness?.modelId === activeModel &&
+                                isFetchingFaithfulness?.type === 'llm') ? (
+                                <Spinner size="sm" />
+                              ) : "Compute Faithfulness"}
+                            </Button>
+                            {faithfulnessScores[activeModel]?.llm !== null && (
+                              <div className="d-flex align-items-center">
+                                <span className="badge rounded-pill bg-info fs-6 px-3 py-2">
+                                  Faithfulness: {faithfulnessScores[activeModel]?.llm?.toFixed(2)}
+                                </span>
+                              </div>
+                            )}
+                            {faithfulnessError &&
+                              isFetchingFaithfulness?.modelId === activeModel &&
+                              isFetchingFaithfulness?.type === 'llm' && (
+                                <span className="text-danger ms-2">{faithfulnessError}</span>
+                              )}
+                          </div>
+                          <RatingSection
+                            title="Direct Explanation"
+                            value={ratings[activeModel]?.llm || 0}
+                            onChange={(rating: number) => handleRatingChange(activeModel, 'llm', rating)}
+                            disabled={!explanations[activeModel]?.llm}
+                          />
+                        </div>
+                      </Col>
+                      {/* SHAP-Enhanced only if not LLM */}
+                      {classification?.method !== 'llm' && (
+                        <Col md={6}>
+                          <div className="explanation-section">
+                            <h6 className="text-success mb-3">SHAP-Enhanced Analysis</h6>
+                            <div className="explanation-content mb-3">
+                              {explanations[activeModel]?.combined ? (
+                                <div className="p-3 bg-light rounded">
+                                  {explanations[activeModel].combined}
+                                </div>
+                              ) : (
+                                <div className="text-muted text-center py-4 border rounded">
+                                  {!shapData.shapWords ?
+                                    "Generate SHAP analysis first" :
+                                    "Generate combined analysis"
+                                  }
+                                </div>
+                              )}
+                            </div>
+                            {/* (Faithfulness + rating for SHAP-Enhanced) */}
+                            <div className="d-flex align-items-center gap-3 my-3">
+                              <Button
+                                size="sm"
+                                variant="outline-info"
+                                onClick={() => get_faithfulness(activeModel, 'combined')}
+                                disabled={
+                                  (isFetchingFaithfulness?.modelId === activeModel &&
+                                    isFetchingFaithfulness?.type === 'combined') ||
+                                  !explanations[activeModel]?.combined
+                                }
+                              >
+                                {(isFetchingFaithfulness?.modelId === activeModel &&
+                                  isFetchingFaithfulness?.type === 'combined') ? (
+                                  <Spinner size="sm" />
+                                ) : "Compute Faithfulness"}
+                              </Button>
+                              {faithfulnessScores[activeModel]?.combined !== null && (
+                                <div className="d-flex align-items-center">
+                                  <span className="badge rounded-pill bg-info fs-6 px-3 py-2">
+                                    Faithfulness: {faithfulnessScores[activeModel]?.combined?.toFixed(2)}
+                                  </span>
+                                </div>
+                              )}
+                              {faithfulnessError &&
+                                isFetchingFaithfulness?.modelId === activeModel &&
+                                isFetchingFaithfulness?.type === 'combined' && (
+                                  <span className="text-danger ms-2">{faithfulnessError}</span>
+                                )}
+                            </div>
+                            <RatingSection
+                              title="Combined Analysis"
+                              value={ratings[activeModel]?.combined || 0}
+                              onChange={(rating: number) => handleRatingChange(activeModel, 'combined', rating)}
+                              disabled={!explanations[activeModel]?.combined}
+                            />
+                          </div>
+                        </Col>
+                      )}
+                    </Row>
+                  </div>
+                </Tab>
+              ))}
+            </Tabs>
+          </Card.Body>
+        </Card>
+      </Col>
+    </Row>
+
+    <div className="d-flex justify-content-end mt-4">
+      <Button
+        variant="success"
+        size="lg"
+        onClick={submitRatings}
+        disabled={isSubmittingRatings || !hasRatings()}
+        className="submit-ratings-btn"
+      >
+        {isSubmittingRatings ? (
+          <Spinner size="sm" className="me-2" />
+        ) : null}
+        Submit All Ratings ({Object.keys(ratings).length * 2 + 1} explanations)
+      </Button>
+    </div>
+  </Container>
+);
 };
 
 interface RatingSectionProps {
