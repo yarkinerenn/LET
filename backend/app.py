@@ -174,9 +174,12 @@ def classify_dataset(dataset_id):
         if data_type == 'legal':
             text_column = data.get('text_column', 'citing_prompt')
             label_column = data.get('label_column', 'label')
-        else:
+        elif data_type == 'sentiment':
             text_column = data.get('text_column', 'text')
             label_column = data.get('label_column', 'label')
+        else:
+            text_column = "question"
+            label_column = "final_decision"
         print(text_column, label_column)
         if method not in CLASSIFICATION_METHODS:
             return jsonify({"error": f"Invalid method. Must be one of: {CLASSIFICATION_METHODS}"}), 400
@@ -227,6 +230,8 @@ def classify_dataset(dataset_id):
         if data_type == "sentiment":
             stats.update({"positive": 0, "negative": 0})
         elif data_type == "legal":
+            stats.update({"correct": 0, "incorrect": 0})
+        elif data_type == "medical":
             stats.update({"correct": 0, "incorrect": 0})
 
         # For demo/sample, limit to first 50
@@ -327,6 +332,62 @@ def classify_dataset(dataset_id):
                         stats["correct"] += 1
                     else:
                         stats["incorrect"] += 1
+                elif data_type == "medical":
+                    question = str(row.get("question", ""))
+                    context = str(row.get("context", ""))  # or use 'abstract' if that's your column name
+                    long_answer=str(row.get("long_answer", ""))
+                    prompt = f"""Given the following context, answer the question as 'yes', or 'no', and reply with just one word.
+                
+                        Question:
+                        {question}
+                        
+                        Context:
+                        {context}
+                        
+                        Your answer (yes, no) only:
+                        """
+
+                    if method == "bert":
+                        label, score = None, 0.0  # You can implement a PubMedQA BERT model if you want!
+                    else:
+                        response = client.chat.completions.create(
+                            model=model_name,
+                            messages=[{
+                                "role": "user",
+                                "content": prompt
+                            }],
+                            max_tokens=3
+                        )
+                        content = response.choices[0].message.content.strip().lower()
+                        if "yes" in content:
+                            label = "yes"
+                        elif "no" in content:
+                            label = "no"
+                        elif "maybe" in content:
+                            label = "maybe"
+                        else:
+                            label = "maybe"  # fallback
+                        score = 1.0
+
+                    result_data = {
+                        "question": question,
+                        "context": context,
+                        "label": label,
+                        "long_answer": long_answer,
+                        "score": score,
+                        "original_data": row.to_dict(),
+                        "llm_explanation": "",
+                        "shap_plot_explanation": "",
+                        "shapwithllm_explanation": "",
+                    }
+                    if label_column:
+                        result_data["actualLabel"] = str(row[label_column]).strip().lower()
+                    results.append(result_data)
+                    stats["total"] += 1
+                    if "actualLabel" in result_data and label == result_data["actualLabel"]:
+                        stats["correct"] += 1
+                    else:
+                        stats["incorrect"] += 1
 
                 else:
                     return jsonify({"error": "Invalid data_type"}), 400
@@ -341,14 +402,21 @@ def classify_dataset(dataset_id):
                 y_true = df[label_column].head(len(results))
                 y_pred = [r['label'] for r in results]
 
-                if data_type == "sentiment":
-                    # Convert to binary (1 = POSITIVE, 0 = NEGATIVE)
-                    y_true_bin = y_true.astype(str).str.upper().map(lambda x: 1 if x == 'POSITIVE' or x == '1' else 0)
-                    y_pred_bin = [1 if l == 'POSITIVE' else 0 for l in y_pred]
+                if data_type == "sentiment" or data_type == "medical":
+                    # Handle binary classes as "POSITIVE"/"NEGATIVE" or "yes"/"no"
+                    if data_type == "sentiment":
+                        # Sentiment logic (unchanged)
+                        y_true_bin = y_true.astype(str).str.upper().map(lambda x: 1 if x == 'POSITIVE' or x == '1' else 0)
+                        y_pred_bin = [1 if l == 'POSITIVE' else 0 for l in y_pred]
+                    else:  # medical/PubMedQA
+                        y_true_bin = y_true.astype(str).str.lower().map(lambda x: 1 if x.strip() == 'yes' else 0)
+                        y_pred_bin = [1 if str(l).strip().lower() == 'yes' else 0 for l in y_pred]
+
                     stats["accuracy"] = accuracy_score(y_true_bin, y_pred_bin)
                     stats["precision"] = precision_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
                     stats["recall"] = recall_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
                     stats["f1_score"] = f1_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+
                     tn, fp, fn, tp = confusion_matrix(y_true_bin, y_pred_bin).ravel()
                     stats["confusion_matrix"] = {
                         "true_negative": int(tn),
@@ -357,8 +425,13 @@ def classify_dataset(dataset_id):
                         "true_positive": int(tp)
                     }
 
+                    # Optionally update each result row with actualLabel as "yes"/"no"
                     for i, result in enumerate(results):
-                        result["actualLabel"] = int(y_true_bin.iloc[i]) if i < len(y_true_bin) else None
+                        result["actualLabel"] = "yes" if y_true_bin.iloc[i] == 1 else "no"
+
+                    # Also count number of "yes"/"no" for stats (useful for frontend pie)
+                    stats["yes"] = int(sum(y_pred_bin))
+                    stats["no"] = int(len(y_pred_bin) - sum(y_pred_bin))
 
                 elif data_type == "legal":
                     # Compare index predictions to actual labels
@@ -1370,6 +1443,18 @@ def generate_llm_explanationofdataset(text, label,truelabel, score,provider,mode
                 
                 Focus on key words and overall tone.
                 Keep explanation under 3 sentences.
+            """
+        else:
+            myprompt=f"""
+               Given the following biomedical question and its context, explain in simple terms why the answer is {label} from given {score}
+
+                Question:{text}
+                
+                
+                Context: {score}
+                
+                Predicted Answer: {label} 
+                
             """
         if provider == 'openai':
 

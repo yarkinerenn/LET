@@ -116,7 +116,13 @@ const DatasetView = () => {
             );
 
             // Navigate to classification dashboard after successful classification
-            navigate(`/datasets/${datasetId}/classifications/${response.data.classification_id}`);
+            if (["sentiment", "legal"].includes((dataType || "").toLowerCase())) {
+              navigate(`/datasets/${datasetId}/classifications/${response.data.classification_id}`);
+            } else {
+              navigate(`/datasets/${datasetId}/classificationsp/${response.data.classification_id}`);
+              console.log('uuumedical');
+            }
+
 
         } catch (err) {
             console.log(err);
@@ -224,19 +230,26 @@ const DatasetView = () => {
                             ) : classifications.length > 0 ? (
                                 <div className="classifications-list" style={{ maxHeight: '400px', overflowY: 'auto', padding: '0 4px' }}>
                                     {classifications.map((classification) => (
-                                        <Card
-                                            key={classification._id}
-                                            className="mb-3 border-0"
-                                            onClick={() => navigate(`/datasets/${datasetId}/classifications/${classification._id}`)}
-                                            style={{
-                                                cursor: 'pointer',
-                                                transition: 'all 0.2s ease',
-                                                borderRadius: '12px',
-                                                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-                                                borderLeft: `4px solid ${classification.method === "llm" ? '#4361ee' : '#4cc9f0'}`
-                                            }}
-                                            onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-                                            onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                                       <Card
+                                          key={classification._id}
+                                          className="mb-3 border-0"
+                                          onClick={() => {
+                                            // Make the check case-insensitive and handle undefined
+                                            if (dataType === "sentiment" || dataType === "legal") {
+                                              navigate(`/datasets/${datasetId}/classifications/${classification._id}`);
+                                            } else {
+                                              navigate(`/datasets/${datasetId}/classificationsp/${classification._id}`);
+                                            }
+                                          }}
+                                          style={{
+                                            cursor: 'pointer',
+                                            transition: 'all 0.2s ease',
+                                            borderRadius: '12px',
+                                            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                                            borderLeft: `4px solid ${classification.method === "llm" ? '#4361ee' : '#4cc9f0'}`
+                                          }}
+                                          onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+                                          onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
                                         >
                                             <Card.Body className="p-4">
                                                 <div className="d-flex justify-content-between align-items-start">
