@@ -1795,7 +1795,7 @@ def generate_llm_explanation_of_shap():
 @app.route('/api/classificationentry/<classification_id>/<result_id>', methods=['GET'])
 @login_required
 def get_classificationentry(classification_id, result_id):
-    """Get a single entry of a classified dataset"""
+    """Get a single entry of a classified dataset, supporting sentiment, legal, and medical."""
     try:
         classification = mongo.db.classifications.find_one({
             "_id": ObjectId(classification_id),
@@ -1806,15 +1806,25 @@ def get_classificationentry(classification_id, result_id):
             return jsonify({"error": "Classification not found"}), 404
 
         result = classification['results'][int(result_id)]
-        # Universal way to extract the main text field
-        entry_text = result.get('text') or result.get('citing_prompt') or ''
+        data_type = classification.get('data_type')
 
-        # For legal, you might want to send all holdings (if they exist)
+        # Universal main text field
+        entry_text = result.get('text') or result.get('citing_prompt') or result.get('question') or ''
+
+        # For legal, get holdings
         holdings = []
-        for i in range(5):
-            holding_key = f'holding_{i}'
-            if holding_key in result.get('original_data', {}):
-                holdings.append(result['original_data'][holding_key])
+        if data_type == "legal":
+            for i in range(5):
+                holding_key = f'holding_{i}'
+                if holding_key in result.get('original_data', {}):
+                    holdings.append(result['original_data'][holding_key])
+        else:
+            holdings = None
+
+        # For medical, get question, context, long_answer if present
+        question = result.get('question') if data_type == "medical" else None
+        context = result.get('context') if data_type == "medical" else None
+        long_answer = result.get('long_answer') if data_type == "medical" else None
 
         response_data = {
             "text": entry_text,
@@ -1831,11 +1841,13 @@ def get_classificationentry(classification_id, result_id):
             "llm_explanations": result.get("llm_explanations", {}),
             "shap_plot_explanation": result.get("shap_plot_explanation"),
             "shapwithllm_explanations": result.get("shapwithllm_explanations", {}),
-            # Optionally add these for legal:
-            "holdings": holdings if holdings else None,
-            "data_type": classification.get('data_type'),
+            "holdings": holdings,
+            "data_type": data_type,
             "method": classification.get('method'),
-
+            # For medical
+            "question": question,
+            "context": context,
+            "long_answer": long_answer,
         }
 
         return jsonify(response_data)

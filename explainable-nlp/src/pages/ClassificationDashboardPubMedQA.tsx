@@ -340,7 +340,7 @@ const ClassificationDashboardPubMedQA = () => {
                             className={isMismatch ? 'table-danger' : ''}
                             style={{ cursor: 'pointer' }}
                             onClick={() =>
-                              navigate(`/datasets/${datasetId}/classifications/${classificationId}/results/${index}`)
+                              navigate(`/datasets/${datasetId}/classifications_pub/${classificationId}/results/${index}`)
                             }
                           >
                             <td style={{ maxWidth: '200px', whiteSpace: 'normal' }}>
