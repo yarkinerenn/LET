@@ -15,9 +15,9 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 from tqdm import tqdm
 import numpy as np
 import traceback  # EN ÜSTE EKLE
-
+import ast
 import shap
-import io
+import re
 from cryptography.fernet import Fernet
 from groq import Groq
 import pandas as pd
@@ -334,7 +334,7 @@ def classify_dataset(dataset_id):
                         stats["incorrect"] += 1
                 elif data_type == "medical":
                     question = str(row.get("question", ""))
-                    context = str(row.get("context", ""))  # or use 'abstract' if that's your column name
+                    context = pretty_pubmed_qa(row.get("context", ""))  # or use 'abstract' if that's your column name
                     long_answer=str(row.get("long_answer", ""))
                     prompt = f"""Given the following context, answer the question as 'yes', or 'no', and reply with just one word.
                 
@@ -729,8 +729,13 @@ def import_hf_dataset():
 
     try:
         # Load dataset from Hugging Face
-        dataset = load_dataset(hf_dataset_name,'pqa_labeled',trust_remote_code=True)
+        dataset = load_dataset(hf_dataset_name, 'pqa_labeled', trust_remote_code=True)
         df = dataset["train"].to_pandas()
+
+        # ----------- PATCH: Prettify context column if present -----------
+        if "context" in df.columns:
+            df["context"] = df["context"].apply(pretty_pubmed_qa)
+        # -----------------------------------------------------------------
 
         # Create file path within upload directory
         filepath = os.path.join(app.config["UPLOAD_FOLDER"], file_name)
@@ -2001,5 +2006,28 @@ def save_ratings():
     except Exception as e:
         print("Error saving ratings:", e)
         return jsonify({"success": False, "message": "Server error"}), 500
+def pretty_pubmed_qa(data):
+    # If data is not a dict, convert it from Python repr to dict first (may require ast.literal_eval)
+    if isinstance(data, str):
+        import ast
+        try:
+            data = ast.literal_eval(data)
+        except Exception:
+            return data  # fallback: just return the string
+
+    context = "\n".join(data.get('contexts', []))
+    labels = ", ".join(data.get('labels', []))
+    meshes = ", ".join(data.get('meshes', []))
+    rr_pred = ", ".join(data.get('reasoning_required_pred', []))
+    rf_pred = ", ".join(data.get('reasoning_free_pred', []))
+    return (
+        f"Context:\n{context}\n"
+        f"Labels: {labels}\n"
+        f"MeSH Terms: {meshes}\n"
+        f"Reasoning Required Prediction: {rr_pred}\n"
+        f"Reasoning Free Prediction: {rf_pred}"
+    )
+
+
 if __name__ == '__main__':
     app.run(port=5000, debug=True)

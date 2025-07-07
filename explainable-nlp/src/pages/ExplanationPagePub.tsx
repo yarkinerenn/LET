@@ -7,13 +7,14 @@ import '../index.css';
 interface PubMedQAEntry {
   question: string;
   context: string;         // Abstract as plain string!
-  prediction: string;           // Model's answer ("yes"/"no")
+  prediction: string;      // Model's answer ("yes"/"no")
   actualLabel?: string;    // True label ("yes"/"no")
   score: number;           // Model's confidence
   method?: string;
   llm_explanations?: Record<string, string>;
   shap_plot_explanation?: string;
   shapwithllm_explanations?: Record<string, string>;
+  long_answer: string;
 }
 
 interface ModelInfo {
@@ -48,7 +49,14 @@ const ExplanationPagePubMedQA = () => {
   const [shapData, setShapData] = useState<ShapData>({});
   const [ratings, setRatings] = useState<Record<string, Record<string, number>>>({});
   const [shapRating, setShapRating] = useState(0);
+
+  // Faithfulness state
+  const [faithfulnessScores, setFaithfulnessScores] = useState<Record<string, { llm: number | null, combined: number | null }>>({});
+  const [isFetchingFaithfulness, setIsFetchingFaithfulness] = useState<{ modelId: string, type: string } | null>(null);
+  const [faithfulnessError, setFaithfulnessError] = useState<string | null>(null);
+
   const [isExplaining, setIsExplaining] = useState(false);
+  const [isSubmittingRatings, setIsSubmittingRatings] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -60,7 +68,6 @@ const ExplanationPagePubMedQA = () => {
           axios.get(`http://localhost:5000/api/classificationentry/${classificationId}/${resultId}`, { withCredentials: true }),
           axios.get(`http://localhost:5000/api/classification/${classificationId}`, { withCredentials: true }),
         ]);
-        console.log(entryRes);
         setEntry(entryRes.data);
         setTotalResults(classRes.data.results?.length || 0);
         setCurrentResultIndex(Number(resultId) || 0);
@@ -74,6 +81,8 @@ const ExplanationPagePubMedQA = () => {
 
         const initialData: Record<string, ExplanationData> = {};
         const initialRatings: Record<string, Record<string, number>> = {};
+        const initialFaithfulnessScores: Record<string, { llm: number | null, combined: number | null }> = {};
+
         savedModels.forEach((m: any) => {
           const modelId = `${m.provider}-${m.model}`.toLowerCase();
           initialData[modelId] = {
@@ -81,7 +90,9 @@ const ExplanationPagePubMedQA = () => {
             combined: entryRes.data.shapwithllm_explanations?.[m.model]
           };
           initialRatings[modelId] = { llm: 0, combined: 0 };
+          initialFaithfulnessScores[modelId] = { llm: null, combined: null };
         });
+
         setAvailableModels(savedModels.map((m: any) => ({
           id: `${m.provider}-${m.model}`.toLowerCase(),
           provider: m.provider,
@@ -89,6 +100,7 @@ const ExplanationPagePubMedQA = () => {
         })));
         setExplanations(initialData);
         setRatings(initialRatings);
+        setFaithfulnessScores(initialFaithfulnessScores);
         setActiveModel(Object.keys(initialData)[0] || '');
         if (entryRes.data.shap_plot_explanation) {
           setShapData({ explanation: entryRes.data.shap_plot_explanation });
@@ -101,7 +113,7 @@ const ExplanationPagePubMedQA = () => {
     fetchData();
   }, [classificationId, resultId]);
 
-  // --- SHAP & LLM EXPLANATION HANDLERS: identical to your base version! ---
+  // --- SHAP & LLM EXPLANATION HANDLERS ---
   const generateShapExplanation = async () => {
     setIsExplaining(true);
     try {
@@ -111,8 +123,8 @@ const ExplanationPagePubMedQA = () => {
         predictedlabel: entry?.prediction,
         confidence: entry?.score,
         truelabel: entry?.actualLabel,
-        classificationId: classificationId,
-        resultId: resultId,
+        classificationId,
+        resultId,
       }, { withCredentials: true });
       setShapData({
         explanation: shapResponse.data.explanation,
@@ -168,6 +180,15 @@ const ExplanationPagePubMedQA = () => {
           combined: combinedExplanation
         }
       }));
+
+      // Reset faithfulness scores when generating new explanations
+      setFaithfulnessScores(prev => ({
+        ...prev,
+        [modelId]: {
+          llm: null,
+          combined: null
+        }
+      }));
     } catch {
       setError('Failed to generate explanations');
     } finally {
@@ -193,14 +214,96 @@ const ExplanationPagePubMedQA = () => {
     }
   };
 
-  // ---- Navigation etc. ----
+  // --- FAITHFULNESS ---
+  const get_faithfulness = async (modelId: string, type: 'llm' | 'combined') => {
+    setIsFetchingFaithfulness({ modelId, type });
+    setFaithfulnessError(null);
+
+    try {
+      const model = availableModels.find(m => m.id === modelId);
+      if (!model) {
+        setFaithfulnessError("Model not found.");
+        return;
+      }
+
+      const explanationToEvaluate = type === 'llm'
+        ? explanations[modelId]?.llm || ""
+        : explanations[modelId]?.combined || "";
+
+      const payload = {
+        ground_question: entry?.question,
+        ground_explanation: entry?.long_answer,
+        ground_label: entry?.actualLabel,
+        predicted_explanation: explanationToEvaluate,
+        predicted_label: entry?.prediction,
+        target_model: model.model,
+        ground_context: entry?.context
+      };
+
+      const response = await axios.post("http://localhost:5000/api/faithfulness", payload, { withCredentials: true });
+
+      setFaithfulnessScores(prev => ({
+        ...prev,
+        [modelId]: {
+          ...(prev[modelId] || { llm: null, combined: null }),
+          [type]: response.data.faithfulness_score
+        }
+      }));
+    } catch (err: any) {
+      setFaithfulnessError(`Failed to compute ${type} faithfulness`);
+    } finally {
+      setIsFetchingFaithfulness(null);
+    }
+  };
+
+  // --- RATINGS ---
+  const handleRatingChange = (modelId: string, type: string, rating: number) => {
+    setRatings(prev => ({
+      ...prev,
+      [modelId]: {
+        ...prev[modelId],
+        [type]: rating
+      }
+    }));
+  };
+
+  const submitRatings = async () => {
+    setIsSubmittingRatings(true);
+    try {
+      await axios.post(
+        'http://localhost:5000/api/submit-ratings',
+        {
+          classificationId,
+          resultId,
+          ratings,
+          shapRating,
+          faithfulnessScores,
+          timestamp: new Date().toISOString()
+        },
+        { withCredentials: true }
+      );
+      alert('Ratings submitted successfully!');
+    } catch (err) {
+      setError('Failed to submit ratings');
+    } finally {
+      setIsSubmittingRatings(false);
+    }
+  };
+
+  const hasRatings = () => {
+    const hasModelRatings = Object.values(ratings).some(modelRatings =>
+      Object.values(modelRatings).some(rating => rating > 0)
+    );
+    return hasModelRatings || shapRating > 0;
+  };
+
   const handlePrevious = () => {
     const newIndex = currentResultIndex - 1;
-    navigate(`/datasets/${datasetId}/classifications/${classificationId}/results/${newIndex}`);
+    navigate(`/datasets/${datasetId}/classifications_pub/${classificationId}/results/${newIndex}`);
   };
   const handleNext = () => {
     const newIndex = currentResultIndex + 1;
-    navigate(`/datasets/${datasetId}/classifications/${classificationId}/results/${newIndex}`);
+    navigate(`/datasets/${datasetId}/classifications_pub/${classificationId}/results/${newIndex}`);
   };
 
   // ---- RENDER ----
@@ -263,13 +366,13 @@ const ExplanationPagePubMedQA = () => {
                 <div className="text-center">
                   <div className="text-muted small">Prediction</div>
                   <Badge pill bg={entry.prediction === "yes" ? "success" : "danger"} className="px-3 py-2 fs-6">
-                    {entry.prediction?.toUpperCase()}
+                    {entry.prediction}
                   </Badge>
                 </div>
                 <div className="text-center">
                   <div className="text-muted small">Actual Label</div>
                   <Badge pill bg={entry.actualLabel === "yes" ? "success" : "danger"} className="px-3 py-2 fs-6">
-                    {entry.actualLabel ? entry.actualLabel.toUpperCase() : "N/A"}
+                    {entry.actualLabel || "N/A"}
                   </Badge>
                 </div>
               </div>
@@ -298,7 +401,14 @@ const ExplanationPagePubMedQA = () => {
                   </div>
                 )}
               </Card.Body>
-              {/* Optionally: SHAP rating section */}
+              <Card.Footer>
+                <RatingSection
+                  title="SHAP Analysis"
+                  value={shapRating}
+                  onChange={setShapRating}
+                  disabled={!shapData.explanation}
+                />
+              </Card.Footer>
             </Card>
           </Col>
         )}
@@ -309,16 +419,19 @@ const ExplanationPagePubMedQA = () => {
             <Card.Header>
               <div className="d-flex justify-content-between align-items-center">
                 <Card.Title className="mb-0">
-                  <span className="me-2">🤖</span> LLM Explanations
+                 LLM Explanations
                 </Card.Title>
-                {entry?.method !== 'llm' && (
-                  <div className="d-flex gap-2">
-                    <Button size="sm" variant="outline-primary" onClick={() => generateLLMExplanation(activeModel)} disabled={isExplaining}>Generate Current</Button>
+                <div className="d-flex gap-2">
+                  {/* Always show the buttons, even for method="llm" */}
+                  <Button size="sm" variant="outline-primary" onClick={() => generateLLMExplanation(activeModel)} disabled={isExplaining}>
+                    Generate Current
+                  </Button>
+                  {entry?.method !== 'llm' && (
                     <Button size="sm" variant="primary" onClick={generateAllExplanations} disabled={isExplaining}>
                       {isExplaining ? (<Spinner size="sm" className="me-2" />) : null} Generate All
                     </Button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </Card.Header>
             <Card.Body className="p-0">
@@ -350,6 +463,42 @@ const ExplanationPagePubMedQA = () => {
                                 </div>
                               )}
                             </div>
+                            {/* Faithfulness + rating for direct */}
+                            <div className="d-flex align-items-center gap-3 my-3">
+                              <Button
+                                size="sm"
+                                variant="outline-info"
+                                onClick={() => get_faithfulness(activeModel, 'llm')}
+                                disabled={
+                                  (isFetchingFaithfulness?.modelId === activeModel &&
+                                    isFetchingFaithfulness?.type === 'llm') ||
+                                  !explanations[activeModel]?.llm
+                                }
+                              >
+                                {(isFetchingFaithfulness?.modelId === activeModel &&
+                                  isFetchingFaithfulness?.type === 'llm') ? (
+                                  <Spinner size="sm" />
+                                ) : "Compute Faithfulness"}
+                              </Button>
+                              {faithfulnessScores[activeModel]?.llm !== null && (
+                                <div className="d-flex align-items-center">
+                                  <span className="badge rounded-pill bg-info fs-6 px-3 py-2">
+                                    Faithfulness: {faithfulnessScores[activeModel]?.llm?.toFixed(2)}
+                                  </span>
+                                </div>
+                              )}
+                              {faithfulnessError &&
+                                isFetchingFaithfulness?.modelId === activeModel &&
+                                isFetchingFaithfulness?.type === 'llm' && (
+                                  <span className="text-danger ms-2">{faithfulnessError}</span>
+                                )}
+                            </div>
+                            <RatingSection
+                              title="Direct Explanation"
+                              value={ratings[activeModel]?.llm || 0}
+                              onChange={(rating: number) => handleRatingChange(activeModel, 'llm', rating)}
+                              disabled={!explanations[activeModel]?.llm}
+                            />
                           </div>
                         </Col>
                         {entry?.method !== 'llm' && (
@@ -370,6 +519,42 @@ const ExplanationPagePubMedQA = () => {
                                   </div>
                                 )}
                               </div>
+                              {/* Faithfulness + rating for SHAP-enhanced */}
+                              <div className="d-flex align-items-center gap-3 my-3">
+                                <Button
+                                  size="sm"
+                                  variant="outline-info"
+                                  onClick={() => get_faithfulness(activeModel, 'combined')}
+                                  disabled={
+                                    (isFetchingFaithfulness?.modelId === activeModel &&
+                                      isFetchingFaithfulness?.type === 'combined') ||
+                                    !explanations[activeModel]?.combined
+                                  }
+                                >
+                                  {(isFetchingFaithfulness?.modelId === activeModel &&
+                                    isFetchingFaithfulness?.type === 'combined') ? (
+                                    <Spinner size="sm" />
+                                  ) : "Compute Faithfulness"}
+                                </Button>
+                                {faithfulnessScores[activeModel]?.combined !== null && (
+                                  <div className="d-flex align-items-center">
+                                    <span className="badge rounded-pill bg-info fs-6 px-3 py-2">
+                                      Faithfulness: {faithfulnessScores[activeModel]?.combined?.toFixed(2)}
+                                    </span>
+                                  </div>
+                                )}
+                                {faithfulnessError &&
+                                  isFetchingFaithfulness?.modelId === activeModel &&
+                                  isFetchingFaithfulness?.type === 'combined' && (
+                                    <span className="text-danger ms-2">{faithfulnessError}</span>
+                                  )}
+                              </div>
+                              <RatingSection
+                                title="Combined Analysis"
+                                value={ratings[activeModel]?.combined || 0}
+                                onChange={(rating: number) => handleRatingChange(activeModel, 'combined', rating)}
+                                disabled={!explanations[activeModel]?.combined}
+                              />
                             </div>
                           </Col>
                         )}
@@ -382,8 +567,67 @@ const ExplanationPagePubMedQA = () => {
           </Card>
         </Col>
       </Row>
+
+      <div className="d-flex justify-content-end mt-4">
+        <Button
+          variant="success"
+          size="lg"
+          onClick={submitRatings}
+          disabled={isSubmittingRatings || !hasRatings()}
+          className="submit-ratings-btn"
+        >
+          {isSubmittingRatings ? (
+            <Spinner size="sm" className="me-2" />
+          ) : null}
+          Submit All Ratings)
+        </Button>
+      </div>
     </Container>
   );
 };
+
+interface RatingSectionProps {
+  title: string;
+  value: number;
+  onChange: (rating: number) => void;
+  disabled: boolean;
+}
+
+const RatingSection: React.FC<RatingSectionProps> = ({ title, value, onChange, disabled }) => (
+  <div className="rating-section">
+    <div className="d-flex justify-content-between align-items-center">
+      <span className="small text-muted">Rate {title}:</span>
+      <div className="d-flex gap-1">
+        {[1, 2, 3, 4, 5].map((rating) => (
+          <button
+            key={rating}
+            className={`rating-star ${value >= rating ? 'active' : ''} ${disabled ? 'disabled' : ''}`}
+            onClick={() => !disabled && onChange(rating)}
+            disabled={disabled}
+            style={{
+              minWidth: '30px',
+              height: '30px',
+              border: '1px solid #dee2e6',
+              borderRadius: '4px',
+              backgroundColor: value >= rating ? '#007bff' : 'white',
+              color: value >= rating ? 'white' : '#6c757d',
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              fontSize: '14px',
+              fontWeight: '500',
+              opacity: disabled ? 0.5 : 1
+            }}
+          >
+            {rating}
+          </button>
+        ))}
+      </div>
+    </div>
+    {value > 0 && (
+      <div className="text-end small mt-1">
+        <span className="text-muted">Your rating:</span> {value}/5
+      </div>
+    )}
+  </div>
+);
 
 export default ExplanationPagePubMedQA;
