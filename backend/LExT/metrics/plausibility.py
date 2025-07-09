@@ -1,7 +1,7 @@
-from metrics.correctness import correctness
-from metrics.consistency import consistency
-from src.utils import save_to_references
-from src.basic_functions import get_prediction
+from .correctness import correctness
+from .consistency import consistency
+from ..src.utils import save_to_references
+from ..src.basic_functions import get_prediction
 
 def plausibility(ground_context, ground_question, ground_explanation, target_model, groq, ner_pipe=None, row_reference= None):
     """

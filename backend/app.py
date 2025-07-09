@@ -24,6 +24,9 @@ import pandas as pd
 import tempfile
 from datasets import load_dataset
 import torch
+
+from LExT.metrics.trustworthiness import lext
+
 load_dotenv()
 # Store API key in .env
 secret_key = os.getenv("SECRET_KEY")
@@ -117,12 +120,13 @@ def add_explanationmodels_to_classficication(classification_id):
     }), 200
 
 
-@app.route('/api/faithfulness', methods=['POST'])
+@app.route('/api/trustworthiness', methods=['POST'])
 @login_required
-def faithfulness_endpoint():
+def trustworthiness_endpoint():
     # Parse POST data
     data = request.json
     print(data)
+
 
     # Extract fields from request
     question = data.get("ground_question")
@@ -131,6 +135,46 @@ def faithfulness_endpoint():
     explanation = data.get("predicted_explanation")
     label = data.get("predicted_label")
     context = data.get("ground_context", None)    # Optional: use if your faithfulness function supports it
+    context = extract_context_explanation(context)
+    groq = get_user_api_key_groq()                     # Or however your code names these
+    target_model = 'llama3:8b'
+    ner_pipe = pipeline("token-classification", model="Clinical-AI-Apollo/Medical-NER", aggregation_strategy='simple')
+
+    # Prepare row_reference for tracking all info/results
+    row_reference = {
+        "ground_question": question,
+        "ground_explanation": ground_explanation,
+        "ground_label": ground_label,
+        "predicted_explanation": explanation,
+        "predicted_label": label,
+        "ground_context": context,
+    }
+
+    # Compute lext score
+    score = lext(context, question,ground_explanation, ground_label, target_model, groq,ner_pipe,  row_reference
+    )
+
+    # Return as JSON (including the whole row_reference if you want details)
+    return jsonify({
+        "trustworthiness_score": score,
+    })
+
+@app.route('/api/faithfulness', methods=['POST'])
+@login_required
+def faithfulness_endpoint():
+    # Parse POST data
+    data = request.json
+    print(data)
+
+
+    # Extract fields from request
+    question = data.get("ground_question")
+    ground_explanation = data.get("ground_explanation")
+    ground_label = data.get("ground_label")
+    explanation = data.get("predicted_explanation")
+    label = data.get("predicted_label")
+    context = data.get("ground_context", None)    # Optional: use if your faithfulness function supports it
+    context = extract_context_explanation(context)
     groq = get_user_api_key_groq()                     # Or however your code names these
     target_model = 'llama3:8b'
 
@@ -2027,7 +2071,12 @@ def pretty_pubmed_qa(data):
         f"Reasoning Required Prediction: {rr_pred}\n"
         f"Reasoning Free Prediction: {rf_pred}"
     )
-
+def extract_context_explanation(context_pretty_str):
+    # Use regex to capture everything between "Context:" and "Labels:"
+    match = re.search(r'Context:\n(.*?)\nLabels:', context_pretty_str, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    return ""
 
 if __name__ == '__main__':
     app.run(port=5000, debug=True)

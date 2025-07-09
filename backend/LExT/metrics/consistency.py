@@ -1,8 +1,8 @@
-from src.basic_functions import call_model, call_llama
-from src.basic_functions import get_prediction
-from src.utils import save_to_references
+from ..src.basic_functions import call_model, call_llama
+from ..src.basic_functions import get_prediction
+from ..src.utils import save_to_references
 import numpy as np
-from metrics.correctness import weighted_accuracy
+from .correctness import weighted_accuracy
 
 def iterative_stability(ground_question, context, target_model, ground_truth, groq, ner_pipe, row_reference={}, iterations=5):
     """

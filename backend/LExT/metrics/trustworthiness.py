@@ -1,6 +1,6 @@
-from metrics.plausibility import plausibility
-from metrics.faithfulness import faithfulness
-from src.utils import save_to_references
+from .plausibility import plausibility
+from .faithfulness import faithfulness
+from ..src.utils import save_to_references
 import numpy as np
 
 def harmonic_mean(a, b):

@@ -11,6 +11,9 @@ def contextual_faithfulness(context, ground_question, predicted_label, target_mo
     Contextual Faithfulness: This metric evaluates the faithfulness of the model's prediction by redacting important words from the context and checking if the model can still make a prediction."
     """
     print("Computing Contextual Faithfulness\n")
+    print(context,'context\n')
+    print(ground_question,'groundquestion\n')
+
     
     # First level: redacting all important words at once.
 
@@ -24,7 +27,7 @@ def contextual_faithfulness(context, ground_question, predicted_label, target_mo
             print("No important words returned for Contextual Faithfulness!")
             return 0
         else: 
-            print(important_words)
+            print(important_words,'these are important words:')
             redacted_context = redact_words(context, important_words)        
     
     else:
@@ -48,6 +51,7 @@ def contextual_faithfulness(context, ground_question, predicted_label, target_mo
                     f"no if it explicitly mentions or suggests no. Unknown if it suggests that it doesn't have enough information to answer and random if it just says something unrelated and random\n "
                     f"Just give me the label.Don't add anything else to your answer.")
     label_result = call_llama(label_prompt, groq).strip().lower()
+    print(label_result,"this is the label result")
     
     if "unknown" in label_result:
         # Second level: redact one word at a time
@@ -55,7 +59,7 @@ def contextual_faithfulness(context, ground_question, predicted_label, target_mo
         unknown_count = 0
         for word in words_list:
             redacted_one = redact_words(context, word)
-            _, redacted_one_pred = get_prediction(redacted_one, ground_question, target_model=target_model)
+            _, redacted_one_pred = get_prediction(redacted_one, ground_question,groq_key=groq, target_model=target_model)
             label_one_prompt = (f"I prompted model with a question and it gave me the following answer:\n"
                     f"Question: {ground_question}\n Prediction:{redacted_one_pred}\n"
                     f" Using this, label it as one of these: yes, no, unknown, or random. Give me a yes if it explicitly mentions/suggests yes,"

@@ -255,6 +255,46 @@ const ExplanationPagePubMedQA = () => {
       setIsFetchingFaithfulness(null);
     }
   };
+  const get_Lext = async (modelId: string, type: 'llm' | 'combined') => {
+    setIsFetchingFaithfulness({ modelId, type });
+    setFaithfulnessError(null);
+
+    try {
+      const model = availableModels.find(m => m.id === modelId);
+      if (!model) {
+        setFaithfulnessError("Model not found.");
+        return;
+      }
+
+      const explanationToEvaluate = type === 'llm'
+        ? explanations[modelId]?.llm || ""
+        : explanations[modelId]?.combined || "";
+
+      const payload = {
+        ground_question: entry?.question,
+        ground_explanation: entry?.long_answer,
+        ground_label: entry?.actualLabel,
+        predicted_explanation: explanationToEvaluate,
+        predicted_label: entry?.prediction,
+        target_model: model.model,
+        ground_context: entry?.context
+      };
+
+      const response = await axios.post("http://localhost:5000/api/trustworthiness", payload, { withCredentials: true });
+
+      setFaithfulnessScores(prev => ({
+        ...prev,
+        [modelId]: {
+          ...(prev[modelId] || { llm: null, combined: null }),
+          [type]: response.data.trustworthiness_score
+        }
+      }));
+    } catch (err: any) {
+      setFaithfulnessError(`Failed to compute ${type} faithfulness`);
+    } finally {
+      setIsFetchingFaithfulness(null);
+    }
+  };
 
   // --- RATINGS ---
   const handleRatingChange = (modelId: string, type: string, rating: number) => {
@@ -463,12 +503,12 @@ const ExplanationPagePubMedQA = () => {
                                 </div>
                               )}
                             </div>
-                            {/* Faithfulness + rating for direct */}
+                            {/* LExT + rating for direct */}
                             <div className="d-flex align-items-center gap-3 my-3">
                               <Button
                                 size="sm"
-                                variant="outline-info"
-                                onClick={() => get_faithfulness(activeModel, 'llm')}
+                                variant="outline-warning"
+                                onClick={() => get_Lext(activeModel, 'llm')}
                                 disabled={
                                   (isFetchingFaithfulness?.modelId === activeModel &&
                                     isFetchingFaithfulness?.type === 'llm') ||
@@ -478,12 +518,12 @@ const ExplanationPagePubMedQA = () => {
                                 {(isFetchingFaithfulness?.modelId === activeModel &&
                                   isFetchingFaithfulness?.type === 'llm') ? (
                                   <Spinner size="sm" />
-                                ) : "Compute Faithfulness"}
+                                ) : "Compute LExT"}
                               </Button>
                               {faithfulnessScores[activeModel]?.llm !== null && (
                                 <div className="d-flex align-items-center">
-                                  <span className="badge rounded-pill bg-info fs-6 px-3 py-2">
-                                    Faithfulness: {faithfulnessScores[activeModel]?.llm?.toFixed(2)}
+                                  <span className="badge rounded-pill bg-warning fs-6 px-3 py-2">
+                                    LExT: {faithfulnessScores[activeModel]?.llm?.toFixed(2)}
                                   </span>
                                 </div>
                               )}
@@ -519,12 +559,12 @@ const ExplanationPagePubMedQA = () => {
                                   </div>
                                 )}
                               </div>
-                              {/* Faithfulness + rating for SHAP-enhanced */}
+                              {/* LExT + rating for SHAP-enhanced */}
                               <div className="d-flex align-items-center gap-3 my-3">
                                 <Button
                                   size="sm"
-                                  variant="outline-info"
-                                  onClick={() => get_faithfulness(activeModel, 'combined')}
+                                  variant="outline-warning"
+                                  onClick={() => get_Lext(activeModel, 'combined')}
                                   disabled={
                                     (isFetchingFaithfulness?.modelId === activeModel &&
                                       isFetchingFaithfulness?.type === 'combined') ||
@@ -534,12 +574,12 @@ const ExplanationPagePubMedQA = () => {
                                   {(isFetchingFaithfulness?.modelId === activeModel &&
                                     isFetchingFaithfulness?.type === 'combined') ? (
                                     <Spinner size="sm" />
-                                  ) : "Compute Faithfulness"}
+                                  ) : "Compute LExT"}
                                 </Button>
                                 {faithfulnessScores[activeModel]?.combined !== null && (
                                   <div className="d-flex align-items-center">
-                                    <span className="badge rounded-pill bg-info fs-6 px-3 py-2">
-                                      Faithfulness: {faithfulnessScores[activeModel]?.combined?.toFixed(2)}
+                                    <span className="badge rounded-pill bg-warning fs-6 px-3 py-2">
+                                      LExT: {faithfulnessScores[activeModel]?.combined?.toFixed(2)}
                                     </span>
                                   </div>
                                 )}

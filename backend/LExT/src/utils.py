@@ -8,13 +8,12 @@ def save_to_references(row_data):
     Save or update a row in the references.csv file.
     This function appends the row_data as a new row.
     """
+    df = pd.DataFrame([row_data])
 
-    df = pd.DataFrame([row_data])  
-
-    if not os.path.exists(REF_FILE):
+    # If file doesn't exist or is empty, write header+row directly
+    if not os.path.exists(REF_FILE) or os.stat(REF_FILE).st_size == 0:
         df.to_csv(REF_FILE, index=False, mode='w')
     else:
         old_df = pd.read_csv(REF_FILE)
-        df = pd.concat([old_df, df], ignore_index=True) 
+        df = pd.concat([old_df, df], ignore_index=True)
         df.to_csv(REF_FILE, index=False)
-        

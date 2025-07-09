@@ -3,8 +3,8 @@ import torch
 import logging
 from transformers import BertTokenizer, BertModel, pipeline
 from sklearn.metrics.pairwise import cosine_similarity
-from src.basic_functions import call_llama
-from src.utils import save_to_references
+from ..src.basic_functions import call_llama
+from ..src.utils import save_to_references
 
 # Initialize BERT model and tokenizer
 tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
