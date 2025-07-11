@@ -24,7 +24,7 @@ import pandas as pd
 import tempfile
 from datasets import load_dataset
 import torch
-
+from sklearn.model_selection import train_test_split
 from LExT.metrics.trustworthiness import lext
 
 load_dotenv()
@@ -279,8 +279,20 @@ def classify_dataset(dataset_id):
             stats.update({"correct": 0, "incorrect": 0})
 
         # For demo/sample, limit to first 50
-        df = df.sample(frac=1, random_state=42).reset_index(drop=True)
-        samples = df.head(10).iterrows()
+        sample_size = 20  # or whatever
+        if label_column in df.columns:
+            # Make sure you have enough samples in each class!
+            df_sampled, _ = train_test_split(
+                df,
+                train_size=sample_size,
+                stratify=df[label_column],
+                random_state=42,
+            )
+        else:
+            # fallback to random if label column not found
+            df_sampled = df.sample(n=sample_size, random_state=42)
+
+        samples = df_sampled.iterrows()
 
         def parse_casehold_label(content):
             content = content.strip()
