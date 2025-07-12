@@ -1631,7 +1631,8 @@ def classify_and_explain(dataset_id):
                     response = client.chat.completions.create(
                         model=model_name,
                         messages=[{"role": "user", "content": prompt}],
-                        max_tokens=300
+                        max_tokens=300,
+                        temperature=0
                     )
                     content = response.choices[0].message.content.strip()
 
