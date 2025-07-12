@@ -131,6 +131,31 @@ const DatasetView = () => {
             setClassifying(null);
         }
     };
+    const handleClassificationandExplanation = async (method: "llm" | "bert") => {
+        setClassifying(method);
+        try {
+            const response = await axios.post(
+                `http://localhost:5000/api/classify_and_explain/${datasetId}`,
+                { method:method,provider: provider, model: model ,dataType: dataType },
+                { withCredentials: true }
+            );
+
+            // Navigate to classification dashboard after successful classification
+            if (["sentiment", "legal"].includes((dataType || "").toLowerCase())) {
+              navigate(`/datasets/${datasetId}/classifications/${response.data.classification_id}`);
+            } else {
+              navigate(`/datasets/${datasetId}/classificationsp/${response.data.classification_id}`);
+              console.log('uuumedical');
+            }
+
+
+        } catch (err) {
+            console.log(err);
+            setError(`Classification using ${method.toUpperCase()} failed.`);
+        } finally {
+            setClassifying(null);
+        }
+    };
     const fetchClassifications = async () => {
         setLoadingClassifications(true);
         try {
@@ -202,6 +227,19 @@ const DatasetView = () => {
                                         </>
                                     ) : (
                                         "Classify with LLM"
+                                    )}
+                                </Button>
+                                <Button
+                                    variant="primary"
+                                    onClick={() => handleClassificationandExplanation("llm")}
+                                    disabled={!dataset || !!classifying}
+                                >
+                                    {classifying === "llm" ? (
+                                        <>
+                                            <Spinner animation="border" size="sm" /> Classifying...
+                                        </>
+                                    ) : (
+                                        "Classify and explain with LLM"
                                     )}
                                 </Button>
                                 <Button

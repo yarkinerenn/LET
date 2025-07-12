@@ -1479,6 +1479,305 @@ def generate_llm_explanation(text, label, score,provider,model):
     except Exception as e:
             print(f"Error: {e}")
             return f"Error: {str(e)}"
+
+from flask import request, jsonify
+from flask_login import login_required, current_user
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from tqdm import tqdm
+from datetime import datetime
+from bson import ObjectId
+import traceback
+import re
+
+@app.route('/api/classify_and_explain/<dataset_id>', methods=['POST'])
+@login_required
+def classify_and_explain(dataset_id):
+    import re
+    from datetime import datetime
+    from tqdm import tqdm
+    from sklearn.model_selection import train_test_split
+    import pandas as pd
+
+    data = request.json
+    if not data:
+        return jsonify({"error": "No JSON data provided"}), 400
+
+    try:
+        # --- Extract parameters ---
+        method = data.get('method')
+        data_type = data.get('dataType', 'sentiment')
+        if data_type == 'legal':
+            text_column = data.get('text_column', 'citing_prompt')
+            label_column = data.get('label_column', 'label')
+        elif data_type == 'sentiment':
+            text_column = data.get('text_column', 'text')
+            label_column = data.get('label_column', 'label')
+        else:
+            text_column = "question"
+            label_column = "final_decision"
+
+        if method not in CLASSIFICATION_METHODS:
+            return jsonify({"error": f"Invalid method. Must be one of: {CLASSIFICATION_METHODS}"}), 400
+
+        user_doc = mongo.db.users.find_one({"_id": ObjectId(current_user.id)})
+        provider = user_doc.get('preferred_provider', 'openai')
+        model_name = user_doc.get('preferred_model', 'gpt-3.5-turbo')
+
+
+        dataset = mongo.db.datasets.find_one({"_id": ObjectId(dataset_id)})
+        if not dataset:
+            return jsonify({"error": "Dataset not found"}), 404
+
+        # --- Load dataset ---
+        try:
+            df = pd.read_csv(dataset['filepath'])
+            if text_column not in df.columns:
+                return jsonify({"error": f"Text column '{text_column}' not found in dataset"}), 400
+            if label_column and label_column not in df.columns:
+                return jsonify({"error": f"Label column '{label_column}' not found in dataset"}), 400
+        except Exception as e:
+            return jsonify({"error": f"Failed to load dataset: {str(e)}"}), 500
+
+        # --- Init client ---
+        client = None
+        if method == 'llm':
+            if provider == 'openai':
+                api_key = get_user_api_key_openai()
+                if not api_key:
+                    return jsonify({"error": "OpenAI API key not configured"}), 400
+                client = OpenAI(api_key=api_key)
+            elif provider == 'groq':
+                api_key = get_user_api_key_groq()
+                if not api_key:
+                    return jsonify({"error": "Groq API key not configured"}), 400
+                client = Groq(api_key=api_key)
+            elif provider == 'deepseek':
+                api_key = get_user_api_key_deepseek_api()
+                if not api_key:
+                    return jsonify({"error": "Deepseek API key not configured"}), 400
+                client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com/v1")
+            else:
+                return jsonify({"error": "Invalid LLM provider"}), 400
+
+        # --- Process rows ---
+        results = []
+        explanations_to_save = []  # To save after we get classification_id
+        stats = {"total": 0}
+        if data_type == "sentiment":
+            stats.update({"positive": 0, "negative": 0})
+        elif data_type == "legal":
+            stats.update({"correct": 0, "incorrect": 0})
+        elif data_type == "medical":
+            stats.update({"correct": 0, "incorrect": 0})
+
+        sample_size = 5
+        if label_column in df.columns:
+            df_sampled, _ = train_test_split(
+                df,
+                train_size=sample_size,
+                stratify=df[label_column],
+                random_state=42,
+            )
+        else:
+            df_sampled = df.sample(n=sample_size, random_state=42)
+
+        samples = df_sampled.iterrows()
+
+        for idx, (_, row) in enumerate(samples):
+            try:
+                # --- Prompt Templates ---
+                if data_type == "sentiment":
+                    text = str(row[text_column])
+                    prompt = f"""Given the text below, classify the sentiment as either POSITIVE or NEGATIVE, and briefly explain your reasoning in 2-3 sentences.
+
+                    Text: {text}
+                    
+                    Format your answer as:
+                    Sentiment: <POSITIVE/NEGATIVE>
+                    Explanation: <your explanation here>
+                    """
+                elif data_type == "legal":
+                    context = str(row[text_column])
+                    choices = [row.get(f'holding_{i}', '') for i in range(5)]
+                    holdings_str = "\n".join([f"{i}: {c}" for i, c in enumerate(choices)])
+                    prompt = f"""Given the following legal scenario, select the most appropriate holding (choose 0, 1, 2, 3, or 4) and explain your reasoning in 2-3 sentences.
+
+                    Statement: {context}
+                    Holdings:
+                    {holdings_str}
+                    
+                    Format your answer as:
+                    Holding: <number>
+                    Explanation: <your explanation here>
+                    """
+                elif data_type == "medical":
+                    question = str(row.get("question", ""))
+                    context = pretty_pubmed_qa(row.get("context", ""))
+                    prompt = f"""Given the following biomedical question and its context, answer 'yes' or 'no', then explain your reasoning in 2-3 sentences.
+
+                    Question: {question}
+                    Context: {context}
+                    
+                    Format your answer as:
+                    Answer: <yes/no/>
+                    Explanation: <your explanation here>
+                    """
+                else:
+                    continue  # skip unknown type
+
+                # --- LLM call (classify + explain) ---
+                if method == "llm":
+                    response = client.chat.completions.create(
+                        model=model_name,
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=300
+                    )
+                    content = response.choices[0].message.content.strip()
+
+                    # Parse output
+                    if data_type == "sentiment":
+                        m = re.search(r"Sentiment:\s*(POSITIVE|NEGATIVE)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
+                        if m:
+                            label = m.group(1).upper()
+                            explanation = m.group(2).strip()
+                        else:
+                            lines = content.split('\n')
+                            label = lines[0].replace("Sentiment:", "").strip().upper()
+                            explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
+                        score = 1.0
+
+                    elif data_type == "legal":
+                        m = re.search(r"Holding:\s*([0-4])[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
+                        if m:
+                            label = int(m.group(1))
+                            explanation = m.group(2).strip()
+                        else:
+                            num_match = re.search(r"[0-4]", content)
+                            label = int(num_match.group(0)) if num_match else -1
+                            explanation = content
+                        score = 1.0
+
+                    elif data_type == "medical":
+                        m = re.search(r"Answer:\s*(yes|no)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
+                        if m:
+                            label = m.group(1).lower()
+                            explanation = m.group(2).strip()
+                        else:
+                            lines = content.split('\n')
+                            label = lines[0].replace("Answer:", "").strip().lower()
+                            explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
+                        score = 1.0
+                    else:
+                        continue
+
+                    # Save explanation for later
+                    explanations_to_save.append({
+                        "row_idx": idx,
+                        "explanation": explanation,
+                        "model": model_name,
+                        "type": "llm"
+                    })
+
+                else:
+                    label, score, explanation = None, 0.0, ""
+
+                # --- Assemble result row ---
+                result_data = {
+                    "label": label,
+                    "score": score,
+                    "llm_explanation": explanation,
+                    "original_data": row.to_dict(),
+                }
+                if data_type == "sentiment":
+                    result_data["text"] = text
+                elif data_type == "legal":
+                    result_data["citing_prompt"] = context
+                    result_data["choices"] = choices
+                elif data_type == "medical":
+                    result_data["question"] = question
+                    result_data["context"] = context
+
+                # Include ground truth if present
+                if label_column:
+                    result_data["actualLabel"] = row[label_column]
+
+                results.append(result_data)
+                stats["total"] += 1
+                if data_type == "sentiment":
+                    if label == "POSITIVE":
+                        stats["positive"] += 1
+                    else:
+                        stats["negative"] += 1
+                elif data_type == "legal":
+                    if "actualLabel" in result_data and label == result_data["actualLabel"]:
+                        stats["correct"] += 1
+                    else:
+                        stats["incorrect"] += 1
+                elif data_type == "medical":
+                    if "actualLabel" in result_data and label == result_data["actualLabel"]:
+                        stats["correct"] += 1
+                    else:
+                        stats["incorrect"] += 1
+
+            except Exception as e:
+                print(f"Error processing row: {str(e)}")
+                continue
+        model_name = model_name.replace('.', '_') if model_name else None
+
+
+        # --- Store all results in DB ---
+        classification_data = {
+            "dataset_id": ObjectId(dataset_id),
+            "user_id": ObjectId(current_user.id),
+            "method": method,
+            "provider": provider if method == 'llm' else None,
+            "model": model_name if method == 'llm' else None,
+            "data_type": data_type,
+            "results": results,
+            "created_at": datetime.now(),
+            "stats": stats
+        }
+        classification_id = mongo.db.classifications.insert_one(classification_data).inserted_id
+        explanation_models = [{'provider': provider, 'model': model_name}]
+        mongo.db.classifications.update_one(
+            {
+                "_id": ObjectId(classification_id),
+                "user_id": ObjectId(current_user.id)  # Ensure user owns this classification
+            },
+            {
+                "$set": {
+                    "explanation_models": explanation_models,
+                    "updated_at": datetime.now()
+                }
+            }
+        )
+
+        # --- Save all explanations AFTER classification_id is known ---
+        for i, explanation_entry in enumerate(explanations_to_save):
+            save_explanation_to_db(
+                classification_id=str(classification_id),
+                user_id=current_user.id,
+                result_id=i,  # this matches the result index
+                explanation_type=explanation_entry["type"],
+                content=explanation_entry["explanation"],
+                model_id=explanation_entry["model"].replace('.', '_')
+            )
+
+        return jsonify({
+            "message": "Classification+explanation completed",
+            "classification_id": str(classification_id),
+            "stats": stats,
+            "sample_count": len(results)
+        }), 200
+
+    except Exception as e:
+        traceback.print_exc()
+        print(f"Classification+explanation error: {str(e)}")
+        return jsonify({
+            "error": "Classification+explanation failed",
+            "details": str(e)
+        }), 500
 def generate_llm_explanationofdataset(text, label,truelabel, score,provider,model,datatype):
     """Generete generative AI explanation of singel instances in the dataset"""
 
@@ -1510,7 +1809,6 @@ def generate_llm_explanationofdataset(text, label,truelabel, score,provider,mode
                Given the following biomedical question and its context, explain in simple terms why the answer is {label} from given {score}
 
                 Question:{text}
-                
                 
                 Context: {score}
                 
