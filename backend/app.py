@@ -1601,12 +1601,12 @@ def classify_and_explain(dataset_id):
                     context = str(row[text_column])
                     choices = [row.get(f'holding_{i}', '') for i in range(5)]
                     holdings_str = "\n".join([f"{i}: {c}" for i, c in enumerate(choices)])
-                    prompt = f"""Given the following legal scenario, select the most appropriate holding (choose 0, 1, 2, 3, or 4) and explain your reasoning in 2-3 sentences.
+                    prompt = f"""Assume you are a legal advisor
 
                     Statement: {context}
                     Holdings:
                     {holdings_str}
-                    
+                    select the most appropriate holding (choose 0, 1, 2, 3, or 4)  and explain your recommendation
                     Format your answer as:
                     Holding: <number>
                     Explanation: <your explanation here>
@@ -1614,10 +1614,12 @@ def classify_and_explain(dataset_id):
                 elif data_type == "medical":
                     question = str(row.get("question", ""))
                     context = pretty_pubmed_qa(row.get("context", ""))
-                    prompt = f"""Given the following biomedical question and its context, answer 'yes' or 'no', then explain your reasoning in 2-3 sentences.
+                    prompt = f"""Assume you are a Medical advisor 
 
                     Question: {question}
                     Context: {context}
+                    
+                    Answer the questions with Yes/No and give an explanation for your recommendation.
                     
                     Format your answer as:
                     Answer: <yes/no/>
