@@ -155,6 +155,26 @@ def trustworthiness_endpoint():
     )
 
     # Return as JSON (including the whole row_reference if you want details)
+    print(row_reference)
+    # Extract Plausibility Metrics
+    plausibility_metrics = {
+        "iterative_stability": row_reference.get("iterative_stability"),
+        "paraphrase_stability": row_reference.get("paraphrase_stability"),
+        "consistency": row_reference.get("consistency"),
+        "plausibility": row_reference.get("plausibility")
+    }
+
+    # Extract Faithfulness Metrics
+    faithfulness_metrics = {
+        "qag_score": row_reference.get("qag_score"),
+        "counterfactual": row_reference.get("counterfactual_scaled"),  # or just "counterfactual"
+        "contextual_faithfulness": row_reference.get("contextual_faithfulness"),
+        "faithfulness": row_reference.get("faithfulness")
+    }
+
+    # Trustworthiness
+    trustworthiness_score = row_reference.get("trustworthiness")
+    metrics={"plausibility_metrics": plausibility_metrics,"faithfulness_metrics": faithfulness_metrics,"trustworthiness_score": trustworthiness_score}
     return jsonify({
         "trustworthiness_score": score,
     })
@@ -174,7 +194,8 @@ def faithfulness_endpoint():
     explanation = data.get("predicted_explanation")
     label = data.get("predicted_label")
     context = data.get("ground_context", None)    # Optional: use if your faithfulness function supports it
-    context = extract_context_explanation(context)
+    if context:
+        context = extract_context_explanation(context)
     groq = get_user_api_key_groq()                     # Or however your code names these
     target_model = 'llama3:8b'
 
@@ -193,6 +214,7 @@ def faithfulness_endpoint():
     score = faithfulness(
         explanation, label, question, ground_label, context, groq, target_model, row_reference
     )
+    print(row_reference)
 
     # Return as JSON (including the whole row_reference if you want details)
     return jsonify({
@@ -1614,6 +1636,7 @@ def classify_and_explain(dataset_id):
                 elif data_type == "medical":
                     question = str(row.get("question", ""))
                     context = pretty_pubmed_qa(row.get("context", ""))
+                    long_answer= str(row.get("long_answer", ""))
                     prompt = f"""Assume you are a Medical advisor 
 
                     Question: {question}
@@ -1679,28 +1702,63 @@ def classify_and_explain(dataset_id):
                         "row_idx": idx,
                         "explanation": explanation,
                         "model": model_name,
-                        "type": "llm"
+                        "type": "llm",
                     })
 
                 else:
                     label, score, explanation = None, 0.0, ""
+                if data_type == "medical":
 
-                # --- Assemble result row ---
-                result_data = {
-                    "label": label,
-                    "score": score,
-                    "llm_explanation": explanation,
-                    "original_data": row.to_dict(),
-                }
-                if data_type == "sentiment":
-                    result_data["text"] = text
-                elif data_type == "legal":
-                    result_data["citing_prompt"] = context
-                    result_data["choices"] = choices
-                elif data_type == "medical":
-                    result_data["question"] = question
-                    result_data["context"] = context
+                    result_data = {
+                        "label": label,
+                        "score": score,
+                        "llm_explanation": explanation,
+                        "original_data": row.to_dict(),
+                    }
+                    if data_type == "sentiment":
+                        result_data["text"] = text
+                    elif data_type == "legal":
+                        result_data["citing_prompt"] = context
+                        result_data["choices"] = choices
+                    elif data_type == "medical":
+                        result_data["question"] = question
+                        result_data["context"] = context
+                        result_data["long_answer"]= long_answer
+                        ner_pipe = pipeline("token-classification", model="Clinical-AI-Apollo/Medical-NER", aggregation_strategy='simple')
+                        groq = get_user_api_key_groq()                     # Or however your code names these
+                        target_model = 'llama3:8b'
+                        row_reference = {
+                            "ground_question": question,
+                            "ground_explanation": long_answer,
+                            "ground_label":  row[label_column],
+                            "predicted_explanation": explanation,
+                            "predicted_label": label,
+                            "ground_context": context,
+                        }
+                        score = lext(
+                                        context, question, long_answer,  row[label_column],
+                                        target_model, groq, ner_pipe, row_reference
+                                    )
+                        # --- Assemble result row ---
+                        plausibility_metrics = {
+                            "iterative_stability": row_reference.get("iterative_stability"),
+                            "paraphrase_stability": row_reference.get("paraphrase_stability"),
+                            "consistency": row_reference.get("consistency"),
+                            "plausibility": row_reference.get("plausibility")
+                        }
 
+                        # Extract Faithfulness Metrics
+                        faithfulness_metrics = {
+                            "qag_score": row_reference.get("qag_score"),
+                            "counterfactual": row_reference.get("counterfactual_scaled"),  # or just "counterfactual"
+                            "contextual_faithfulness": row_reference.get("contextual_faithfulness"),
+                            "faithfulness": row_reference.get("faithfulness")
+                        }
+
+                        # Trustworthiness
+                        trustworthiness_score = row_reference.get("trustworthiness")
+                        metrics={"plausibility_metrics": plausibility_metrics,"faithfulness_metrics": faithfulness_metrics,"trustworthiness_score": trustworthiness_score}
+                        result_data["metrics"]= metrics
                 # Include ground truth if present
                 if label_column:
                     result_data["actualLabel"] = row[label_column]
@@ -2187,6 +2245,7 @@ def get_classificationentry(classification_id, result_id):
         question = result.get('question') if data_type == "medical" else None
         context = result.get('context') if data_type == "medical" else None
         long_answer = result.get('long_answer') if data_type == "medical" else None
+        trustworthiness_score = result.get("metrics", {}).get("trustworthiness_score") if data_type == "medical" else None
 
         response_data = {
             "text": entry_text,
@@ -2210,7 +2269,9 @@ def get_classificationentry(classification_id, result_id):
             "question": question,
             "context": context,
             "long_answer": long_answer,
+            "trustworthiness_score": trustworthiness_score,
         }
+        print(response_data)
 
         return jsonify(response_data)
 

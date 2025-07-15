@@ -15,6 +15,7 @@ interface PubMedQAEntry {
   shap_plot_explanation?: string;
   shapwithllm_explanations?: Record<string, string>;
   long_answer: string;
+  trustworthiness_score: number;
 }
 
 interface ModelInfo {
@@ -69,6 +70,7 @@ const ExplanationPagePubMedQA = () => {
           axios.get(`http://localhost:5000/api/classification/${classificationId}`, { withCredentials: true }),
         ]);
         setEntry(entryRes.data);
+        console.log(entryRes.data);
         setTotalResults(classRes.data.results?.length || 0);
         setCurrentResultIndex(Number(resultId) || 0);
 
@@ -232,7 +234,7 @@ const ExplanationPagePubMedQA = () => {
 
       const payload = {
         ground_question: entry?.question,
-        ground_explanation: entry?.long_answer,
+        ground_explanation: entry?.context,
         ground_label: entry?.actualLabel,
         predicted_explanation: explanationToEvaluate,
         predicted_label: entry?.prediction,
@@ -272,7 +274,7 @@ const ExplanationPagePubMedQA = () => {
 
       const payload = {
         ground_question: entry?.question,
-        ground_explanation: entry?.long_answer,
+        ground_explanation: entry?.context,
         ground_label: entry?.actualLabel,
         predicted_explanation: explanationToEvaluate,
         predicted_label: entry?.prediction,
@@ -504,35 +506,43 @@ const ExplanationPagePubMedQA = () => {
                               )}
                             </div>
                             {/* LExT + rating for direct */}
-                            <div className="d-flex align-items-center gap-3 my-3">
-                              <Button
-                                size="sm"
-                                variant="outline-warning"
-                                onClick={() => get_Lext(activeModel, 'llm')}
-                                disabled={
-                                  (isFetchingFaithfulness?.modelId === activeModel &&
-                                    isFetchingFaithfulness?.type === 'llm') ||
-                                  !explanations[activeModel]?.llm
-                                }
-                              >
-                                {(isFetchingFaithfulness?.modelId === activeModel &&
-                                  isFetchingFaithfulness?.type === 'llm') ? (
-                                  <Spinner size="sm" />
-                                ) : "Compute LExT"}
-                              </Button>
-                              {faithfulnessScores[activeModel]?.llm !== null && (
-                                <div className="d-flex align-items-center">
-                                  <span className="badge rounded-pill bg-warning fs-6 px-3 py-2">
-                                    LExT: {faithfulnessScores[activeModel]?.llm?.toFixed(2)}
-                                  </span>
-                                </div>
-                              )}
-                              {faithfulnessError &&
-                                isFetchingFaithfulness?.modelId === activeModel &&
-                                isFetchingFaithfulness?.type === 'llm' && (
-                                  <span className="text-danger ms-2">{faithfulnessError}</span>
+                            {entry.trustworthiness_score !== undefined && entry.trustworthiness_score !== null ? (
+                              <div className="d-flex align-items-center my-3">
+                                <span className="badge rounded-pill bg-warning fs-6 px-3 py-2">
+                                  LExT: {entry.trustworthiness_score.toFixed(2)}
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="d-flex align-items-center gap-3 my-3">
+                                <Button
+                                  size="sm"
+                                  variant="outline-warning"
+                                  onClick={() => get_Lext(activeModel, 'llm')}
+                                  disabled={
+                                    (isFetchingFaithfulness?.modelId === activeModel &&
+                                      isFetchingFaithfulness?.type === 'llm') ||
+                                    !explanations[activeModel]?.llm
+                                  }
+                                >
+                                  {(isFetchingFaithfulness?.modelId === activeModel &&
+                                    isFetchingFaithfulness?.type === 'llm') ? (
+                                    <Spinner size="sm" />
+                                  ) : "Compute LExT"}
+                                </Button>
+                                {faithfulnessScores[activeModel]?.llm !== null && (
+                                  <div className="d-flex align-items-center">
+                                    <span className="badge rounded-pill bg-warning fs-6 px-3 py-2">
+                                      LExT: {faithfulnessScores[activeModel]?.llm?.toFixed(2)}
+                                    </span>
+                                  </div>
                                 )}
-                            </div>
+                                {faithfulnessError &&
+                                  isFetchingFaithfulness?.modelId === activeModel &&
+                                  isFetchingFaithfulness?.type === 'llm' && (
+                                    <span className="text-danger ms-2">{faithfulnessError}</span>
+                                  )}
+                              </div>
+)}
                             <RatingSection
                               title="Direct Explanation"
                               value={ratings[activeModel]?.llm || 0}
