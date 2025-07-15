@@ -16,6 +16,7 @@ interface PubMedQAEntry {
   shapwithllm_explanations?: Record<string, string>;
   long_answer: string;
   trustworthiness_score: number;
+  ratings?: Record<string, { llm?: number; combined?: number }>;
 }
 
 interface ModelInfo {
@@ -91,7 +92,10 @@ const ExplanationPagePubMedQA = () => {
             llm: entryRes.data.llm_explanations?.[m.model],
             combined: entryRes.data.shapwithllm_explanations?.[m.model]
           };
-          initialRatings[modelId] = { llm: 0, combined: 0 };
+          initialRatings[modelId] = {
+            llm: entryRes.data.ratings?.[modelId]?.llm || 0,
+            combined: entryRes.data.ratings?.[modelId]?.combined || 0,
+          };
           initialFaithfulnessScores[modelId] = { llm: null, combined: null };
         });
 
@@ -313,13 +317,11 @@ const ExplanationPagePubMedQA = () => {
     setIsSubmittingRatings(true);
     try {
       await axios.post(
-        'http://localhost:5000/api/submit-ratings',
+        'http://localhost:5000/api/save_ratings',
         {
           classificationId,
           resultId,
           ratings,
-          shapRating,
-          faithfulnessScores,
           timestamp: new Date().toISOString()
         },
         { withCredentials: true }
@@ -363,6 +365,8 @@ const ExplanationPagePubMedQA = () => {
   );
   if (!entry) return null;
 
+  // @ts-ignore
+  // @ts-ignore
   return (
     <Container className="py-4 explanation-page" fluid>
       <div className="d-flex justify-content-between align-items-center mb-4">
@@ -549,6 +553,7 @@ const ExplanationPagePubMedQA = () => {
                               onChange={(rating: number) => handleRatingChange(activeModel, 'llm', rating)}
                               disabled={!explanations[activeModel]?.llm}
                             />
+
                           </div>
                         </Col>
                         {entry?.method !== 'llm' && (

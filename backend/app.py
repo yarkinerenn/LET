@@ -2383,7 +2383,6 @@ def decrypt_api_key(encrypted_api_key: str) -> str:
 def save_ratings_to_db(classification_id, user_id, result_id, ratings, timestamp):
     update_fields = {
         f"results.{result_id}.ratings": ratings,
-        f"results.{result_id}.rating_timestamp": timestamp
     }
 
     result = mongo.db.classifications.update_one(
