@@ -1,16 +1,39 @@
 import pandas as pd
 from transformers import pipeline
 from groq import Groq
-from langchain_community.llms import Ollama
 import json
-
-def call_model(prompt, target_model):
+from openai import OpenAI
+def call_model(prompt, target_model, provider,api_key, **kwargs):
     """
-    Call a target model using the provided prompt.
+    Call a target model using the provided prompt, supporting Groq and OpenAI APIs.
     """
-    llm = Ollama(model=target_model)
-    prediction = llm.invoke([prompt])
-    return prediction
+    target_model=target_model.replace('_','.')
+    if provider == "groq":
+        client = Groq(api_key=api_key)
+        chat_completion = client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model=target_model,
+            **kwargs
+        )
+        return chat_completion.choices[0].message.content
+    elif provider == "openai":
+        client = OpenAI(api_key=api_key)
+        chat_completion = client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model=target_model,
+            **kwargs
+        )
+        return chat_completion.choices[0].message.content
+    elif provider == "openrouter":
+        client = OpenAI(api_key=api_key)
+        chat_completion = client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model=target_model,
+            **kwargs
+        )
+        return chat_completion.choices[0].message.content
+    else:
+        raise ValueError(f"Unknown provider: {provider}")
 
 def call_llama(prompt, groq_key, model="llama3-70b-8192"):
     """
@@ -33,7 +56,7 @@ def call_llama(prompt, groq_key, model="llama3-70b-8192"):
     return result
 
 
-def get_prediction(context, question, target_model, groq_key, include_context=True):
+def get_prediction(context, question, target_model, groq_key,provider,api, include_context=True):
     """
     Get the prediction from the target model.
     The prompt is constructed using the context and question.
@@ -44,7 +67,7 @@ def get_prediction(context, question, target_model, groq_key, include_context=Tr
         prompt = f"Question: {question}\nAnswer the above question in one word, and also give the explanation for your answer. Don't add anything else to your answer."
     
     # Call the target model
-    prediction_raw = call_model(prompt, target_model)
+    prediction_raw = call_model(prompt, target_model,provider,api)
     
     # Now pass prediction to the bigger llama model for extraction
     extraction_prompt = (

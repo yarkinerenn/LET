@@ -9,7 +9,7 @@ def generate_questions(explanation, groq):
     questions = call_llama(prompt, groq).split("\n")
     return [q.strip() for q in questions if q.strip()]
 
-def evaluate_questions(questions, explanation, target_model, row_reference ={}):
+def evaluate_questions(questions, explanation, target_model,provider,api, row_reference ={}):
     yes_count = 0
     no_i_dont_know_questions = []
     
@@ -17,7 +17,7 @@ def evaluate_questions(questions, explanation, target_model, row_reference ={}):
         prompt = (f"Can the following question be answered from this explanation?\n\n"
                   f"Explanation: {explanation}\nQuestion: {question}"
                   f"Just give me a yes/no. Don't add anything else to your answer.")
-        answer = call_model(prompt, target_model).strip().lower()
+        answer = call_model(prompt, target_model,provider,api,).strip().lower()
         if "yes" in answer:
             yes_count += 1
         else:
@@ -33,13 +33,13 @@ def evaluate_questions(questions, explanation, target_model, row_reference ={}):
     
     return qag_score, no_i_dont_know_questions
 
-def qag(explanation, groq, target_model, row_reference={}):
+def qag(explanation, groq, target_model,provider,api, row_reference={}):
     """
     Compute the QAG score by generating questions from the explanation and evaluating them. "
     """
     print("Computing QAG score\n")
 
     questions = generate_questions(explanation, groq)
-    score, failed = evaluate_questions(questions, explanation, target_model, row_reference)
+    score, failed = evaluate_questions(questions, explanation, target_model,provider,api, row_reference)
     return score
 

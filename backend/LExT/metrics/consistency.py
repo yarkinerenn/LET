@@ -3,8 +3,7 @@ from ..src.basic_functions import get_prediction
 from ..src.utils import save_to_references
 import numpy as np
 from .correctness import weighted_accuracy
-
-def iterative_stability(ground_question, context, target_model, ground_truth, groq, ner_pipe, row_reference={}, iterations=5):
+def iterative_stability(ground_question, context, target_model, ground_truth, groq,provider,api, ner_pipe, row_reference={}, iterations=5):
     """
     Run the prediction function for a number of iterations and compute the variance
     between the original prediction and subsequent iterations.
@@ -12,25 +11,26 @@ def iterative_stability(ground_question, context, target_model, ground_truth, gr
     print("Computing Iterative Stability\n")
     predictions = []
 
-    
+
     # Run for additional iterations
     for i in range(iterations):
-        _, exp_iter = get_prediction(context, ground_question, target_model, groq)
+        _, exp_iter = get_prediction(context, ground_question, target_model, groq,provider,api)
         predictions.append(exp_iter)
-    
+
     accuracy_scores = [
         weighted_accuracy(ground_truth, exp, ner_pipe, save=False) for exp in predictions
     ]
     variance = np.var(accuracy_scores)
     stability_score = 1 - variance
-    
+
     # Save iterations in references
     row_reference['iterative_explanations'] = predictions
     row_reference['iterative_stability'] = stability_score
-    
+
     return stability_score
 
-def paraphrase_stability(ground_question, context, target_model, ground_truth, groq, ner_pipe, row_reference= {}):
+
+def paraphrase_stability(ground_question, context, target_model, ground_truth, groq,provider,api, ner_pipe, row_reference= {}):
     """
     Generate paraphrased versions of the ground question using the larger Llama model.
     Then run the prediction function on each and compute the variance compared to the original.
@@ -43,11 +43,11 @@ def paraphrase_stability(ground_question, context, target_model, ground_truth, g
     paraphrased_versions = [q.strip() for q in paraphrased_output.strip().split('\n') if q.strip()]
     
     # Get original prediction explanation
-    _, exp_orig = get_prediction(context, ground_question, target_model, groq)
+    _, exp_orig = get_prediction(context, ground_question, target_model, groq,provider,api)
     
     explanations = []
     for para in paraphrased_versions:
-        _, exp_para = get_prediction(context, para, target_model, groq)
+        _, exp_para = get_prediction(context, para, target_model, groq,provider,api)
         explanations.append(exp_para)
 
     # Save paraphrases and explanations
@@ -67,13 +67,13 @@ def paraphrase_stability(ground_question, context, target_model, ground_truth, g
     
     return stability_score
 
-def consistency(ground_question, context, target_model, ground_truth, groq, ner_pipe, row_reference={}):
+def consistency(ground_question, context, target_model, ground_truth, groq,provider,api, ner_pipe, row_reference={}):
     """
     Consistency is the average of iterative stability and paraphrase stability.
     """
     
-    iter_stab = iterative_stability(ground_question, context, target_model, ground_truth, groq, ner_pipe, row_reference)
-    para_stab = paraphrase_stability(ground_question, context, target_model, ground_truth, groq, ner_pipe, row_reference)
+    iter_stab = iterative_stability(ground_question, context, target_model, ground_truth, groq,provider,api, ner_pipe, row_reference)
+    para_stab = paraphrase_stability(ground_question, context, target_model, ground_truth, groq,provider,api, ner_pipe, row_reference)
     print("Computing Consistency\n")
     
     consistency_score = (iter_stab + para_stab) / 2.0

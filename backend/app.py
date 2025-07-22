@@ -137,7 +137,16 @@ def trustworthiness_endpoint():
     context = data.get("ground_context", None)    # Optional: use if your faithfulness function supports it
     context = extract_context_explanation(context)
     groq = get_user_api_key_groq()                     # Or however your code names these
-    target_model = 'llama3:8b'
+    target_model = data.get("target_model")
+    provider=data.get("provider")
+    if provider == "openrouter":
+        api=get_user_api_key_openrouter()
+    elif provider == "openai":
+        api=get_user_api_key_openai()
+    elif provider == "groq":
+        api=get_user_api_key_groq()
+    else:
+        api='api'
     ner_pipe = pipeline("token-classification", model="Clinical-AI-Apollo/Medical-NER", aggregation_strategy='simple')
 
     # Prepare row_reference for tracking all info/results
@@ -151,7 +160,7 @@ def trustworthiness_endpoint():
     }
 
     # Compute lext score
-    score = lext(context, question,ground_explanation, ground_label, target_model, groq,ner_pipe,  row_reference
+    score = lext(context, question,ground_explanation, ground_label, target_model, groq,provider,api,ner_pipe,  row_reference
     )
 
     # Return as JSON (including the whole row_reference if you want details)
@@ -212,7 +221,7 @@ def faithfulness_endpoint():
     # Compute faithfulness score
     # Adjust the arguments below to match your actual faithfulness() function's signature!
     score = faithfulness(
-        explanation, label, question, ground_label, context, groq, target_model, row_reference
+        explanation, label, question, ground_label, context, groq, target_model,provider,api, row_reference
     )
     print(row_reference)
 
@@ -807,7 +816,7 @@ def import_hf_dataset():
 
     try:
         # Load dataset from Hugging Face
-        dataset = load_dataset(hf_dataset_name, 'pqa_labeled', trust_remote_code=True)
+        dataset = load_dataset(hf_dataset_name,  trust_remote_code=True)
         df = dataset["train"].to_pandas()
 
         # ----------- PATCH: Prettify context column if present -----------
@@ -1660,6 +1669,7 @@ def classify_and_explain(dataset_id):
                         temperature=0
                     )
                     content = response.choices[0].message.content.strip()
+                    print(content,'this is what llm prompt')
 
                     # Parse output
                     if data_type == "sentiment":
@@ -1735,9 +1745,17 @@ def classify_and_explain(dataset_id):
                             "predicted_label": label,
                             "ground_context": context,
                         }
+                        if provider == "openrouter":
+                            api=get_user_api_key_openrouter()
+                        elif provider == "openai":
+                            api=get_user_api_key_openai()
+                        elif provider == "groq":
+                            api=get_user_api_key_groq()
+                        else:
+                            api='api'
                         score = lext(
                                         context, question, long_answer,  row[label_column],
-                                        target_model, groq, ner_pipe, row_reference
+                                        model_name, groq,provider,api, ner_pipe, row_reference
                                     )
                         # --- Assemble result row ---
                         plausibility_metrics = {
@@ -1786,6 +1804,53 @@ def classify_and_explain(dataset_id):
                 continue
         model_name = model_name.replace('.', '_') if model_name else None
 
+
+        # --- Metrics ---
+        if label_column:
+            try:
+                y_true = df[label_column].head(len(results))
+                y_pred = [r['label'] for r in results]
+
+                if data_type == "sentiment" or data_type == "medical":
+                    # Handle binary classes as "POSITIVE"/"NEGATIVE" or "yes"/"no"
+                    if data_type == "sentiment":
+                        y_true_bin = y_true.astype(str).str.upper().map(lambda x: 1 if x == 'POSITIVE' or x == '1' else 0)
+                        y_pred_bin = [1 if l == 'POSITIVE' else 0 for l in y_pred]
+                    else:  # medical/PubMedQA
+                        y_true_bin = y_true.astype(str).str.lower().map(lambda x: 1 if x.strip() == 'yes' else 0)
+                        y_pred_bin = [1 if str(l).strip().lower() == 'yes' else 0 for l in y_pred]
+
+                    stats["accuracy"] = accuracy_score(y_true_bin, y_pred_bin)
+                    stats["precision"] = precision_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+                    stats["recall"] = recall_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+                    stats["f1_score"] = f1_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+
+                    tn, fp, fn, tp = confusion_matrix(y_true_bin, y_pred_bin).ravel()
+                    stats["confusion_matrix"] = {
+                        "true_negative": int(tn),
+                        "false_positive": int(fp),
+                        "false_negative": int(fn),
+                        "true_positive": int(tp)
+                    }
+
+                    # Optionally update each result row with actualLabel as "yes"/"no"
+                    for i, result in enumerate(results):
+                        result["actualLabel"] = "yes" if y_true_bin.iloc[i] == 1 else "no"
+
+                    # Also count number of "yes"/"no" for stats (useful for frontend pie)
+                    stats["yes"] = int(sum(y_pred_bin))
+                    stats["no"] = int(len(y_pred_bin) - sum(y_pred_bin))
+
+                elif data_type == "legal":
+                    # Compare index predictions to actual labels
+                    y_true_legal = y_true.astype(int)
+                    accuracy = sum(y_true_legal.iloc[i] == y_pred[i] for i in range(len(y_true_legal))) / len(y_true_legal)
+                    stats["accuracy"] = accuracy
+                    for i, result in enumerate(results):
+                        result["actualLabel"] = int(y_true_legal.iloc[i]) if i < len(y_true_legal) else None
+
+            except Exception as e:
+                print(f"Error calculating metrics: {str(e)}")
 
         # --- Store all results in DB ---
         classification_data = {

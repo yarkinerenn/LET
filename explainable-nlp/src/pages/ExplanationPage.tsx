@@ -96,8 +96,8 @@ const ExplanationPage = () => {
                     };
 
                     initialRatings[modelId] = {
-                        llm: 0,
-                        combined: 0
+                        llm: entryData.ratings?.[modelId]?.llm || 0,
+                        combined: entryData.ratings?.[modelId]?.combined || 0,
                     };
 
                     initialFaithfulnessScores[modelId] = {
@@ -300,7 +300,7 @@ const ExplanationPage = () => {
         setIsSubmittingRatings(true);
         try {
             await axios.post(
-                'http://localhost:5000/api/submit-ratings',
+                'http://localhost:5000/api/save_ratings',
                 {
                     classificationId,
                     resultId,

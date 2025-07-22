@@ -9,6 +9,11 @@ const Settings = () => {
     const [openrouterApi, setopenrouterApi] = useState("");
     const [error, setError] = useState("");         // For error messages
     const [success, setSuccess] = useState("");     // For success message
+    const openAIModels=[
+        { name: "gpt-4.1-2025-04-14" },
+        { name: "o4-mini-2025-04-16" },
+        { name: "gpt-4.1-nano-2025-04-14" },
+    ];
     const groqModels = [
         { name: "allam-2-7b" },
         { name: "deepseek-r1-distill-llama-70b" },
@@ -338,6 +343,19 @@ const Settings = () => {
                         </Form.Select>
                     </div>
                 )}
+                {provider === 'openai' && (
+                    <div className="mb-3">
+                        <span className="me-3">Select Model:</span>
+                        <Form.Select value={model} onChange={(e) => setModel(e.target.value)}>
+                            <option value="">-- Select a Model --</option>
+                            {openAIModels.map((m) => (
+                                <option key={m.name} value={m.name}>
+                                    {m.name}
+                                </option>
+                            ))}
+                        </Form.Select>
+                    </div>
+                )}
                 {provider === 'openrouter' && (
                     <div className="mb-3">
                         <span className="me-3">Select Model:</span>
@@ -421,6 +439,19 @@ const Settings = () => {
                         <Form.Select value={modelex} onChange={(e) => setModelex(e.target.value)}>
                             <option value="">-- Select a Model --</option>
                             {groqModels.map((m) => (
+                                <option key={m.name} value={m.name}>
+                                    {m.name}
+                                </option>
+                            ))}
+                        </Form.Select>
+                    </div>
+                )}
+                {providerex === 'openai' && (
+                    <div className="mb-3">
+                        <span className="me-3">Select Model:</span>
+                        <Form.Select value={modelex} onChange={(e) => setModelex(e.target.value)}>
+                            <option value="">-- Select a Model --</option>
+                            {openAIModels.map((m) => (
                                 <option key={m.name} value={m.name}>
                                     {m.name}
                                 </option>

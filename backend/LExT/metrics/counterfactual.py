@@ -14,10 +14,10 @@ def rephrase_explanation(question, explanation, groq, label):
     rephrased_explanation = call_llama(prompt, groq).strip()
     return rephrased_explanation
 
-def test_label_flipping(rephrased_explanation, question, target_model):
+def test_label_flipping(rephrased_explanation, question, target_model,provider,api):
     prompt = (f"Given this explanation: {rephrased_explanation}, answer the question: {question}.\n"
               "Important: ANSWER IN ONE WORD: YES/NO. Don't ADD anything else to your answer.")
-    new_label = call_model(prompt, target_model).strip().lower()
+    new_label = call_model(prompt, target_model,provider,api).strip().lower()
     return new_label
 
 def evaluate_label(new_label, old_label, groq):
@@ -31,7 +31,7 @@ def evaluate_label(new_label, old_label, groq):
         scaled = -1
     return label, scaled
 
-def counterfactual_faithfulness(predicted_explanation, ground_question, predicted_label, target_model, groq, row_reference={}):
+def counterfactual_faithfulness(predicted_explanation, ground_question, predicted_label, target_model, groq,provider,api, row_reference={}):
     """
     Compute the counterfactual faithfulness score by rephrasing the explanation and checking if the label flips.    "
     """
@@ -40,7 +40,7 @@ def counterfactual_faithfulness(predicted_explanation, ground_question, predicte
     # Get rephrased explanation
     rephrased = rephrase_explanation(ground_question, predicted_explanation, groq, predicted_label)
     # Test label flipping
-    new_label = test_label_flipping(rephrased, ground_question, target_model)
+    new_label = test_label_flipping(rephrased, ground_question, target_model,provider,api)
     label_extracted, scaled = evaluate_label(new_label, predicted_label, groq)
     
     # Scale: as range is -1 to 1, do a simple min-max scaling: (x+1)/2 -> range [0,1]

@@ -6,7 +6,7 @@ def redact_words(context, important_words):
     pattern = re.compile(r'\b(' + '|'.join(map(re.escape, words)) + r')\b', re.IGNORECASE)
     return pattern.sub("[REDACTED]", context)
 
-def contextual_faithfulness(context, ground_question, predicted_label, target_model, groq, row_reference={}):
+def contextual_faithfulness(context, ground_question, predicted_label, target_model, groq,provider,api, row_reference={}):
     """
     Contextual Faithfulness: This metric evaluates the faithfulness of the model's prediction by redacting important words from the context and checking if the model can still make a prediction."
     """
@@ -22,7 +22,7 @@ def contextual_faithfulness(context, ground_question, predicted_label, target_mo
                   f"For the above question and context, you predicted {predicted_label}."
                   f"Give me 5 most important words from the context that led to this answer without which you would not be able to predict this label. "
                   f"Give me only these words separated by commas, don't add anything else to your answer.")
-        important_words = call_model(prompt, target_model=target_model)
+        important_words = call_model(prompt, target_model,provider,api)
         if not important_words:
             print("No important words returned for Contextual Faithfulness!")
             return 0
@@ -35,7 +35,7 @@ def contextual_faithfulness(context, ground_question, predicted_label, target_mo
               f"For the above question, you predicted {predicted_label}."
               f"Give me 5 most important words from the question that led to this answer without which you would not be able to predict this label. "
               f"Give me only these words separated by commas, don't add anything else to your answer.")
-        important_words = call_model(prompt, target_model=target_model)
+        important_words = call_model(prompt, target_model,provider,api,)
         if not important_words:
             print("No important words returned for Contextual Faithfulness!")
             return 0
@@ -44,7 +44,7 @@ def contextual_faithfulness(context, ground_question, predicted_label, target_mo
     
 
     # Run prediction on redacted context
-    _, redacted_pred = get_prediction(redacted_context, ground_question, target_model, groq)
+    _, redacted_pred = get_prediction(redacted_context, ground_question, target_model, groq,provider,api)
     label_prompt = (f"I prompted model with a question and it gave me the following answer:\n"
                     f"Question: {ground_question}\n Prediction:{redacted_pred}\n"
                     f" Using this, label it as one of these: yes, no, unknown, or random. Give me a yes if it explicitly mentions/suggests yes,"
@@ -59,7 +59,7 @@ def contextual_faithfulness(context, ground_question, predicted_label, target_mo
         unknown_count = 0
         for word in words_list:
             redacted_one = redact_words(context, word)
-            _, redacted_one_pred = get_prediction(redacted_one, ground_question,groq_key=groq, target_model=target_model)
+            _, redacted_one_pred = get_prediction(redacted_one, ground_question,groq, target_model,provider,api)
             label_one_prompt = (f"I prompted model with a question and it gave me the following answer:\n"
                     f"Question: {ground_question}\n Prediction:{redacted_one_pred}\n"
                     f" Using this, label it as one of these: yes, no, unknown, or random. Give me a yes if it explicitly mentions/suggests yes,"

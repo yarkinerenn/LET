@@ -33,8 +33,8 @@ const groqModels = [
     ];
     const openrouterModels = [
         { name: "deepseek/deepseek-r1-0528-qwen3-8b:free" },
-        { name: "deepseek-r1-0528" },
-        { name: "sarvam-m" },
+        { name: "sarvamai/sarvam-m:free" },
+        { name: "mistralai/devstral-small-2505:free" },
         { name: "devstral-small" },
         { name: "gemma-3n-e4b-it" },
         { name: "llama-3.3-8b-instruct" },

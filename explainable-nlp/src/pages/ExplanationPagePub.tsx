@@ -283,6 +283,7 @@ const ExplanationPagePubMedQA = () => {
         predicted_explanation: explanationToEvaluate,
         predicted_label: entry?.prediction,
         target_model: model.model,
+        provider:model.provider,
         ground_context: entry?.context
       };
 

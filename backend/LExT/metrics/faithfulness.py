@@ -2,18 +2,25 @@ from .QAG import qag
 from .contextual import contextual_faithfulness
 from .counterfactual import counterfactual_faithfulness
 
-def faithfulness(predicted_explanation, predicted_label, ground_question, ground_label, context, groq, target_model, row_reference={}):
+def faithfulness(predicted_explanation, predicted_label, ground_question, ground_label, context, groq, target_model,provider,api ,row_reference={}):
     """
     Compute faithfulness as the average of:
       - QAG Score
       - Counterfactual Faithfulness
       - Contextual Faithfulness
     """
-    qag_score = qag(predicted_explanation, groq, target_model, row_reference)
-    counter = counterfactual_faithfulness(predicted_explanation, ground_question, predicted_label, target_model, groq, row_reference)
-    contextual = contextual_faithfulness(context, ground_question, predicted_label, target_model, groq, row_reference)
+    faithfulness_score = 0
+    counter=0
+    contextual = contextual_faithfulness(context, ground_question, predicted_label, target_model, groq,provider,api, row_reference)
+    qag_score = qag(predicted_explanation, groq, target_model,provider,api, row_reference)
+    print(predicted_label)
+    if isinstance(predicted_label, int)==False:
+        counter = counterfactual_faithfulness(predicted_explanation, ground_question, predicted_label, target_model, groq,provider,api, row_reference)
+        faithfulness_score = (qag_score + counter + contextual) / 3.0
+    else:
+         faithfulness_score = (qag_score + contextual) / 2.0
     print("Computing Faithfulness\n")
-    faithfulness_score = (qag_score + counter + contextual) / 3.0
+
     print(f"QAG: {qag_score}, Counterfactual: {counter}, Contextual: {contextual}, Faithfulness: {faithfulness_score}\n")
     
     row_reference['faithfulness'] = faithfulness_score
