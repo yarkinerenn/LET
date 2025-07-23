@@ -527,9 +527,17 @@ def classify_dataset(dataset_id):
                 if i < len(y_true):
                     result["actualLabel"] = y_true[i]
 
-            # Count "yes"/"no" for stats
-            stats["yes"] = int(sum(y_pred_bin))
-            stats["no"] = int(len(y_pred_bin) - sum(y_pred_bin))
+            # Count predictions for stats
+            if data_type == "medical":
+                stats["yes"] = sum(1 for x in y_pred if x == "yes")
+                stats["no"] = sum(1 for x in y_pred if x == "no")
+                stats["maybe"] = sum(1 for x in y_pred if x == "maybe")
+            elif data_type == "sentiment":
+                stats["positive"] = sum(1 for x in y_pred if x == "positive")
+                stats["negative"] = sum(1 for x in y_pred if x == "negative")
+            else:
+                stats["yes"] = int(sum(y_pred_bin))
+                stats["no"] = int(len(y_pred_bin) - sum(y_pred_bin))
         except Exception as e:
             print(f"Error calculating metrics: {str(e)}")
 
@@ -1602,9 +1610,9 @@ def classify_and_explain(dataset_id):
         elif data_type == "legal":
             stats.update({"correct": 0, "incorrect": 0})
         elif data_type == "medical":
-            stats.update({"correct": 0, "incorrect": 0})
+            stats.update({"correct": 0, "incorrect": 0, "maybe": 0})
 
-        sample_size = 5
+        sample_size = 15
         print(df[label_column].value_counts(),'dist of labels')
         if label_column in df.columns:
             df_sampled, _ = train_test_split(
@@ -1698,7 +1706,7 @@ def classify_and_explain(dataset_id):
                         score = 1.0
 
                     elif data_type == "medical":
-                        m = re.search(r"Answer:\s*(yes|no)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
+                        m = re.search(r"Answer:\s*(yes|no|maybe)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
                         if m:
                             label = m.group(1).lower()
                             explanation = m.group(2).strip()
@@ -1800,6 +1808,8 @@ def classify_and_explain(dataset_id):
                     else:
                         stats["incorrect"] += 1
                 elif data_type == "medical":
+                    if label == "maybe":
+                        stats["maybe"] += 1
                     if "actualLabel" in result_data and label == result_data["actualLabel"]:
                         stats["correct"] += 1
                     else:
@@ -1857,8 +1867,13 @@ def classify_and_explain(dataset_id):
                     result["actualLabel"] = y_true[i]
 
             # Count "yes"/"no" for stats
-            stats["yes"] = int(sum(y_pred_bin))
-            stats["no"] = int(len(y_pred_bin) - sum(y_pred_bin))
+            if data_type == "medical":
+                stats["yes"] = sum(1 for x in y_pred if x == "yes")
+                stats["no"] = sum(1 for x in y_pred if x == "no")
+                stats["maybe"] = sum(1 for x in y_pred if x == "maybe")
+            else:
+                stats["yes"] = int(sum(y_pred_bin))
+                stats["no"] = int(len(y_pred_bin) - sum(y_pred_bin))
         except Exception as e:
             print(f"Error calculating metrics: {str(e)}")
 

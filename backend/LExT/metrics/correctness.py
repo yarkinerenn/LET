@@ -45,6 +45,9 @@ def weighted_accuracy(ground_truth, predicted_exp, ner_pipe=None, row_reference=
 
     # NER-based overlap
     def extract_words_from_ner(text):
+        if not text or not text.strip():
+            print('oops empty text')
+            return set()
         entities = ner_pipe(text)
         words = [entity['word'] for entity in entities]
         return set(words)

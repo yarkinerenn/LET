@@ -7,8 +7,8 @@ import {
 } from 'recharts';
 import  {prettyPubMedContext} from "../modules/pubmedcar";
 
-// Only Yes/No colors
-const COLORS = ['#0088FE', '#FF8042'];
+// Yes/No/Maybe colors
+const COLORS = ['#0088FE', '#FF8042', '#FFC107'];
 
 const groqModels = [
         { name: " llama3-70b" },
@@ -105,7 +105,7 @@ const groqModels = [
 interface PubMedQAResult {
   question: string;
   context: string; // Abstract
-  label: string;   // "yes" or "no"
+  label: string;   // "yes" or "no" or "maybe"
   score: number;
   actualLabel?: string;
   original_data?: any;
@@ -115,6 +115,7 @@ interface PubMedQAStats {
   total: number;
   yes?: number;
   no?: number;
+  maybe?: number;
   accuracy?: number;
   precision?: number;
   recall?: number;
@@ -172,14 +173,15 @@ const ClassificationDashboardPubMedQA = () => {
     fetchData();
   }, [classificationId]);
 
-  // Filter out any accidental "maybe"
+  // Show yes/no/maybe
   const paginatedResults = classification?.results
-    ?.filter(r => r.label === "yes" || r.label === "no")
+    ?.filter(r => r.label === "yes" || r.label === "no" || r.label === "maybe")
     ?.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const pieData = [
     { name: "Yes", value: stats?.yes || 0 },
-    { name: "No", value: stats?.no || 0 }
+    { name: "No", value: stats?.no || 0 },
+    { name: "Maybe", value: stats?.maybe || 0 }
   ];
 
   // Model Modal logic (as in your code)
@@ -249,6 +251,14 @@ const ClassificationDashboardPubMedQA = () => {
                 <Card.Body>
                   <Card.Title>No</Card.Title>
                   <Card.Text className="display-6 text-danger">{stats?.no}</Card.Text>
+                </Card.Body>
+              </Card>
+            </Col>
+            <Col md={2}>
+              <Card className="mb-3">
+                <Card.Body>
+                  <Card.Title>Maybe</Card.Title>
+                  <Card.Text className="display-6 text-warning">{stats?.maybe || 0}</Card.Text>
                 </Card.Body>
               </Card>
             </Col>
@@ -351,14 +361,30 @@ const ClassificationDashboardPubMedQA = () => {
                               {prettyPubMedContext(result.context)}
                             </td>
                             <td>
-                              <Badge bg={result.label === "yes" ? "success" : "danger"}>
+                              <Badge
+                                bg={
+                                  result.label === "yes"
+                                    ? "success"
+                                    : result.label === "no"
+                                    ? "danger"
+                                    : "warning"
+                                }
+                              >
                                 {toUpperLabel(result.label)}
                               </Badge>
                             </td>
                             <td>{(result.score * 100).toFixed(1)}%</td>
                             {result.actualLabel !== undefined && (
                               <td>
-                                <Badge bg={result.actualLabel === "yes" ? "success" : "danger"}>
+                                <Badge
+                                  bg={
+                                    result.actualLabel === "yes"
+                                      ? "success"
+                                      : result.actualLabel === "no"
+                                      ? "danger"
+                                      : "warning"
+                                  }
+                                >
                                   {toUpperLabel(result.actualLabel)}
                                 </Badge>
                               </td>
