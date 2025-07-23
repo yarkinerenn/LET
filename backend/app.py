@@ -14,6 +14,7 @@ from LExT.metrics.faithfulness import faithfulness
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 from tqdm import tqdm
 import numpy as np
+from langchain_community.llms import Ollama
 import traceback  # EN ÜSTE EKLE
 import ast
 import shap
@@ -26,6 +27,7 @@ from datasets import load_dataset
 import torch
 from sklearn.model_selection import train_test_split
 from LExT.metrics.trustworthiness import lext
+import ollama
 
 load_dotenv()
 # Store API key in .env
@@ -1598,6 +1600,8 @@ def classify_and_explain(dataset_id):
                 if not api_key:
                     return jsonify({"error": "Deepseek API key not configured"}), 400
                 client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com/v1")
+            elif provider == 'ollama':
+                print('using ollama')
             else:
                 return jsonify({"error": "Invalid LLM provider"}), 400
 
@@ -1673,59 +1677,108 @@ def classify_and_explain(dataset_id):
 
                 # --- LLM call (classify + explain) ---
                 if method == "llm":
-
-                    response = client.chat.completions.create(
-                        model=model_name,
-                        messages=[{"role": "user", "content": prompt}],
-                        temperature=0
-                    )
-                    content = response.choices[0].message.content.strip()
-                    print(content, 'this is what llm prompt')
-
-                    # Parse output
-                    if data_type == "sentiment":
-                        m = re.search(r"Sentiment:\s*(POSITIVE|NEGATIVE)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
-                        if m:
-                            label = m.group(1).upper()
-                            explanation = m.group(2).strip()
+                    if provider == "ollama":
+                        llm = Ollama(model=model_name)
+                        content = llm.invoke([prompt])
+                        print(content, 'this is what ollama prompt')
+                        # Parse output
+                        if data_type == "sentiment":
+                            m = re.search(r"Sentiment:\s*(POSITIVE|NEGATIVE)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
+                            if m:
+                                label = m.group(1).upper()
+                                explanation = m.group(2).strip()
+                            else:
+                                lines = content.split('\n')
+                                label = lines[0].replace("Sentiment:", "").strip().upper()
+                                explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
+                            score = 1.0
+                        elif data_type == "legal":
+                            m = re.search(r"Holding:\s*([0-4])[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
+                            if m:
+                                label = int(m.group(1))
+                                explanation = m.group(2).strip()
+                            else:
+                                num_match = re.search(r"[0-4]", content)
+                                label = int(num_match.group(0)) if num_match else -1
+                                explanation = content
+                            score = 1.0
+                        elif data_type == "medical":
+                            m = re.search(r"Answer:\s*(yes|no|maybe)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
+                            if m:
+                                label = m.group(1).lower()
+                                explanation = m.group(2).strip()
+                            else:
+                                lines = content.split('\n')
+                                label = lines[0].replace("Answer:", "").strip().lower()
+                                explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
+                            score = 1.0
                         else:
-                            lines = content.split('\n')
-                            label = lines[0].replace("Sentiment:", "").strip().upper()
-                            explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
-                        score = 1.0
-
-                    elif data_type == "legal":
-                        m = re.search(r"Holding:\s*([0-4])[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
-                        if m:
-                            label = int(m.group(1))
-                            explanation = m.group(2).strip()
-                        else:
-                            num_match = re.search(r"[0-4]", content)
-                            label = int(num_match.group(0)) if num_match else -1
-                            explanation = content
-                        score = 1.0
-
-                    elif data_type == "medical":
-                        m = re.search(r"Answer:\s*(yes|no|maybe)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
-                        if m:
-                            label = m.group(1).lower()
-                            explanation = m.group(2).strip()
-                        else:
-                            lines = content.split('\n')
-                            label = lines[0].replace("Answer:", "").strip().lower()
-                            explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
-                        score = 1.0
+                            continue
+                        explanations_to_save.append({
+                            "df_index": int(df_idx),
+                            "explanation": explanation,
+                            "model": model_name,
+                            "type": "llm",
+                        })
+                        # Skip further LLM calls for this row
+                        # Continue to result handling logic
+                        # Use this indentation to match surrounding block
+                        # Rest of code continues unchanged
+                        # Add an "else" after this for non-Ollama providers (keep existing OpenAI/Groq/etc.)
+                        # Example: else: (existing code)
+                        # Do not indent the next 'else' branch for OpenAI/Groq
                     else:
-                        continue
+                        response = client.chat.completions.create(
+                            model=model_name,
+                            messages=[{"role": "user", "content": prompt}],
+                            temperature=0
+                        )
+                        content = response.choices[0].message.content.strip()
+                        print(content, 'this is what llm prompt')
 
-                    # Save explanation for later, track by DataFrame index
-                    explanations_to_save.append({
-                        "df_index": int(df_idx),
-                        "explanation": explanation,
-                        "model": model_name,
-                        "type": "llm",
-                    })
+                        # Parse output
+                        if data_type == "sentiment":
+                            m = re.search(r"Sentiment:\s*(POSITIVE|NEGATIVE)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
+                            if m:
+                                label = m.group(1).upper()
+                                explanation = m.group(2).strip()
+                            else:
+                                lines = content.split('\n')
+                                label = lines[0].replace("Sentiment:", "").strip().upper()
+                                explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
+                            score = 1.0
 
+                        elif data_type == "legal":
+                            m = re.search(r"Holding:\s*([0-4])[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
+                            if m:
+                                label = int(m.group(1))
+                                explanation = m.group(2).strip()
+                            else:
+                                num_match = re.search(r"[0-4]", content)
+                                label = int(num_match.group(0)) if num_match else -1
+                                explanation = content
+                            score = 1.0
+
+                        elif data_type == "medical":
+                            m = re.search(r"Answer:\s*(yes|no|maybe)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
+                            if m:
+                                label = m.group(1).lower()
+                                explanation = m.group(2).strip()
+                            else:
+                                lines = content.split('\n')
+                                label = lines[0].replace("Answer:", "").strip().lower()
+                                explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
+                            score = 1.0
+                        else:
+                            continue
+
+                        # Save explanation for later, track by DataFrame index
+                        explanations_to_save.append({
+                            "df_index": int(df_idx),
+                            "explanation": explanation,
+                            "model": model_name,
+                            "type": "llm",
+                        })
                 else:
                     label, score, explanation = None, 0.0, ""
                 if data_type == "medical":

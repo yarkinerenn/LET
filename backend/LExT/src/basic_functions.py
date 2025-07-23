@@ -3,6 +3,7 @@ from transformers import pipeline
 from groq import Groq
 import json
 from openai import OpenAI
+from langchain_community.llms import Ollama
 def call_model(prompt, target_model, provider,api_key, **kwargs):
     """
     Call a target model using the provided prompt, supporting Groq and OpenAI APIs.
@@ -32,6 +33,12 @@ def call_model(prompt, target_model, provider,api_key, **kwargs):
             **kwargs
         )
         return chat_completion.choices[0].message.content
+
+    elif provider == "ollama":
+        llm = Ollama(model=target_model)
+        prediction = llm.invoke([prompt])
+        return prediction
+
     else:
         raise ValueError(f"Unknown provider: {provider}")
 

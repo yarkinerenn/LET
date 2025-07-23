@@ -13,6 +13,11 @@ const Settings = () => {
         { name: "gpt-4.1-2025-04-14" },
         { name: "o4-mini-2025-04-16" },
         { name: "gpt-4.1-nano-2025-04-14" },
+        {name:"gpt-3.5-turbo"}
+    ];
+    // Ollama models
+    const ollamaModels = [
+        { name: "jsk/bio-mistral" }
     ];
     const groqModels = [
         { name: "allam-2-7b" },
@@ -324,9 +329,21 @@ const Settings = () => {
                         value="openrouter"
                         checked={provider === 'openrouter'}
                         onChange={(e) => setProvider(e.currentTarget.value)}
-                        className="mb-2"
+                        className="mb-2 me-3"
                     >
                         Open router
+                    </ToggleButton>
+                    <ToggleButton
+                        id="provider-ollama"
+                        type="radio"
+                        variant={provider === 'ollama' ? 'dark' : 'outline-primary'}
+                        name="provider"
+                        value="ollama"
+                        checked={provider === 'ollama'}
+                        onChange={(e) => setProvider(e.currentTarget.value)}
+                        className="mb-2"
+                    >
+                        Ollama
                     </ToggleButton>
                 </ButtonGroup>
 
@@ -362,6 +379,19 @@ const Settings = () => {
                         <Form.Select value={model} onChange={(e) => setModel(e.target.value)}>
                             <option value="">-- Select a Model --</option>
                             {openrouterModels.map((m) => (
+                                <option key={m.name} value={m.name}>
+                                    {m.name}
+                                </option>
+                            ))}
+                        </Form.Select>
+                    </div>
+                )}
+                {provider === 'ollama' && (
+                    <div className="mb-3">
+                        <span className="me-3">Select Model:</span>
+                        <Form.Select value={model} onChange={(e) => setModel(e.target.value)}>
+                            <option value="">-- Select a Model --</option>
+                            {ollamaModels.map((m) => (
                                 <option key={m.name} value={m.name}>
                                     {m.name}
                                 </option>
@@ -427,9 +457,21 @@ const Settings = () => {
                         value="openrouter"
                         checked={providerex === 'openrouter'}
                         onChange={(e) => setProviderex(e.currentTarget.value)}
-                        className="mb-2"
+                        className="mb-2 me-3"
                     >
                         Openrouter
+                    </ToggleButton>
+                    <ToggleButton
+                        id="providerex-ollama"
+                        type="radio"
+                        variant={providerex === 'ollama' ? 'dark' : 'outline-primary'}
+                        name="providerex"
+                        value="ollama"
+                        checked={providerex === 'ollama'}
+                        onChange={(e) => setProviderex(e.currentTarget.value)}
+                        className="mb-2"
+                    >
+                        Ollama
                     </ToggleButton>
                 </ButtonGroup>
 
@@ -465,6 +507,19 @@ const Settings = () => {
                         <Form.Select value={modelex} onChange={(e) => setModelex(e.target.value)}>
                             <option value="">-- Select a Model --</option>
                             {openrouterModels.map((m) => (
+                                <option key={m.name} value={m.name}>
+                                    {m.name}
+                                </option>
+                            ))}
+                        </Form.Select>
+                    </div>
+                )}
+                {providerex === 'ollama' && (
+                    <div className="mb-3">
+                        <span className="me-3">Select Model:</span>
+                        <Form.Select value={modelex} onChange={(e) => setModelex(e.target.value)}>
+                            <option value="">-- Select a Model --</option>
+                            {ollamaModels.map((m) => (
                                 <option key={m.name} value={m.name}>
                                     {m.name}
                                 </option>
