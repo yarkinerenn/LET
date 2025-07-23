@@ -1601,6 +1601,10 @@ def classify_and_explain(dataset_id):
                     return jsonify({"error": "Deepseek API key not configured"}), 400
                 client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com/v1")
             elif provider == 'ollama':
+                myapi= get_user_api_key_openai()
+                if not myapi:
+                    return jsonify({"error": "OpenAI API key not configured"}), 400
+                client = OpenAI(api_key=myapi)
                 print('using ollama')
             else:
                 return jsonify({"error": "Invalid LLM provider"}), 400
@@ -1661,17 +1665,26 @@ def classify_and_explain(dataset_id):
                     question = str(row.get("question", ""))
                     context = pretty_pubmed_qa(row.get("context", ""))
                     long_answer= str(row.get("long_answer", ""))
-                    prompt = f"""Assume you are a Medical advisor 
-
-                    Question: {question}
-                    Context: {context}
-                    
-                    Answer the questions with Yes/No and give an explanation for your recommendation.
-                    
-                    Format your answer as:
-                    Answer: <yes/no/maybe>
-                    Explanation: <your explanation here>
-                    """
+                    if provider!='ollama':
+                        prompt = f"""Assume you are a Medical advisor 
+    
+                        Question: {question}
+                        Context: {context}
+                        
+                        Answer the questions with Yes/No/maybe and give an explanation for your recommendation.
+                        
+                        Format your answer as:
+                        Answer: <yes/no/maybe>
+                        Explanation: <your explanation here>
+                        """
+                    else:
+                        prompt=f"""Assume you are a Medical advisor 
+    
+                        Question: {question}
+                        Context: {context}
+                        
+                        Answer the questions with Yes/No/maybe and give an explanation for your recommendation.
+                        """
                 else:
                     continue  # skip unknown type
 
@@ -1680,6 +1693,16 @@ def classify_and_explain(dataset_id):
                     if provider == "ollama":
                         llm = Ollama(model=model_name)
                         content = llm.invoke([prompt])
+                        gatherer_prompt=f''' Format this '{content}' answer as:
+                        Answer: <yes/no/maybe>
+                        Explanation: <explanation here>'''
+
+                        response = client.chat.completions.create(
+                            model='gpt-4.1-2025-04-14',
+                            messages=[{"role": "user", "content":gatherer_prompt }],
+                            temperature=0
+                        )
+                        content = response.choices[0].message.content.strip()
                         print(content, 'this is what ollama prompt')
                         # Parse output
                         if data_type == "sentiment":
@@ -1893,37 +1916,61 @@ def classify_and_explain(dataset_id):
                     y_true.append(gold)
                     y_pred.append(pred)
 
-            # Convert to binary if needed
+            # --- Updated metrics block: 3-class for medical, binary for sentiment, else binary ---
             if data_type == "sentiment":
                 y_true_bin = [1 if x in ['positive', '1', 'yes'] else 0 for x in y_true]
                 y_pred_bin = [1 if x in ['positive', '1', 'yes'] else 0 for x in y_pred]
-            else:  # medical/PubMedQA or others
+                stats["accuracy"] = accuracy_score(y_true_bin, y_pred_bin)
+                stats["precision"] = precision_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+                stats["recall"] = recall_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+                stats["f1_score"] = f1_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+                tn, fp, fn, tp = confusion_matrix(y_true_bin, y_pred_bin).ravel()
+                stats["confusion_matrix"] = {
+                    "true_negative": int(tn),
+                    "false_positive": int(fp),
+                    "false_negative": int(fn),
+                    "true_positive": int(tp)
+                }
+            elif data_type == "medical":
+                labels = ["yes", "no", "maybe"]
+                stats["accuracy"] = accuracy_score(y_true, y_pred)
+                stats["precision"] = precision_score(y_true, y_pred, labels=labels, average='macro', zero_division=0)
+                stats["recall"] = recall_score(y_true, y_pred, labels=labels, average='macro', zero_division=0)
+                stats["f1_score"] = f1_score(y_true, y_pred, labels=labels, average='macro', zero_division=0)
+                cm = confusion_matrix(y_true, y_pred, labels=labels)
+                stats["confusion_matrix"] = {
+                    "labels": labels,
+                    "matrix": cm.tolist()
+                }
+            else:
+                # For legal and other types, keep previous logic if needed
                 y_true_bin = [1 if x == 'yes' else 0 for x in y_true]
                 y_pred_bin = [1 if x == 'yes' else 0 for x in y_pred]
-
-            stats["accuracy"] = accuracy_score(y_true_bin, y_pred_bin)
-            stats["precision"] = precision_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
-            stats["recall"] = recall_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
-            stats["f1_score"] = f1_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
-
-            tn, fp, fn, tp = confusion_matrix(y_true_bin, y_pred_bin).ravel()
-            stats["confusion_matrix"] = {
-                "true_negative": int(tn),
-                "false_positive": int(fp),
-                "false_negative": int(fn),
-                "true_positive": int(tp)
-            }
+                stats["accuracy"] = accuracy_score(y_true_bin, y_pred_bin)
+                stats["precision"] = precision_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+                stats["recall"] = recall_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+                stats["f1_score"] = f1_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+                tn, fp, fn, tp = confusion_matrix(y_true_bin, y_pred_bin).ravel()
+                stats["confusion_matrix"] = {
+                    "true_negative": int(tn),
+                    "false_positive": int(fp),
+                    "false_negative": int(fn),
+                    "true_positive": int(tp)
+                }
 
             # Optionally update each result row with actualLabel
             for i, result in enumerate(results):
                 if i < len(y_true):
                     result["actualLabel"] = y_true[i]
 
-            # Count "yes"/"no" for stats
+            # Count predictions for stats
             if data_type == "medical":
                 stats["yes"] = sum(1 for x in y_pred if x == "yes")
                 stats["no"] = sum(1 for x in y_pred if x == "no")
                 stats["maybe"] = sum(1 for x in y_pred if x == "maybe")
+            elif data_type == "sentiment":
+                stats["positive"] = sum(1 for x in y_pred if x == "positive")
+                stats["negative"] = sum(1 for x in y_pred if x == "negative")
             else:
                 stats["yes"] = int(sum(y_pred_bin))
                 stats["no"] = int(len(y_pred_bin) - sum(y_pred_bin))
