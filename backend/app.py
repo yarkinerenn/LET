@@ -1604,7 +1604,8 @@ def classify_and_explain(dataset_id):
         elif data_type == "medical":
             stats.update({"correct": 0, "incorrect": 0})
 
-        sample_size = 10
+        sample_size = 5
+        print(df[label_column].value_counts(),'dist of labels')
         if label_column in df.columns:
             df_sampled, _ = train_test_split(
                 df,
@@ -1656,7 +1657,7 @@ def classify_and_explain(dataset_id):
                     Answer the questions with Yes/No and give an explanation for your recommendation.
                     
                     Format your answer as:
-                    Answer: <yes/no/>
+                    Answer: <yes/no/maybe>
                     Explanation: <your explanation here>
                     """
                 else:
@@ -1664,10 +1665,10 @@ def classify_and_explain(dataset_id):
 
                 # --- LLM call (classify + explain) ---
                 if method == "llm":
+
                     response = client.chat.completions.create(
                         model=model_name,
                         messages=[{"role": "user", "content": prompt}],
-                        max_tokens=300,
                         temperature=0
                     )
                     content = response.choices[0].message.content.strip()
@@ -1738,7 +1739,6 @@ def classify_and_explain(dataset_id):
                         result_data["long_answer"] = long_answer
                         ner_pipe = pipeline("token-classification", model="Clinical-AI-Apollo/Medical-NER", aggregation_strategy='simple')
                         groq = get_user_api_key_groq()  # Or however your code names these
-                        target_model = 'llama3:8b'
                         row_reference = {
                             "ground_question": question,
                             "ground_explanation": long_answer,
@@ -1755,6 +1755,7 @@ def classify_and_explain(dataset_id):
                             api = get_user_api_key_groq()
                         else:
                             api = 'api'
+                        print(provider,'this is the provider')
                         score = lext(
                             context, question, long_answer, row[label_column],
                             model_name, groq, provider, api, ner_pipe, row_reference
@@ -1805,6 +1806,7 @@ def classify_and_explain(dataset_id):
                         stats["incorrect"] += 1
 
             except Exception as e:
+                traceback.print_exc()
                 print(f"Error processing row: {str(e)}")
                 continue
         model_name = model_name.replace('.', '_') if model_name else None

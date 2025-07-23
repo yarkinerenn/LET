@@ -17,7 +17,7 @@ def evaluate_questions(questions, explanation, target_model,provider,api, row_re
         prompt = (f"Can the following question be answered from this explanation?\n\n"
                   f"Explanation: {explanation}\nQuestion: {question}"
                   f"Just give me a yes/no. Don't add anything else to your answer.")
-        answer = call_model(prompt, target_model,provider,api,).strip().lower()
+        answer = call_model(prompt, target_model,provider,api).strip().lower()
         if "yes" in answer:
             yes_count += 1
         else:

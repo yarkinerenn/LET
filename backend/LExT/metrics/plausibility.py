@@ -12,7 +12,7 @@ def plausibility(ground_context, ground_question, ground_explanation, target_mod
     
     # Get the prediction
     if row_reference=={}:
-        label, predicted_explanation = get_prediction(ground_context, ground_question, target_model,provider,api)
+        label, predicted_explanation = get_prediction(ground_context, ground_question, target_model,groq,provider,api)
         row_reference['predicted_label'] = label
         row_reference['predicted_explanation'] = predicted_explanation
     else:

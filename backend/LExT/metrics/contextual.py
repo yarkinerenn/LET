@@ -59,7 +59,7 @@ def contextual_faithfulness(context, ground_question, predicted_label, target_mo
         unknown_count = 0
         for word in words_list:
             redacted_one = redact_words(context, word)
-            _, redacted_one_pred = get_prediction(redacted_one, ground_question,groq, target_model,provider,api)
+            _, redacted_one_pred = get_prediction(redacted_one, ground_question,target_model,groq,provider,api)
             label_one_prompt = (f"I prompted model with a question and it gave me the following answer:\n"
                     f"Question: {ground_question}\n Prediction:{redacted_one_pred}\n"
                     f" Using this, label it as one of these: yes, no, unknown, or random. Give me a yes if it explicitly mentions/suggests yes,"
