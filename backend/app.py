@@ -484,52 +484,54 @@ def classify_dataset(dataset_id):
                 continue
 
         # --- Metrics ---
-        if label_column:
-            try:
-                y_true = df[label_column].head(len(results))
-                y_pred = [r['label'] for r in results]
+        try:
+            y_true = []
+            y_pred = []
+            for r in results:
+                pred = str(r.get('label', '')).strip().lower()
+                gold = None
+                if 'actualLabel' in r:
+                    gold = str(r['actualLabel']).strip().lower()
+                elif 'original_data' in r:
+                    if 'final_decision' in r['original_data']:
+                        gold = str(r['original_data']['final_decision']).strip().lower()
+                    elif 'label' in r['original_data']:
+                        gold = str(r['original_data']['label']).strip().lower()
+                if gold is not None and pred != '':
+                    y_true.append(gold)
+                    y_pred.append(pred)
 
-                if data_type == "sentiment" or data_type == "medical":
-                    # Handle binary classes as "POSITIVE"/"NEGATIVE" or "yes"/"no"
-                    if data_type == "sentiment":
-                        # Sentiment logic (unchanged)
-                        y_true_bin = y_true.astype(str).str.upper().map(lambda x: 1 if x == 'POSITIVE' or x == '1' else 0)
-                        y_pred_bin = [1 if l == 'POSITIVE' else 0 for l in y_pred]
-                    else:  # medical/PubMedQA
-                        y_true_bin = y_true.astype(str).str.lower().map(lambda x: 1 if x.strip() == 'yes' else 0)
-                        y_pred_bin = [1 if str(l).strip().lower() == 'yes' else 0 for l in y_pred]
+            # Convert to binary if needed
+            if data_type == "sentiment":
+                y_true_bin = [1 if x in ['positive', '1', 'yes'] else 0 for x in y_true]
+                y_pred_bin = [1 if x in ['positive', '1', 'yes'] else 0 for x in y_pred]
+            else:  # medical/PubMedQA or others
+                y_true_bin = [1 if x == 'yes' else 0 for x in y_true]
+                y_pred_bin = [1 if x == 'yes' else 0 for x in y_pred]
 
-                    stats["accuracy"] = accuracy_score(y_true_bin, y_pred_bin)
-                    stats["precision"] = precision_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
-                    stats["recall"] = recall_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
-                    stats["f1_score"] = f1_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+            stats["accuracy"] = accuracy_score(y_true_bin, y_pred_bin)
+            stats["precision"] = precision_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+            stats["recall"] = recall_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+            stats["f1_score"] = f1_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
 
-                    tn, fp, fn, tp = confusion_matrix(y_true_bin, y_pred_bin).ravel()
-                    stats["confusion_matrix"] = {
-                        "true_negative": int(tn),
-                        "false_positive": int(fp),
-                        "false_negative": int(fn),
-                        "true_positive": int(tp)
-                    }
+            tn, fp, fn, tp = confusion_matrix(y_true_bin, y_pred_bin).ravel()
+            stats["confusion_matrix"] = {
+                "true_negative": int(tn),
+                "false_positive": int(fp),
+                "false_negative": int(fn),
+                "true_positive": int(tp)
+            }
 
-                    # Optionally update each result row with actualLabel as "yes"/"no"
-                    for i, result in enumerate(results):
-                        result["actualLabel"] = "yes" if y_true_bin.iloc[i] == 1 else "no"
+            # Optionally update each result row with actualLabel
+            for i, result in enumerate(results):
+                if i < len(y_true):
+                    result["actualLabel"] = y_true[i]
 
-                    # Also count number of "yes"/"no" for stats (useful for frontend pie)
-                    stats["yes"] = int(sum(y_pred_bin))
-                    stats["no"] = int(len(y_pred_bin) - sum(y_pred_bin))
-
-                elif data_type == "legal":
-                    # Compare index predictions to actual labels
-                    y_true_legal = y_true.astype(int)
-                    accuracy = sum(y_true_legal.iloc[i] == y_pred[i] for i in range(len(y_true_legal))) / len(y_true_legal)
-                    stats["accuracy"] = accuracy
-                    for i, result in enumerate(results):
-                        result["actualLabel"] = int(y_true_legal.iloc[i]) if i < len(y_true_legal) else None
-
-            except Exception as e:
-                print(f"Error calculating metrics: {str(e)}")
+            # Count "yes"/"no" for stats
+            stats["yes"] = int(sum(y_pred_bin))
+            stats["no"] = int(len(y_pred_bin) - sum(y_pred_bin))
+        except Exception as e:
+            print(f"Error calculating metrics: {str(e)}")
 
         # --- Store results in DB ---
         classification_data = {
@@ -1602,7 +1604,7 @@ def classify_and_explain(dataset_id):
         elif data_type == "medical":
             stats.update({"correct": 0, "incorrect": 0})
 
-        sample_size = 5
+        sample_size = 10
         if label_column in df.columns:
             df_sampled, _ = train_test_split(
                 df,
@@ -1613,9 +1615,9 @@ def classify_and_explain(dataset_id):
         else:
             df_sampled = df.sample(n=sample_size, random_state=42)
 
-        samples = df_sampled.iterrows()
+        samples = list(df_sampled.iterrows())
 
-        for idx, (_, row) in enumerate(samples):
+        for df_idx, row in samples:
             try:
                 # --- Prompt Templates ---
                 if data_type == "sentiment":
@@ -1669,7 +1671,7 @@ def classify_and_explain(dataset_id):
                         temperature=0
                     )
                     content = response.choices[0].message.content.strip()
-                    print(content,'this is what llm prompt')
+                    print(content, 'this is what llm prompt')
 
                     # Parse output
                     if data_type == "sentiment":
@@ -1707,9 +1709,9 @@ def classify_and_explain(dataset_id):
                     else:
                         continue
 
-                    # Save explanation for later
+                    # Save explanation for later, track by DataFrame index
                     explanations_to_save.append({
-                        "row_idx": idx,
+                        "df_index": int(df_idx),
                         "explanation": explanation,
                         "model": model_name,
                         "type": "llm",
@@ -1733,30 +1735,30 @@ def classify_and_explain(dataset_id):
                     elif data_type == "medical":
                         result_data["question"] = question
                         result_data["context"] = context
-                        result_data["long_answer"]= long_answer
+                        result_data["long_answer"] = long_answer
                         ner_pipe = pipeline("token-classification", model="Clinical-AI-Apollo/Medical-NER", aggregation_strategy='simple')
-                        groq = get_user_api_key_groq()                     # Or however your code names these
+                        groq = get_user_api_key_groq()  # Or however your code names these
                         target_model = 'llama3:8b'
                         row_reference = {
                             "ground_question": question,
                             "ground_explanation": long_answer,
-                            "ground_label":  row[label_column],
+                            "ground_label": row[label_column],
                             "predicted_explanation": explanation,
                             "predicted_label": label,
                             "ground_context": context,
                         }
                         if provider == "openrouter":
-                            api=get_user_api_key_openrouter()
+                            api = get_user_api_key_openrouter()
                         elif provider == "openai":
-                            api=get_user_api_key_openai()
+                            api = get_user_api_key_openai()
                         elif provider == "groq":
-                            api=get_user_api_key_groq()
+                            api = get_user_api_key_groq()
                         else:
-                            api='api'
+                            api = 'api'
                         score = lext(
-                                        context, question, long_answer,  row[label_column],
-                                        model_name, groq,provider,api, ner_pipe, row_reference
-                                    )
+                            context, question, long_answer, row[label_column],
+                            model_name, groq, provider, api, ner_pipe, row_reference
+                        )
                         # --- Assemble result row ---
                         plausibility_metrics = {
                             "iterative_stability": row_reference.get("iterative_stability"),
@@ -1775,11 +1777,14 @@ def classify_and_explain(dataset_id):
 
                         # Trustworthiness
                         trustworthiness_score = row_reference.get("trustworthiness")
-                        metrics={"plausibility_metrics": plausibility_metrics,"faithfulness_metrics": faithfulness_metrics,"trustworthiness_score": trustworthiness_score}
-                        result_data["metrics"]= metrics
+                        metrics = {"plausibility_metrics": plausibility_metrics, "faithfulness_metrics": faithfulness_metrics, "trustworthiness_score": trustworthiness_score}
+                        result_data["metrics"] = metrics
                 # Include ground truth if present
                 if label_column:
                     result_data["actualLabel"] = row[label_column]
+
+                # Add DataFrame index for robust tracking
+                result_data["df_index"] = int(df_idx)
 
                 results.append(result_data)
                 stats["total"] += 1
@@ -1806,51 +1811,54 @@ def classify_and_explain(dataset_id):
 
 
         # --- Metrics ---
-        if label_column:
-            try:
-                y_true = df[label_column].head(len(results))
-                y_pred = [r['label'] for r in results]
+        try:
+            y_true = []
+            y_pred = []
+            for r in results:
+                pred = str(r.get('label', '')).strip().lower()
+                gold = None
+                if 'actualLabel' in r:
+                    gold = str(r['actualLabel']).strip().lower()
+                elif 'original_data' in r:
+                    if 'final_decision' in r['original_data']:
+                        gold = str(r['original_data']['final_decision']).strip().lower()
+                    elif 'label' in r['original_data']:
+                        gold = str(r['original_data']['label']).strip().lower()
+                if gold is not None and pred != '':
+                    y_true.append(gold)
+                    y_pred.append(pred)
 
-                if data_type == "sentiment" or data_type == "medical":
-                    # Handle binary classes as "POSITIVE"/"NEGATIVE" or "yes"/"no"
-                    if data_type == "sentiment":
-                        y_true_bin = y_true.astype(str).str.upper().map(lambda x: 1 if x == 'POSITIVE' or x == '1' else 0)
-                        y_pred_bin = [1 if l == 'POSITIVE' else 0 for l in y_pred]
-                    else:  # medical/PubMedQA
-                        y_true_bin = y_true.astype(str).str.lower().map(lambda x: 1 if x.strip() == 'yes' else 0)
-                        y_pred_bin = [1 if str(l).strip().lower() == 'yes' else 0 for l in y_pred]
+            # Convert to binary if needed
+            if data_type == "sentiment":
+                y_true_bin = [1 if x in ['positive', '1', 'yes'] else 0 for x in y_true]
+                y_pred_bin = [1 if x in ['positive', '1', 'yes'] else 0 for x in y_pred]
+            else:  # medical/PubMedQA or others
+                y_true_bin = [1 if x == 'yes' else 0 for x in y_true]
+                y_pred_bin = [1 if x == 'yes' else 0 for x in y_pred]
 
-                    stats["accuracy"] = accuracy_score(y_true_bin, y_pred_bin)
-                    stats["precision"] = precision_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
-                    stats["recall"] = recall_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
-                    stats["f1_score"] = f1_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+            stats["accuracy"] = accuracy_score(y_true_bin, y_pred_bin)
+            stats["precision"] = precision_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+            stats["recall"] = recall_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+            stats["f1_score"] = f1_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
 
-                    tn, fp, fn, tp = confusion_matrix(y_true_bin, y_pred_bin).ravel()
-                    stats["confusion_matrix"] = {
-                        "true_negative": int(tn),
-                        "false_positive": int(fp),
-                        "false_negative": int(fn),
-                        "true_positive": int(tp)
-                    }
+            tn, fp, fn, tp = confusion_matrix(y_true_bin, y_pred_bin).ravel()
+            stats["confusion_matrix"] = {
+                "true_negative": int(tn),
+                "false_positive": int(fp),
+                "false_negative": int(fn),
+                "true_positive": int(tp)
+            }
 
-                    # Optionally update each result row with actualLabel as "yes"/"no"
-                    for i, result in enumerate(results):
-                        result["actualLabel"] = "yes" if y_true_bin.iloc[i] == 1 else "no"
+            # Optionally update each result row with actualLabel
+            for i, result in enumerate(results):
+                if i < len(y_true):
+                    result["actualLabel"] = y_true[i]
 
-                    # Also count number of "yes"/"no" for stats (useful for frontend pie)
-                    stats["yes"] = int(sum(y_pred_bin))
-                    stats["no"] = int(len(y_pred_bin) - sum(y_pred_bin))
-
-                elif data_type == "legal":
-                    # Compare index predictions to actual labels
-                    y_true_legal = y_true.astype(int)
-                    accuracy = sum(y_true_legal.iloc[i] == y_pred[i] for i in range(len(y_true_legal))) / len(y_true_legal)
-                    stats["accuracy"] = accuracy
-                    for i, result in enumerate(results):
-                        result["actualLabel"] = int(y_true_legal.iloc[i]) if i < len(y_true_legal) else None
-
-            except Exception as e:
-                print(f"Error calculating metrics: {str(e)}")
+            # Count "yes"/"no" for stats
+            stats["yes"] = int(sum(y_pred_bin))
+            stats["no"] = int(len(y_pred_bin) - sum(y_pred_bin))
+        except Exception as e:
+            print(f"Error calculating metrics: {str(e)}")
 
         # --- Store all results in DB ---
         classification_data = {
@@ -1880,15 +1888,21 @@ def classify_and_explain(dataset_id):
         )
 
         # --- Save all explanations AFTER classification_id is known ---
-        for i, explanation_entry in enumerate(explanations_to_save):
-            save_explanation_to_db(
-                classification_id=str(classification_id),
-                user_id=current_user.id,
-                result_id=i,  # this matches the result index
-                explanation_type=explanation_entry["type"],
-                content=explanation_entry["explanation"],
-                model_id=explanation_entry["model"].replace('.', '_')
+        for explanation_entry in explanations_to_save:
+            # Find the corresponding result index by matching df_index
+            result_id = next(
+                (i for i, r in enumerate(results) if r.get("df_index") == explanation_entry["df_index"]),
+                None
             )
+            if result_id is not None:
+                save_explanation_to_db(
+                    classification_id=str(classification_id),
+                    user_id=current_user.id,
+                    result_id=result_id,
+                    explanation_type=explanation_entry["type"],
+                    content=explanation_entry["explanation"],
+                    model_id=explanation_entry["model"].replace('.', '_')
+                )
 
         return jsonify({
             "message": "Classification+explanation completed",
