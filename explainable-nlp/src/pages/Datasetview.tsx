@@ -38,7 +38,7 @@ const DatasetView = () => {
     const [itemsPerPage, setItemsPerPage] = useState(20);
     const [selectedEntry, setSelectedEntry] = useState<any | null>(null);
     const [showModal, setShowModal] = useState(false);
-
+    const [userChangedDataType, setUserChangedDataType] = useState(false);
     const formatDate = (dateString: string) => {
         return new Date(dateString).toLocaleString();
     };
@@ -178,6 +178,22 @@ const DatasetView = () => {
                     withCredentials: true,
                 });
                 setDataset(response.data);
+                // TODO: Auto-select data type based on dataset name or file for convenience.
+                // Only set dataType if user hasn't already changed it (i.e., dataType is still initial).
+                if (response.data?.filename && !userChangedDataType) {
+                  const lowerName = response.data.filename.toLowerCase();
+                  if (
+                    lowerName.includes('med') ||
+                    lowerName.includes('medical') ||
+                    lowerName.includes('pubmed')
+                  ) {
+                    setDataType('medical');
+                  } else if (lowerName.includes('legal') || lowerName.includes('casehold')) {
+                    setDataType('legal');
+                  } else {
+                    setDataType('sentiment');
+                  }
+                }
             } catch (err) {
                 setError("Failed to load dataset.");
             } finally {
@@ -206,7 +222,11 @@ const DatasetView = () => {
                       <select
                         className="form-select w-auto"
                         value={dataType}
-                        onChange={e => setDataType(e.target.value as 'sentiment' | 'legal'|'medical')}
+                        onChange={e => {
+                          setDataType(e.target.value as 'sentiment' | 'legal' | 'medical');
+                          setUserChangedDataType(true);
+
+                        }}
                         style={{ minWidth: 180 }}
                       >
                         <option value="sentiment">Sentiment Analysis</option>
