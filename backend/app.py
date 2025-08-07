@@ -2703,6 +2703,8 @@ def get_classificationentry(classification_id, result_id):
                 "choices": result.get('choices', []),
                 "ground_explanation": result.get('ground_explanation', ''),
                 "text": result.get('question', ''),
+                "trustworthiness_score": result.get("metrics", {}).get("trustworthiness_score"),
+
             })
         else:
             # fallback for unknown types

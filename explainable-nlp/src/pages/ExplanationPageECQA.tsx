@@ -17,6 +17,9 @@ interface ECQAEntry {
   taskB: string;               // Long explanation (as ground-truth explanation)
   trustworthiness_score: number;
   ratings?: Record<string, { llm?: number; combined?: number }>;
+  prediction: string;
+  question: string;
+  ground_explanation: string;
 }
 
 interface ModelInfo {
@@ -70,6 +73,7 @@ const ExplanationPageECQA = () => {
           axios.get(`http://localhost:5000/api/classification/${classificationId}`, { withCredentials: true }),
         ]);
         setEntry(entryRes.data);
+        console.log(entryRes.data);
         setTotalResults(classRes.data.results?.length || 0);
         setCurrentResultIndex(Number(resultId) || 0);
 
@@ -355,7 +359,7 @@ const ExplanationPageECQA = () => {
           <Row>
             <Col md={8}>
               <h5>Question</h5>
-              <div className="p-3 bg-light rounded mb-2">{entry.q_text}</div>
+              <div className="p-3 bg-light rounded mb-2">{entry.question}</div>
               <h6>Choices</h6>
               <ul className="p-3 bg-light rounded">
                 {entry.choices?.map((choice, idx) => (
@@ -371,7 +375,7 @@ const ExplanationPageECQA = () => {
                 <div className="text-center">
                   <div className="text-muted small">Prediction</div>
                   <Badge pill bg="info" className="px-3 py-2 fs-6">
-                    {entry.label}
+                    {entry.prediction}
                   </Badge>
                 </div>
                 <div className="text-center">
@@ -386,7 +390,7 @@ const ExplanationPageECQA = () => {
           <Row>
             <Col>
               <h6 className="mt-4">Gold Explanation</h6>
-              <div className="p-3 bg-light rounded">{entry.taskB}</div>
+              <div className="p-3 bg-light rounded">{entry.ground_explanation}</div>
             </Col>
           </Row>
         </Card.Body>
