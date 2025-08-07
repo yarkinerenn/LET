@@ -1433,20 +1433,31 @@ def explain_prediction():
         print(f"Error generating explanation: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-def generate_llm_explanation(text, label, score,provider,model):
-    """generate explanations with generative AI"""
-
+def generate_llm_explanation(text, label, score, provider, model, data_type="sentiment"):
+    """Generate explanations with generative AI"""
     try:
-        print('this is the provider')
-        if provider == 'openai':
-
-            openai_api_key = get_user_api_key_openai()
-
-            if not openai_api_key:
-                return "Error: No OpenAI API key found for this user."
-
-            client = OpenAI(api_key=openai_api_key)
-
+        # ---- PROMPT TEMPLATES ----
+        if data_type == "legal":
+            prompt = f"""
+                Explain why this holding is correct for the legal statement:
+                
+                Statement: {text}
+                Holding: {label}
+                
+                Focus on key words and overall legal reasoning.
+                Keep explanation under 3 sentences.
+            """
+        elif data_type == "medical":
+            prompt = f"""
+                Given the following biomedical question and its context, explain in simple terms why the answer is {label}.
+                
+                Question: {text}
+                Predicted Answer: {label}
+                Confidence: {score}
+                
+                Keep explanation under 3 sentences.
+            """
+        else:  # Default to sentiment
             prompt = f"""
                 Explain this sentiment analysis result in simple terms:
                 
@@ -1457,66 +1468,42 @@ def generate_llm_explanation(text, label, score,provider,model):
                 Keep explanation under 3 sentences.
             """
 
+        if provider == 'openai':
+            openai_api_key = get_user_api_key_openai()
+            if not openai_api_key:
+                return "Error: No OpenAI API key found for this user."
+            client = OpenAI(api_key=openai_api_key)
             response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[{"role": "user", "content": prompt}]
             )
-
             explanation = response.choices[0].message.content
             return explanation
-        elif provider=='groq':
-            api= get_user_api_key_groq()
 
-            client = Groq(
-                api_key=api,
-            )
-
+        elif provider == 'groq':
+            api = get_user_api_key_groq()
+            client = Groq(api_key=api)
             chat_completion = client.chat.completions.create(
-                messages=[
-                    {
-                        "role": "user",
-                        "content":f"""
-                Explain this sentiment analysis result in simple terms:
-                
-                Text: {text}
-                Sentiment: {label} ({score}% confidence)
-                
-                Focus on key words and overall tone.
-                Keep explanation under 3 sentences.
-            """,
-                    }
-                ],
+                messages=[{"role": "user", "content": prompt}],
                 model=model,
             )
             return chat_completion.choices[0].message.content
-        elif provider=='openrouter':
-            print('openroutersss')
-            openai_api_key = get_user_api_key_openrouter()
-            print(openai_api_key,'inst it a key')
 
+        elif provider == 'openrouter':
+            openai_api_key = get_user_api_key_openrouter()
             if not openai_api_key:
                 return "Error: No OpenAI API key found for this user."
-
-            client = OpenAI(  base_url="https://openrouter.ai/api/v1",
-                              api_key=openai_api_key)
-
-            prompt = f"""
-                Explain this sentiment analysis result in simple terms:
-                
-                Text: {text}
-                Sentiment: {label} ({score}% confidence)
-                
-                Focus on key words and overall tone.
-                Keep explanation under 3 sentences.
-            """
-
+            client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=openai_api_key)
             response = client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": prompt}]
             )
-
             explanation = response.choices[0].message.content
             return explanation
+
+    except Exception as e:
+        print(f"Error: {e}")
+        return f"Error: {str(e)}"
 
 
     except Exception as e:
@@ -1556,6 +1543,9 @@ def classify_and_explain(dataset_id):
         elif data_type == 'sentiment':
             text_column = data.get('text_column', 'text')
             label_column = data.get('label_column', 'label')
+        elif data_type == 'ecqa':
+            text_column = "q_text"
+            label_column = "q_ans"
         else:
             text_column = "question"
             label_column = "final_decision"
@@ -1619,10 +1609,15 @@ def classify_and_explain(dataset_id):
             stats.update({"correct": 0, "incorrect": 0})
         elif data_type == "medical":
             stats.update({"correct": 0, "incorrect": 0, "maybe": 0})
+        elif data_type == "ecqa":
+            stats.update({})  # multiclass; will update after
 
-        sample_size = 15
+        sample_size = 5
         print(df[label_column].value_counts(),'dist of labels')
-        if label_column in df.columns:
+        if data_type == "ecqa":
+            # For ECQA, don't stratify, just sample N entries
+            df_sampled = df.sample(n=sample_size, random_state=42)
+        elif label_column in df.columns:
             df_sampled, _ = train_test_split(
                 df,
                 train_size=sample_size,
@@ -1685,6 +1680,26 @@ def classify_and_explain(dataset_id):
                         
                         Answer the questions with Yes/No/maybe and give an explanation for your recommendation.
                         """
+                elif data_type == "ecqa":
+                    question = str(row[text_column])
+                    choices = [row.get('q_op1', ''), row.get('q_op2', ''), row.get('q_op3', ''), row.get('q_op4', ''), row.get('q_op5', '')]
+                    gold_label = row[label_column]
+                    long_answer = row.get("taskB", "")
+                    prompt = f"""Given the following question and five answer options, select the best answer and explain your choice in 2-3 sentences.
+
+                    Question: {question}
+                    
+                    Choices:
+                    1. {choices[0]}
+                    2. {choices[1]}
+                    3. {choices[2]}
+                    4. {choices[3]}
+                    5. {choices[4]}
+                    
+                    Format your answer as:
+                    Answer: <answer text>
+                    Explanation: <your explanation here>
+                    """
                 else:
                     continue  # skip unknown type
 
@@ -1792,6 +1807,19 @@ def classify_and_explain(dataset_id):
                                 label = lines[0].replace("Answer:", "").strip().lower()
                                 explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
                             score = 1.0
+                        elif data_type == "ecqa":
+                            # Example expected format:
+                            # Answer: <answer text>
+                            # Explanation: <explanation here>
+                            m = re.search(r"Answer:\s*(.+)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
+                            if m:
+                                label = m.group(1).strip()
+                                explanation = m.group(2).strip()
+                            else:
+                                lines = content.split('\n')
+                                label = lines[0].replace("Answer:", "").strip()
+                                explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
+                            score = 1.0
                         else:
                             continue
 
@@ -1804,8 +1832,120 @@ def classify_and_explain(dataset_id):
                         })
                 else:
                     label, score, explanation = None, 0.0, ""
+                # --- Assemble result_data for medical and ecqa types ---
+                if provider == "openrouter":
+                    api = get_user_api_key_openrouter()
+                elif provider == "openai":
+                    api = get_user_api_key_openai()
+                elif provider == "groq":
+                    api = get_user_api_key_groq()
+                else:
+                    api = 'api'
+                groq = get_user_api_key_groq()
                 if data_type == "medical":
+                    result_data = {
+                        "question": question,
+                        "context": context,
+                        "long_answer": long_answer,
+                        "label": label,
+                        "score": score,
+                        "llm_explanation": explanation,
+                        "actualLabel": row[label_column],
+                        "df_index": int(df_idx),
+                    }
+                    # Compute trustworthiness & metrics here
+                    ner_pipe = pipeline("token-classification", model="Clinical-AI-Apollo/Medical-NER", aggregation_strategy='simple')
+                    row_reference = {
+                        "ground_question": question,
+                        "ground_explanation": long_answer,
+                        "ground_label": row[label_column],
+                        "predicted_explanation": explanation,
+                        "predicted_label": label,
+                        "ground_context": context,
+                    }
 
+                    trust_score = lext(
+                        context, question, long_answer, row[label_column],
+                        model_name, groq, provider, api, ner_pipe, row_reference
+                    )
+                    plausibility_metrics = {
+                        "iterative_stability": row_reference.get("iterative_stability"),
+                        "paraphrase_stability": row_reference.get("paraphrase_stability"),
+                        "consistency": row_reference.get("consistency"),
+                        "plausibility": row_reference.get("plausibility")
+                    }
+                    faithfulness_metrics = {
+                        "qag_score": row_reference.get("qag_score"),
+                        "counterfactual": row_reference.get("counterfactual_scaled"),
+                        "contextual_faithfulness": row_reference.get("contextual_faithfulness"),
+                        "faithfulness": row_reference.get("faithfulness")
+                    }
+                    trustworthiness_score = row_reference.get("trustworthiness")
+                    metrics = {
+                        "plausibility_metrics": plausibility_metrics,
+                        "faithfulness_metrics": faithfulness_metrics,
+                        "trustworthiness_score": trustworthiness_score,
+                        "lext_score": trust_score
+                    }
+                    result_data["metrics"] = metrics
+                elif data_type == "ecqa":
+                    question = str(row[text_column])
+                    choices = [row.get('q_op1', ''), row.get('q_op2', ''), row.get('q_op3', ''), row.get('q_op4', ''), row.get('q_op5', '')]
+                    gold_label = row[label_column]
+                    ground_explanation = row.get("taskB", "")
+                    result_data = {
+                        "question": question,
+                        "choices": choices,
+                        "label": label,
+                        "score": score,
+                        "llm_explanation": explanation,
+                        "actualLabel": gold_label,
+                        "ground_explanation": ground_explanation,
+                        "df_index": int(df_idx),
+                    }
+                    row_reference = {
+                        "ground_question": question,
+                        "ground_explanation": ground_explanation,
+                        "ground_label": gold_label,
+                        "predicted_explanation": explanation,
+                        "predicted_label": label,
+                    }
+                    context = (
+                        f"Question: {question}\n"
+                        f"Choices:\n"
+                        f"1. {choices[0]}\n"
+                        f"2. {choices[1]}\n"
+                        f"3. {choices[2]}\n"
+                        f"4. {choices[3]}\n"
+                        f"5. {choices[4]}\n"
+                        f"Gold Answer: {gold_label}"
+                    )
+                    trust_score = lext(
+                        context, question, long_answer, gold_label,
+                        model_name, groq, provider, api, None, row_reference
+                    )
+                    plausibility_metrics = {
+                        "iterative_stability": row_reference.get("iterative_stability"),
+                        "paraphrase_stability": row_reference.get("paraphrase_stability"),
+                        "consistency": row_reference.get("consistency"),
+                        "plausibility": row_reference.get("plausibility")
+                    }
+                    faithfulness_metrics = {
+                        "qag_score": row_reference.get("qag_score"),
+                        "counterfactual": row_reference.get("counterfactual_scaled"),
+                        "contextual_faithfulness": row_reference.get("contextual_faithfulness"),
+                        "faithfulness": row_reference.get("faithfulness")
+                    }
+                    trustworthiness_score = row_reference.get("trustworthiness")
+                    metrics = {
+                        "plausibility_metrics": plausibility_metrics,
+                        "faithfulness_metrics": faithfulness_metrics,
+                        "trustworthiness_score": trustworthiness_score,
+                        "lext_score": trust_score
+                    }
+                    result_data["metrics"] = metrics
+                else:
+                    # Existing logic for other types
                     result_data = {
                         "label": label,
                         "score": score,
@@ -1817,59 +1957,11 @@ def classify_and_explain(dataset_id):
                     elif data_type == "legal":
                         result_data["citing_prompt"] = context
                         result_data["choices"] = choices
-                    elif data_type == "medical":
-                        result_data["question"] = question
-                        result_data["context"] = context
-                        result_data["long_answer"] = long_answer
-                        ner_pipe = pipeline("token-classification", model="Clinical-AI-Apollo/Medical-NER", aggregation_strategy='simple')
-                        groq = get_user_api_key_groq()  # Or however your code names these
-                        row_reference = {
-                            "ground_question": question,
-                            "ground_explanation": long_answer,
-                            "ground_label": row[label_column],
-                            "predicted_explanation": explanation,
-                            "predicted_label": label,
-                            "ground_context": context,
-                        }
-                        if provider == "openrouter":
-                            api = get_user_api_key_openrouter()
-                        elif provider == "openai":
-                            api = get_user_api_key_openai()
-                        elif provider == "groq":
-                            api = get_user_api_key_groq()
-                        else:
-                            api = 'api'
-                        print(provider,'this is the provider')
-                        score = lext(
-                            context, question, long_answer, row[label_column],
-                            model_name, groq, provider, api, ner_pipe, row_reference
-                        )
-                        # --- Assemble result row ---
-                        plausibility_metrics = {
-                            "iterative_stability": row_reference.get("iterative_stability"),
-                            "paraphrase_stability": row_reference.get("paraphrase_stability"),
-                            "consistency": row_reference.get("consistency"),
-                            "plausibility": row_reference.get("plausibility")
-                        }
-
-                        # Extract Faithfulness Metrics
-                        faithfulness_metrics = {
-                            "qag_score": row_reference.get("qag_score"),
-                            "counterfactual": row_reference.get("counterfactual_scaled"),  # or just "counterfactual"
-                            "contextual_faithfulness": row_reference.get("contextual_faithfulness"),
-                            "faithfulness": row_reference.get("faithfulness")
-                        }
-
-                        # Trustworthiness
-                        trustworthiness_score = row_reference.get("trustworthiness")
-                        metrics = {"plausibility_metrics": plausibility_metrics, "faithfulness_metrics": faithfulness_metrics, "trustworthiness_score": trustworthiness_score}
-                        result_data["metrics"] = metrics
-                # Include ground truth if present
-                if label_column:
-                    result_data["actualLabel"] = row[label_column]
-
-                # Add DataFrame index for robust tracking
-                result_data["df_index"] = int(df_idx)
+                    # Include ground truth if present
+                    if label_column:
+                        result_data["actualLabel"] = row[label_column]
+                    # Add DataFrame index for robust tracking
+                    result_data["df_index"] = int(df_idx)
 
                 results.append(result_data)
                 stats["total"] += 1
@@ -1916,7 +2008,7 @@ def classify_and_explain(dataset_id):
                     y_true.append(gold)
                     y_pred.append(pred)
 
-            # --- Updated metrics block: 3-class for medical, binary for sentiment, else binary ---
+            # --- Updated metrics block: 3-class for medical, binary for sentiment, multiclass for ecqa, else binary ---
             if data_type == "sentiment":
                 y_true_bin = [1 if x in ['positive', '1', 'yes'] else 0 for x in y_true]
                 y_pred_bin = [1 if x in ['positive', '1', 'yes'] else 0 for x in y_pred]
@@ -1933,6 +2025,18 @@ def classify_and_explain(dataset_id):
                 }
             elif data_type == "medical":
                 labels = ["yes", "no", "maybe"]
+                stats["accuracy"] = accuracy_score(y_true, y_pred)
+                stats["precision"] = precision_score(y_true, y_pred, labels=labels, average='macro', zero_division=0)
+                stats["recall"] = recall_score(y_true, y_pred, labels=labels, average='macro', zero_division=0)
+                stats["f1_score"] = f1_score(y_true, y_pred, labels=labels, average='macro', zero_division=0)
+                cm = confusion_matrix(y_true, y_pred, labels=labels)
+                stats["confusion_matrix"] = {
+                    "labels": labels,
+                    "matrix": cm.tolist()
+                }
+            elif data_type == "ecqa":
+                # Multiclass: use unique gold labels as class set
+                labels = sorted(list(set(y_true + y_pred)))
                 stats["accuracy"] = accuracy_score(y_true, y_pred)
                 stats["precision"] = precision_score(y_true, y_pred, labels=labels, average='macro', zero_division=0)
                 stats["recall"] = recall_score(y_true, y_pred, labels=labels, average='macro', zero_division=0)
@@ -1971,6 +2075,12 @@ def classify_and_explain(dataset_id):
             elif data_type == "sentiment":
                 stats["positive"] = sum(1 for x in y_pred if x == "positive")
                 stats["negative"] = sum(1 for x in y_pred if x == "negative")
+            elif data_type == "ecqa":
+                # Count each label
+                from collections import Counter
+                pred_counts = Counter(y_pred)
+                for label in set(y_pred):
+                    stats[label] = pred_counts[label]
             else:
                 stats["yes"] = int(sum(y_pred_bin))
                 stats["no"] = int(len(y_pred_bin) - sum(y_pred_bin))
@@ -2035,6 +2145,125 @@ def classify_and_explain(dataset_id):
             "error": "Classification+explanation failed",
             "details": str(e)
         }), 500
+@app.route('/api/classification/empty/<dataset_id>', methods=['POST'])
+@login_required
+def create_or_get_empty_classification(dataset_id):
+    """
+    Create an empty/manual classification for this user/dataset if not exists, otherwise return existing one.
+    Handles all supported data types automatically (sentiment, legal, medical).
+    """
+    user_doc = mongo.db.users.find_one({"_id": ObjectId(current_user.id)})
+
+    MAX_RESULTS = 200  # <- Limit results to avoid BSON document too large
+    provider = user_doc.get('preferred_provider', 'openai')
+    model_name = user_doc.get('preferred_model', 'gpt-3.5-turbo')
+    try:
+        print(dataset_id,'this is datasetid')
+        # Check if one already exists
+        classification = mongo.db.classifications.find_one({
+            "dataset_id": ObjectId(dataset_id),
+            "user_id": ObjectId(current_user.id),
+            "method": "explore"
+        })
+
+        if classification:
+            return jsonify({"classification_id": str(classification["_id"]), "already_exists": True}), 200
+
+        # Otherwise, create it
+        dataset = mongo.db.datasets.find_one({"_id": ObjectId(dataset_id)})
+        if not dataset:
+            print('dataset not found')
+            return jsonify({"error": "Dataset not found"}), 404
+
+        df = pd.read_csv(dataset["filepath"])
+
+        # --- Detect type ---
+        if "final_decision" in df.columns:
+            data_type = "medical"
+        elif "citing_prompt" in df.columns:
+            data_type = "legal"
+        elif "text" in df.columns:
+            data_type = "sentiment"
+        else:
+            data_type = "unknown"
+
+        results = []
+        # Only take the first MAX_RESULTS rows!
+        for _, row in df.head(MAX_RESULTS).iterrows():
+            if data_type == "medical":
+                results.append({
+                    "question": row.get("question", ""),
+                    "context": row.get("context", ""),
+                    "long_answer": row.get("long_answer", ""),
+                    "label": "",
+                    "score": None,
+                    "actualLabel": row.get("final_decision", ""),
+                    "llm_explanations": {},
+                    "shap_plot_explanation": "",
+                    "shapwithllm_explanations": {},
+                    "ratings": {},
+                    "trustworthiness_score": None
+                })
+            elif data_type == "legal":
+                results.append({
+                    "citing_prompt": row.get("citing_prompt", ""),
+                    "choices": [row.get(f"holding_{i}", "") for i in range(5)],
+                    "label": "",
+                    "score": None,
+                    "actualLabel": row.get("label", ""),
+                    "llm_explanations": {},
+                    "shap_plot_explanation": "",
+                    "shapwithllm_explanations": {},
+                    "ratings": {},
+                    "trustworthiness_score": None
+                })
+            elif data_type == "sentiment":
+                results.append({
+                    "text": row.get("text", ""),
+                    "label": "",
+                    "score": None,
+                    "actualLabel": row.get("label", ""),
+                    "llm_explanations": {},
+                    "shap_plot_explanation": "",
+                    "shapwithllm_explanations": {},
+                    "ratings": {},
+                    "trustworthiness_score": None
+                })
+            else:
+                results.append({
+                    "original_data": row.to_dict(),
+                    "label": "",
+                    "score": None,
+                    "actualLabel": "",
+                    "llm_explanations": {},
+                    "shap_plot_explanation": "",
+                    "shapwithllm_explanations": {},
+                    "ratings": {},
+                    "trustworthiness_score": None
+                })
+        explanation_models = [{'provider': provider, 'model': model_name}]
+
+
+        classification_data = {
+            'explanation_models':explanation_models,
+            "dataset_id": ObjectId(dataset_id),
+            "user_id": ObjectId(current_user.id),
+            "method": "explore",
+            "provider": None,
+            "model": None,
+            "data_type": data_type,
+            "results": results,
+            "created_at": datetime.now(),
+            "stats": {},
+
+        }
+        classification_id = mongo.db.classifications.insert_one(classification_data).inserted_id
+        return jsonify({"classification_id": str(classification_id), "already_exists": False, "data_type": data_type}), 201
+
+    except Exception as e:
+        traceback.print_exc()
+        print(f"Error in empty classification creation: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 def generate_llm_explanationofdataset(text, label,truelabel, score,provider,model,datatype):
     """Generete generative AI explanation of singel instances in the dataset"""
 
@@ -2157,6 +2386,7 @@ def generate_shap_explanation(input_text, label):
     except Exception as e:
         print(f"Error in SHAP explanation: {str(e)}")
         return None, f"Could not generate SHAP explanation: {str(e)}"
+
 @app.route('/api/explain_withshap', methods=['POST'])
 def generate_llm_explanation_of_shap():
     """Generate generative AI explanation with prompting SHAP values"""
@@ -2411,7 +2641,7 @@ def generate_llm_explanation_of_shap():
 @app.route('/api/classificationentry/<classification_id>/<result_id>', methods=['GET'])
 @login_required
 def get_classificationentry(classification_id, result_id):
-    """Get a single entry of a classified dataset, supporting sentiment, legal, and medical."""
+    """Get a single entry of a classified dataset (sentiment, legal, medical, ECQA, etc)."""
     try:
         classification = mongo.db.classifications.find_one({
             "_id": ObjectId(classification_id),
@@ -2424,30 +2654,11 @@ def get_classificationentry(classification_id, result_id):
         result = classification['results'][int(result_id)]
         data_type = classification.get('data_type')
 
-        # Universal main text field
-        entry_text = result.get('text') or result.get('citing_prompt') or result.get('question') or ''
-
-        # For legal, get holdings
-        holdings = []
-        if data_type == "legal":
-            for i in range(5):
-                holding_key = f'holding_{i}'
-                if holding_key in result.get('original_data', {}):
-                    holdings.append(result['original_data'][holding_key])
-        else:
-            holdings = None
-
-        # For medical, get question, context, long_answer if present
-        question = result.get('question') if data_type == "medical" else None
-        context = result.get('context') if data_type == "medical" else None
-        long_answer = result.get('long_answer') if data_type == "medical" else None
-        trustworthiness_score = result.get("metrics", {}).get("trustworthiness_score") if data_type == "medical" else None
-
+        # Default/Universal fields
         response_data = {
-            "text": entry_text,
-            "prediction": result['label'],
-            "confidence": result['score'],
-            "actualLabel": result.get('actualLabel'),
+            "prediction": result.get('label', ''),
+            "confidence": result.get('score', ''),
+            "actualLabel": result.get('actualLabel', ''),
             "llm_explanation": result.get('llm_explanation', ''),
             "shap_plot": result.get('shap_plot_explanation', ''),
             "shapwithllm": result.get('shapwithllm_explanation', ''),
@@ -2458,17 +2669,46 @@ def get_classificationentry(classification_id, result_id):
             "llm_explanations": result.get("llm_explanations", {}),
             "shap_plot_explanation": result.get("shap_plot_explanation"),
             "shapwithllm_explanations": result.get("shapwithllm_explanations", {}),
-            "holdings": holdings,
             "data_type": data_type,
             "method": classification.get('method'),
-            # For medical
-            "question": question,
-            "context": context,
-            "long_answer": long_answer,
-            "trustworthiness_score": trustworthiness_score,
         }
-        print(response_data)
 
+        # Per-type enrichment
+        if data_type == "legal":
+            holdings = []
+            for i in range(5):
+                holding_key = f'holding_{i}'
+                if holding_key in result.get('original_data', {}):
+                    holdings.append(result['original_data'][holding_key])
+            response_data.update({
+                "text": result.get('citing_prompt', ''),
+                "holdings": holdings,
+            })
+        elif data_type == "medical":
+            response_data.update({
+                "text": result.get('question', ''),
+                "question": result.get('question', ''),
+                "context": result.get('context', ''),
+                "long_answer": result.get('long_answer', ''),
+                "trustworthiness_score": result.get("metrics", {}).get("trustworthiness_score"),
+            })
+        elif data_type == "sentiment":
+            response_data.update({
+                "text": result.get('text', ''),
+            })
+        elif data_type == "ecqa":
+            # --- ECQA-specific fields ---
+            response_data.update({
+                "question": result.get('question', ''),
+                "choices": result.get('choices', []),
+                "ground_explanation": result.get('ground_explanation', ''),
+                "text": result.get('question', ''),
+            })
+        else:
+            # fallback for unknown types
+            response_data["text"] = result.get('text', '') or result.get('question', '') or ''
+
+        print(response_data)
         return jsonify(response_data)
 
     except IndexError:

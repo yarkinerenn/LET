@@ -4,17 +4,17 @@ import { Container, Row, Col, Card, Alert, Spinner, Button, Tab, Tabs, Badge } f
 import axios from 'axios';
 import '../index.css';
 
-interface PubMedQAEntry {
-  question: string;
-  context: string;         // Abstract as plain string!
-  prediction: string;      // Model's answer ("yes"/"no")
-  actualLabel?: string;    // True label ("yes"/"no")
-  score: number;           // Model's confidence
+interface ECQAEntry {
+  q_text: string;
+  choices: string[];           // List of options (["op1", "op2", ...])
+  label: string;               // Model's predicted answer (as string, e.g., "ignore")
+  actualLabel?: string;        // True label ("ignore")
+  score: number;               // Model's confidence
   method?: string;
   llm_explanations?: Record<string, string>;
   shap_plot_explanation?: string;
   shapwithllm_explanations?: Record<string, string>;
-  long_answer: string;
+  taskB: string;               // Long explanation (as ground-truth explanation)
   trustworthiness_score: number;
   ratings?: Record<string, { llm?: number; combined?: number }>;
 }
@@ -35,11 +35,11 @@ interface ShapData {
   shapWords?: string[];
 }
 
-const ExplanationPagePubMedQA = () => {
+const ExplanationPageECQA = () => {
   const { datasetId, classificationId, resultId } = useParams();
   const navigate = useNavigate();
 
-  const [entry, setEntry] = useState<PubMedQAEntry | null>(null);
+  const [entry, setEntry] = useState<ECQAEntry | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [totalResults, setTotalResults] = useState(0);
@@ -52,7 +52,6 @@ const ExplanationPagePubMedQA = () => {
   const [ratings, setRatings] = useState<Record<string, Record<string, number>>>({});
   const [shapRating, setShapRating] = useState(0);
 
-  // Faithfulness state
   const [faithfulnessScores, setFaithfulnessScores] = useState<Record<string, { llm: number | null, combined: number | null }>>({});
   const [isFetchingFaithfulness, setIsFetchingFaithfulness] = useState<{ modelId: string, type: string } | null>(null);
   const [faithfulnessError, setFaithfulnessError] = useState<string | null>(null);
@@ -71,7 +70,6 @@ const ExplanationPagePubMedQA = () => {
           axios.get(`http://localhost:5000/api/classification/${classificationId}`, { withCredentials: true }),
         ]);
         setEntry(entryRes.data);
-        console.log(entryRes.data);
         setTotalResults(classRes.data.results?.length || 0);
         setCurrentResultIndex(Number(resultId) || 0);
 
@@ -124,9 +122,9 @@ const ExplanationPagePubMedQA = () => {
     setIsExplaining(true);
     try {
       const shapResponse = await axios.post('http://localhost:5000/api/explain', {
-        text: entry?.context,
+        text: entry?.q_text,
         explainer_type: 'shap',
-        predictedlabel: entry?.prediction,
+        predictedlabel: entry?.label,
         confidence: entry?.score,
         truelabel: entry?.actualLabel,
         classificationId,
@@ -152,26 +150,26 @@ const ExplanationPagePubMedQA = () => {
 
     try {
       const llmResponse = await axios.post('http://localhost:5000/api/explain', {
-        text: entry?.context,
+        text: entry?.q_text,
         provider: model.provider,
         model: model.model,
         explainer_type: 'llm',
         resultId,
-        predictedlabel: entry?.prediction,
+        predictedlabel: entry?.label,
         confidence: entry?.score,
         truelabel: entry?.actualLabel,
         classificationId,
-        datatype: "pubmedqa"
+        datatype: "ecqa"
       }, { withCredentials: true });
 
       let combinedExplanation: null = null;
       if (shapWords && shapWords.length > 0) {
         const combinedRes = await axios.post('http://localhost:5000/api/explain_withshap', {
-          text: entry?.context,
+          text: entry?.q_text,
           shapwords: shapWords,
           provider: model.provider,
           model: model.model,
-          label: entry?.prediction,
+          label: entry?.label,
           resultId,
           confidence: entry?.score,
           classificationId
@@ -221,46 +219,6 @@ const ExplanationPagePubMedQA = () => {
   };
 
   // --- FAITHFULNESS ---
-  const get_faithfulness = async (modelId: string, type: 'llm' | 'combined') => {
-    setIsFetchingFaithfulness({ modelId, type });
-    setFaithfulnessError(null);
-
-    try {
-      const model = availableModels.find(m => m.id === modelId);
-      if (!model) {
-        setFaithfulnessError("Model not found.");
-        return;
-      }
-
-      const explanationToEvaluate = type === 'llm'
-        ? explanations[modelId]?.llm || ""
-        : explanations[modelId]?.combined || "";
-
-      const payload = {
-        ground_question: entry?.question,
-        ground_explanation: entry?.context,
-        ground_label: entry?.actualLabel,
-        predicted_explanation: explanationToEvaluate,
-        predicted_label: entry?.prediction,
-        target_model: model.model,
-        ground_context: entry?.context
-      };
-
-      const response = await axios.post("http://localhost:5000/api/faithfulness", payload, { withCredentials: true });
-
-      setFaithfulnessScores(prev => ({
-        ...prev,
-        [modelId]: {
-          ...(prev[modelId] || { llm: null, combined: null }),
-          [type]: response.data.faithfulness_score
-        }
-      }));
-    } catch (err: any) {
-      setFaithfulnessError(`Failed to compute ${type} faithfulness`);
-    } finally {
-      setIsFetchingFaithfulness(null);
-    }
-  };
   const get_Lext = async (modelId: string, type: 'llm' | 'combined') => {
     setIsFetchingFaithfulness({ modelId, type });
     setFaithfulnessError(null);
@@ -277,14 +235,14 @@ const ExplanationPagePubMedQA = () => {
         : explanations[modelId]?.combined || "";
 
       const payload = {
-        ground_question: entry?.question,
-        ground_explanation: entry?.context,
+        ground_question: entry?.q_text,
+        ground_explanation: entry?.taskB,
         ground_label: entry?.actualLabel,
         predicted_explanation: explanationToEvaluate,
-        predicted_label: entry?.prediction,
+        predicted_label: entry?.label,
         target_model: model.model,
-        provider:model.provider,
-        ground_context: entry?.context
+        provider: model.provider,
+        ground_context: entry?.q_text
       };
 
       const response = await axios.post("http://localhost:5000/api/trustworthiness", payload, { withCredentials: true });
@@ -344,18 +302,18 @@ const ExplanationPagePubMedQA = () => {
 
   const handlePrevious = () => {
     const newIndex = currentResultIndex - 1;
-    navigate(`/datasets/${datasetId}/classifications_pub/${classificationId}/results/${newIndex}`);
+    navigate(`/datasets/${datasetId}/classifications_ecqa/${classificationId}/results/${newIndex}`);
   };
   const handleNext = () => {
     const newIndex = currentResultIndex + 1;
-    navigate(`/datasets/${datasetId}/classifications_pub/${classificationId}/results/${newIndex}`);
+    navigate(`/datasets/${datasetId}/classifications_ecqa/${classificationId}/results/${newIndex}`);
   };
 
   // ---- RENDER ----
   if (loading) return (
     <Container className="py-5 text-center">
       <Spinner animation="border" />
-      <div className="mt-3">Loading PubMedQA entry...</div>
+      <div className="mt-3">Loading ECQA entry...</div>
     </Container>
   );
   if (error) return (
@@ -366,8 +324,6 @@ const ExplanationPagePubMedQA = () => {
   );
   if (!entry) return null;
 
-  // @ts-ignore
-  // @ts-ignore
   return (
     <Container className="py-4 explanation-page" fluid>
       <div className="d-flex justify-content-between align-items-center mb-4">
@@ -393,17 +349,19 @@ const ExplanationPagePubMedQA = () => {
         </div>
       </div>
 
-      {/* --- MAIN CARD: Question, Context, Prediction, Actual --- */}
+      {/* --- MAIN CARD: Question, Choices, Prediction, Actual --- */}
       <Card className="mb-4">
         <Card.Body>
           <Row>
             <Col md={8}>
               <h5>Question</h5>
-              <div className="p-3 bg-light rounded mb-2">{entry.question}</div>
-              <h6>Context (Abstract)</h6>
-              <div className="original-text p-3 bg-light rounded" style={{ whiteSpace: 'pre-line' }}>
-                {entry.context}
-              </div>
+              <div className="p-3 bg-light rounded mb-2">{entry.q_text}</div>
+              <h6>Choices</h6>
+              <ul className="p-3 bg-light rounded">
+                {entry.choices?.map((choice, idx) => (
+                  <li key={idx}><b>{idx + 1}.</b> {choice}</li>
+                ))}
+              </ul>
               <div className="text-muted small mt-2">
                 Confidence: {(entry.score * 100).toFixed(1)}%
               </div>
@@ -412,17 +370,23 @@ const ExplanationPagePubMedQA = () => {
               <div className="d-flex flex-column gap-3">
                 <div className="text-center">
                   <div className="text-muted small">Prediction</div>
-                  <Badge pill bg={entry.prediction === "yes" ? "success" : "danger"} className="px-3 py-2 fs-6">
-                    {entry.prediction}
+                  <Badge pill bg="info" className="px-3 py-2 fs-6">
+                    {entry.label}
                   </Badge>
                 </div>
                 <div className="text-center">
                   <div className="text-muted small">Actual Label</div>
-                  <Badge pill bg={entry.actualLabel === "yes" ? "success" : "danger"} className="px-3 py-2 fs-6">
+                  <Badge pill bg="success" className="px-3 py-2 fs-6">
                     {entry.actualLabel || "N/A"}
                   </Badge>
                 </div>
               </div>
+            </Col>
+          </Row>
+          <Row>
+            <Col>
+              <h6 className="mt-4">Gold Explanation</h6>
+              <div className="p-3 bg-light rounded">{entry.taskB}</div>
             </Col>
           </Row>
         </Card.Body>
@@ -448,14 +412,6 @@ const ExplanationPagePubMedQA = () => {
                   </div>
                 )}
               </Card.Body>
-              <Card.Footer>
-                <RatingSection
-                  title="SHAP Analysis"
-                  value={shapRating}
-                  onChange={setShapRating}
-                  disabled={!shapData.explanation}
-                />
-              </Card.Footer>
             </Card>
           </Col>
         )}
@@ -510,7 +466,6 @@ const ExplanationPagePubMedQA = () => {
                                 </div>
                               )}
                             </div>
-                            {/* LExT + rating for direct */}
                             {entry.trustworthiness_score !== undefined && entry.trustworthiness_score !== null ? (
                               <div className="d-flex align-items-center my-3">
                                 <span className="badge rounded-pill bg-warning fs-6 px-3 py-2">
@@ -557,63 +512,6 @@ const ExplanationPagePubMedQA = () => {
 
                           </div>
                         </Col>
-                        {(entry?.method !== 'llm' && entry?.method !== 'explore') && (
-                          <Col md={6}>
-                            <div className="explanation-section">
-                              <h6 className="text-success mb-3">SHAP-Enhanced Analysis</h6>
-                              <div className="explanation-content mb-3">
-                                {explanations[activeModel]?.combined ? (
-                                  <div className="p-3 bg-light rounded">
-                                    {explanations[activeModel].combined}
-                                  </div>
-                                ) : (
-                                  <div className="text-muted text-center py-4 border rounded">
-                                    {!shapData.shapWords
-                                      ? "Generate SHAP analysis first"
-                                      : "Generate combined analysis"
-                                    }
-                                  </div>
-                                )}
-                              </div>
-                              {/* LExT + rating for SHAP-enhanced */}
-                              <div className="d-flex align-items-center gap-3 my-3">
-                                <Button
-                                  size="sm"
-                                  variant="outline-warning"
-                                  onClick={() => get_Lext(activeModel, 'combined')}
-                                  disabled={
-                                    (isFetchingFaithfulness?.modelId === activeModel &&
-                                      isFetchingFaithfulness?.type === 'combined') ||
-                                    !explanations[activeModel]?.combined
-                                  }
-                                >
-                                  {(isFetchingFaithfulness?.modelId === activeModel &&
-                                    isFetchingFaithfulness?.type === 'combined') ? (
-                                    <Spinner size="sm" />
-                                  ) : "Compute LExT"}
-                                </Button>
-                                {faithfulnessScores[activeModel]?.combined !== null && (
-                                  <div className="d-flex align-items-center">
-                                    <span className="badge rounded-pill bg-warning fs-6 px-3 py-2">
-                                      LExT: {faithfulnessScores[activeModel]?.combined?.toFixed(2)}
-                                    </span>
-                                  </div>
-                                )}
-                                {faithfulnessError &&
-                                  isFetchingFaithfulness?.modelId === activeModel &&
-                                  isFetchingFaithfulness?.type === 'combined' && (
-                                    <span className="text-danger ms-2">{faithfulnessError}</span>
-                                  )}
-                              </div>
-                              <RatingSection
-                                title="Combined Analysis"
-                                value={ratings[activeModel]?.combined || 0}
-                                onChange={(rating: number) => handleRatingChange(activeModel, 'combined', rating)}
-                                disabled={!explanations[activeModel]?.combined}
-                              />
-                            </div>
-                          </Col>
-                        )}
                       </Row>
                     </div>
                   </Tab>
@@ -635,7 +533,7 @@ const ExplanationPagePubMedQA = () => {
           {isSubmittingRatings ? (
             <Spinner size="sm" className="me-2" />
           ) : null}
-          Submit All Ratings)
+          Submit All Ratings
         </Button>
       </div>
     </Container>
@@ -686,4 +584,4 @@ const RatingSection: React.FC<RatingSectionProps> = ({ title, value, onChange, d
   </div>
 );
 
-export default ExplanationPagePubMedQA;
+export default ExplanationPageECQA;

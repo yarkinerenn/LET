@@ -32,7 +32,30 @@ const DatasetView = () => {
     const [loadingClassifications, setLoadingClassifications] = useState(false);
     const [classifications, setClassifications] = useState<ClassificationItem[]>([]);
     const { provider, model } = useProvider();
-    const [dataType, setDataType] = useState<'sentiment' | 'legal'|'medical'>('sentiment');
+    const [dataType, setDataType] = useState<'sentiment' | 'legal'|'medical'|'ecqa'>('sentiment');
+    const [exploreLoading, setExploreLoading] = useState(false);
+    const handleExploreDataset = async () => {
+        setExploreLoading(true);
+        setError(null);
+        try {
+            const response = await axios.post(
+                `http://localhost:5000/api/classification/empty/${datasetId}`,
+                {},
+                { withCredentials: true }
+            );
+            if (["medical"].includes((response.data.data_type || dataType).toLowerCase())) {
+                navigate(`/datasets/${datasetId}/classifications_pub/${response.data.classification_id}/results/0`);
+            } else if (["sentiment", "legal"].includes((response.data.data_type || dataType).toLowerCase())) {
+                navigate(`/datasets/${datasetId}/classifications/${response.data.classification_id}/results/0`);
+            } else {
+                navigate(`/datasets/${datasetId}/classifications/${response.data.classification_id}`);
+            }
+        } catch (err) {
+            setError("Failed to start exploration mode.");
+        } finally {
+            setExploreLoading(false);
+        }
+    };
     // Pagination states
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(20);
@@ -53,8 +76,8 @@ const DatasetView = () => {
     const paginationItems = [];
     for (let number = 1; number <= totalPages; number++) {
         paginationItems.push(
-            <Pagination.Item 
-                key={number} 
+            <Pagination.Item
+                key={number}
                 active={number === currentPage}
                 onClick={() => setCurrentPage(number)}
             >
@@ -178,7 +201,6 @@ const DatasetView = () => {
                     withCredentials: true,
                 });
                 setDataset(response.data);
-                // TODO: Auto-select data type based on dataset name or file for convenience.
                 // Only set dataType if user hasn't already changed it (i.e., dataType is still initial).
                 if (response.data?.filename && !userChangedDataType) {
                   const lowerName = response.data.filename.toLowerCase();
@@ -190,7 +212,12 @@ const DatasetView = () => {
                     setDataType('medical');
                   } else if (lowerName.includes('legal') || lowerName.includes('casehold')) {
                     setDataType('legal');
-                  } else {
+
+                  }
+                  else if (lowerName.includes('cqa')){
+                    setDataType('ecqa');
+                  }
+                  else {
                     setDataType('sentiment');
                   }
                 }
@@ -214,6 +241,20 @@ const DatasetView = () => {
                 <Col md={4} className="border-end border-2">
 
                     <Card className="border-0">
+                    <Button
+                        variant="warning"
+                        className="mb-2"
+                        onClick={handleExploreDataset}
+                        disabled={!dataset || exploreLoading}
+                    >
+                        {exploreLoading ? (
+                            <>
+                                <Spinner animation="border" size="sm" /> Exploring...
+                            </>
+                        ) : (
+                            "Explore/Annotate Dataset (One by One)"
+                        )}
+                    </Button>
                         <Card.Body>
 
                             <Card.Title className="mb-4">Classification Methods</Card.Title>
@@ -223,7 +264,7 @@ const DatasetView = () => {
                         className="form-select w-auto"
                         value={dataType}
                         onChange={e => {
-                          setDataType(e.target.value as 'sentiment' | 'legal' | 'medical');
+                          setDataType(e.target.value as 'sentiment' | 'legal' | 'medical'|'ecqa');
                           setUserChangedDataType(true);
 
                         }}
@@ -232,6 +273,7 @@ const DatasetView = () => {
                         <option value="sentiment">Sentiment Analysis</option>
                         <option value="legal">Legal</option>
                           <option value="medical">Medical</option>
+                          <option value="ecqa">CommonsenseQA</option>
 
                       </select>
                     </div>
@@ -295,7 +337,11 @@ const DatasetView = () => {
                                             // Make the check case-insensitive and handle undefined
                                             if (dataType === "sentiment" || dataType === "legal") {
                                               navigate(`/datasets/${datasetId}/classifications/${classification._id}`);
-                                            } else {
+                                            }
+                                            else if(dataType === "ecqa") {
+                                                 navigate(`/datasets/${datasetId}/classifications_ecqa/${classification._id}`);
+                                            }
+                                            else {
                                               navigate(`/datasets/${datasetId}/classificationsp/${classification._id}`);
                                             }
                                           }}
