@@ -31,6 +31,7 @@ const DatasetView = () => {
     const navigate = useNavigate();
     const [loadingClassifications, setLoadingClassifications] = useState(false);
     const [classifications, setClassifications] = useState<ClassificationItem[]>([]);
+    const [classificationLimit, setClassificationLimit] = useState<number | null>(null);
     const { provider, model } = useProvider();
     const [dataType, setDataType] = useState<'sentiment' | 'legal'|'medical'|'ecqa'>('sentiment');
     const [exploreLoading, setExploreLoading] = useState(false);
@@ -159,7 +160,7 @@ const DatasetView = () => {
         try {
             const response = await axios.post(
                 `http://localhost:5000/api/classify_and_explain/${datasetId}`,
-                { method:method,provider: provider, model: model ,dataType: dataType },
+                { method:method,provider: provider, model: model ,dataType: dataType, limit: classificationLimit},
                 { withCredentials: true }
             );
 
@@ -259,24 +260,36 @@ const DatasetView = () => {
 
                             <Card.Title className="mb-4">Classification Methods</Card.Title>
                             <div className="mb-3 d-flex align-items-center gap-3">
-                      <span className="fw-semibold">Select Data Type:</span>
-                      <select
-                        className="form-select w-auto"
-                        value={dataType}
-                        onChange={e => {
-                          setDataType(e.target.value as 'sentiment' | 'legal' | 'medical'|'ecqa');
-                          setUserChangedDataType(true);
+                              <span className="fw-semibold">Select Data Type:</span>
+                              <select
+                                className="form-select w-auto"
+                                value={dataType}
+                                onChange={e => {
+                                  setDataType(e.target.value as 'sentiment' | 'legal' | 'medical'|'ecqa');
+                                  setUserChangedDataType(true);
 
-                        }}
-                        style={{ minWidth: 180 }}
-                      >
-                        <option value="sentiment">Sentiment Analysis</option>
-                        <option value="legal">Legal</option>
-                          <option value="medical">Medical</option>
-                          <option value="ecqa">CommonsenseQA</option>
+                                }}
+                                style={{ minWidth: 180 }}
+                              >
+                                <option value="sentiment">Sentiment Analysis</option>
+                                <option value="legal">Legal</option>
+                                  <option value="medical">Medical</option>
+                                  <option value="ecqa">CommonsenseQA</option>
 
-                      </select>
-                    </div>
+                              </select>
+                            </div>
+                            <div className="mb-3 d-flex align-items-center gap-3">
+                              <span className="fw-semibold">Entries to Classify:</span>
+                              <Form.Control
+                                type="number"
+                                min="1"
+                                max={dataset?.data?.length || 1}
+                                value={classificationLimit ?? ""}
+                                onChange={e => setClassificationLimit(e.target.value ? Number(e.target.value) : null)}
+                                placeholder='5'
+                                style={{ width: "100px" }}
+                              />
+                            </div>
                             <div className="d-grid gap-3">
                                 <Button
                                     variant="primary"

@@ -37,13 +37,18 @@ def compute_cosine_similarity_bert(text1, text2):
 
 def weighted_accuracy(ground_truth, predicted_exp, ner_pipe=None, row_reference={}, save=True):
     # cosine similarity between ground truth and predicted explanation
-    base_acc = compute_cosine_similarity_bert(ground_truth, predicted_exp)
     print("Computing Weighted Accuracy\n")
+    base_acc = compute_cosine_similarity_bert(ground_truth, predicted_exp)
 
-    if not ner_pipe:
-        ner_pipe = pipeline("token-classification", model="Clinical-AI-Apollo/Medical-NER", aggregation_strategy='simple')
+    # Fast path: if no NER is provided, just return the cosine accuracy
+    if ner_pipe is None:
+        final_accuracy = base_acc
+        if save:
+            row_reference['predicted_explanation'] = predicted_exp
+            row_reference['accuracy'] = final_accuracy
+        return final_accuracy
 
-    # NER-based overlap
+    # NER-based overlap path
     def extract_words_from_ner(text):
         if not text or not text.strip():
             print('oops empty text')

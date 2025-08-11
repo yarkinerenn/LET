@@ -183,13 +183,63 @@ const ECQADashboard = () => {
                     </thead>
                     <tbody>
                       {paginatedResults?.map((result, index) => {
-                        const isMismatch =
-                          result.actualLabel !== undefined &&
-                          result.label !== result.actualLabel;
+                        // Normalize labels aggressively: trim, case fold, unicode normalize, collapse spaces, strip digits/punctuation
+                        const normalize = (str?: string) =>
+                          (str ?? '')
+                            .normalize('NFKC')                 // Unicode normalize (handles NBSP-like characters)
+                            .replace(/\u00A0/g, ' ')           // convert non‑breaking space to normal space
+                            .replace(/[\u2000-\u200D\u2060]/g, '') // remove zero‑width spaces
+                            .trim()
+                            .toLowerCase()
+                            .replace(/[.\d]/g, '')
+                            .replace(/\s+/g, ' ');
+
+                        // Map various actualLabel forms to the textual choice:
+                        // - "1".."5"  -> q_op1..q_op5
+                        // - "A".."E"  -> q_op1..q_op5
+                        // - "1: text" -> "text"
+                        // - "Answer: text" -> "text"
+                        const resolveActualLabel = (label: string | undefined, choices: (string | undefined)[]) => {
+                          if (label == null) return undefined;
+                          const s = String(label).normalize('NFKC').trim();
+
+                          // 1) numeric index
+                          if (/^\d+$/.test(s)) {
+                            const idx = parseInt(s, 10) - 1;
+                            return choices[idx] ?? s;
+                          }
+
+                          // 2) letter index A-E
+                          if (/^[A-E]$/i.test(s)) {
+                            const idx = s.toUpperCase().charCodeAt(0) - 65; // A->0
+                            return choices[idx] ?? s;
+                          }
+
+                          // 3) "1: something" or "3) something"
+                          const m = s.match(/^(\d)\s*[:.)-]?\s*(.*)$/);
+                          if (m) {
+                            const idx = parseInt(m[1], 10) - 1;
+                            if (m[2]) return m[2];
+                            return choices[idx] ?? s;
+                          }
+
+                          // 4) "Answer: ..." prefix
+                          return s.replace(/^answer\s*[:\-]\s*/i, '');
+                        };
+
                         const original = result.original_data || {};
                         const choices = [
                           original.q_op1, original.q_op2, original.q_op3, original.q_op4, original.q_op5
                         ];
+
+                        const normalizedPred = normalize(result.label);
+                        const resolvedActual = resolveActualLabel(result.actualLabel, choices);
+                        const normalizedActual = resolvedActual !== undefined ? normalize(resolvedActual) : undefined;
+                        const isMismatch = normalizedActual !== undefined && normalizedPred !== normalizedActual;
+
+                        // Debug once per row (comment out in production)
+                        // console.debug({ pred: result.label, actual: result.actualLabel, resolvedActual, normalizedPred, normalizedActual });
+
                         return (
                           <tr
                             key={index}
@@ -214,7 +264,7 @@ const ECQADashboard = () => {
                               )}
                             </td>
                             <td>
-                              <Badge bg="info">{result.label}</Badge>
+                              <Badge bg="info">{result.label?.toLowerCase()}</Badge>
                             </td>
                             <td>
                               <ul className="mb-0">
@@ -225,7 +275,7 @@ const ECQADashboard = () => {
                             </td>
                             {result.actualLabel !== undefined && (
                               <td>
-                                <Badge bg="primary">{result.actualLabel}</Badge>
+                                <Badge bg="primary">{result.actualLabel?.toLowerCase()}</Badge>
                               </td>
                             )}
                           </tr>

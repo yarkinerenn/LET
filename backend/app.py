@@ -958,6 +958,7 @@ class User(UserMixin):
         self.openai_api = user_data.get('openai_api', '')  # Ensure openai_api is loaded
         self.grok_api = user_data.get('grok_api', '')  # Ensure grok_api is loaded
         self.deepseek_api = user_data.get('deepseek_api', '')
+        self.gemini_api = user_data.get('gemini_api', '')
         self.preferred_provider = user_data.get('preferred_provider', 'openai')
         self.preferred_model = user_data.get('preferred_model', 'gpt-3.5-turbo')
         self.preferred_providerex = user_data.get('preferred_providerex', 'openai')
@@ -996,6 +997,8 @@ def register():
     grok_api_key = data.get("grok_api", "")
     deepseek_api_key = data.get("deepseek_api", "")
     openrouter_api_key = data.get("openrouter_api", "")
+    gemini_api_key = data.get("gemini_api", "")
+
 
 
     # Encrypt the user-entered API keys
@@ -1003,6 +1006,9 @@ def register():
     encrypted_grok_api = encrypt_api_key(grok_api_key) if grok_api_key else ""
     encrypted_deepseek_api = encrypt_api_key(deepseek_api_key) if deepseek_api_key else ""
     encrypted_openrouter_api = encrypt_api_key(openrouter_api_key) if openrouter_api_key else ""
+    encrypted_gemini_api = encrypt_api_key(gemini_api_key) if gemini_api_key else ""
+
+
 
     user_data = {
         'username': data['username'],
@@ -1013,6 +1019,7 @@ def register():
         'grok_api': encrypted_grok_api,
         'deepseek_api': encrypted_deepseek_api,
         'openrouter_api': encrypted_openrouter_api,
+        'gemini_api': encrypted_gemini_api,
         'preferred_provider': data.get('preferred_provider', 'openai'),
         'preferred_model': data.get('preferred_model', 'gpt-3.5-turbo'),
         'preferred_providerex': data.get('preferred_providerex', 'openai'),
@@ -1062,6 +1069,18 @@ def update_preferred_explanation():
     )
 
     return jsonify({"message": "Explanation preferences updated successfully"}), 200
+def get_user_api_key_gemini():
+    """Retrieve the user's OpenAI API key securely."""
+    if not current_user.is_authenticated:
+        return None
+
+    # Fetch the OpenAI API key from MongoDB to avoid issues with Flask-Login session
+    user_data = mongo.db.users.find_one({'_id': ObjectId(current_user.id)}, {'gemini_api': 1})
+    print(current_user.username,'this is the user')
+
+    if user_data and "gemini_api" in user_data:
+        return decrypt_api_key(user_data['gemini_api'])  # Return decrypted API key
+    return None
 def get_user_api_key_openai():
     """Retrieve the user's OpenAI API key securely."""
     if not current_user.is_authenticated:
@@ -1138,6 +1157,7 @@ def update_api_keys():
     grok_api_key = data.get("grok_api")
     deepseek_api_key = data.get("deepseek_api")
     openrouter_api_key= data.get('openrouter_api')
+    gemini_api_key= data.get('gemini_api')
 
     update_fields = {}
 
@@ -1153,6 +1173,8 @@ def update_api_keys():
 
     if openrouter_api_key:
         update_fields["openrouter_api"] = encrypt_api_key(openrouter_api_key)
+        print(gemini_api_key)
+        update_fields["gemini_api"] = encrypt_api_key(gemini_api_key)
 
     # Only update if there's something to change
     if update_fields:
@@ -1537,6 +1559,7 @@ def classify_and_explain(dataset_id):
         # --- Extract parameters ---
         method = data.get('method')
         data_type = data.get('dataType', 'sentiment')
+        limit = data.get('limit')
         if data_type == 'legal':
             text_column = data.get('text_column', 'citing_prompt')
             label_column = data.get('label_column', 'label')
@@ -1596,6 +1619,17 @@ def classify_and_explain(dataset_id):
                     return jsonify({"error": "OpenAI API key not configured"}), 400
                 client = OpenAI(api_key=myapi)
                 print('using ollama')
+            elif provider =='openrouter':
+                api_key = get_user_api_key_openrouter()
+                if not api_key:
+                    return jsonify({"error": "Openrouter API key not configured"}), 400
+                client = OpenAI( base_url="https://openrouter.ai/api/v1",api_key=api_key)
+            elif provider =='gemini':
+                api_key = get_user_api_key_gemini()
+                print('using gemini', api_key)
+                if not api_key:
+                    return jsonify({"error": "Gemini API key not configured"}), 400
+                client = OpenAI( base_url="https://generativelanguage.googleapis.com/v1beta/openai/",api_key=api_key)
             else:
                 return jsonify({"error": "Invalid LLM provider"}), 400
 
@@ -1612,7 +1646,7 @@ def classify_and_explain(dataset_id):
         elif data_type == "ecqa":
             stats.update({})  # multiclass; will update after
 
-        sample_size = 5
+        sample_size = limit
         print(df[label_column].value_counts(),'dist of labels')
         if data_type == "ecqa":
             # For ECQA, don't stratify, just sample N entries
@@ -1839,6 +1873,8 @@ def classify_and_explain(dataset_id):
                     api = get_user_api_key_openai()
                 elif provider == "groq":
                     api = get_user_api_key_groq()
+                elif provider == "gemini":
+                    api = get_user_api_key_gemini()
                 else:
                     api = 'api'
                 groq = get_user_api_key_groq()

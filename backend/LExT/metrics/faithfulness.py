@@ -26,7 +26,7 @@ def faithfulness(predicted_explanation, predicted_label, ground_question, ground
          faithfulness_score = (qag_score + contextual) / 2.0
     print("Computing Faithfulness\n")
 
-    print(f"QAG: {qag_score}, Counterfactual: {counter}, Contextual: {contextual}, Faithfulness: {faithfulness_score}\n")
+    print(f"QAG: {qag_score}, Counterfactual: {counter}, Faithfulness: {faithfulness_score}\n")
     
     row_reference['faithfulness'] = faithfulness_score
     

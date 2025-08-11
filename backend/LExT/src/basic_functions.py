@@ -26,7 +26,16 @@ def call_model(prompt, target_model, provider,api_key, **kwargs):
         )
         return chat_completion.choices[0].message.content
     elif provider == "openrouter":
-        client = OpenAI(api_key=api_key)
+        client = OpenAI( base_url="https://openrouter.ai/api/v1",api_key=api_key)
+        chat_completion = client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model=target_model,
+            **kwargs
+        )
+        return chat_completion.choices[0].message.content
+    elif provider == "gemini":
+        print(api_key,'this is gemini api')
+        client = OpenAI( base_url="https://generativelanguage.googleapis.com/v1beta/openai/",api_key=api_key)
         chat_completion = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
             model=target_model,

@@ -7,13 +7,15 @@ const Settings = () => {
     const [grokApi, setGrokApi] = useState("");     // Current Grok API Key
     const [deepseekApi, setdeepseekApi] = useState("");
     const [openrouterApi, setopenrouterApi] = useState("");
+    const [geminiApi, setGeminiApi] = useState("");
     const [error, setError] = useState("");         // For error messages
     const [success, setSuccess] = useState("");     // For success message
     const openAIModels=[
         { name: "gpt-4.1-2025-04-14" },
         { name: "o4-mini-2025-04-16" },
         { name: "gpt-4.1-nano-2025-04-14" },
-        {name:"gpt-3.5-turbo"}
+        {name:"gpt-3.5-turbo"},
+        {name: "gpt-4o-mini-2024-07-18"}
     ];
     // Ollama models
     const ollamaModels = [
@@ -45,7 +47,7 @@ const Settings = () => {
         { name: "sarvam-m" },
         { name: "devstral-small" },
         { name: "gemma-3n-e4b-it" },
-        { name: "llama-3.3-8b-instruct" },
+        { name: "google/gemma-3n-e2b-it:free" },
         { name: "deephermes-3-mistral-24b-preview" },
         { name: "phi-4-reasoning-plus" },
         { name: "phi-4-reasoning" },
@@ -111,6 +113,13 @@ const Settings = () => {
         { name: "mistral-7b-instruct" }
     ];
     const{ provider, setProvider,providerex, setProviderex, model, setModel, modelex, setModelex } = useProvider();
+
+    const geminiModels = [
+        { name: "models/gemini-1.5-flash-8b" },
+        { name: "gemini-1.5-flash" },
+        { name: "gemini-2.0-flash-exp" },
+        { name: "gemini-2.5-pro-exp-03-25" }
+    ];
     const handleExplanationSettingsUpdate = async () => {
         const payload = {
             preferred_providerex: providerex,
@@ -173,7 +182,7 @@ const Settings = () => {
         console.log("Submit button clicked!");
 
         // Ensure at least one API key is filled
-        if (!openaiApi && !grokApi && !deepseekApi && !openrouterApi) {
+        if (!openaiApi && !grokApi && !deepseekApi && !openrouterApi && !geminiApi) {
             setError("Please enter at least one API key.");
             console.log("Error: Both API fields are empty.");
             return;
@@ -185,11 +194,12 @@ const Settings = () => {
         setSuccess(""); // Clear previous success messages
 
         // Prepare the request payload (only include non-empty values)
-        const payload: { openai_api?: string; grok_api?: string ,deepseek_api?: string, openrouter_api?: string} = {};
+        const payload: { openai_api?: string; grok_api?: string; deepseek_api?: string; openrouter_api?: string; gemini_api?: string } = {};
         if (openaiApi) payload.openai_api = openaiApi;
         if (grokApi) payload.grok_api = grokApi;
         if (deepseekApi) payload.deepseek_api = deepseekApi;
         if (openrouterApi) payload.openrouter_api = openrouterApi;
+        if (geminiApi) payload.gemini_api = geminiApi;
 
 
         console.log("Sending request with payload:", payload);
@@ -213,6 +223,7 @@ const Settings = () => {
                 setSuccess(result.message);
                 setOpenaiApi(""); // Clear input fields on success
                 setGrokApi("");
+                setGeminiApi("");
             } else {
                 console.error("Error updating API keys:", result);
                 setError(result.error || "An error occurred.");
@@ -270,6 +281,16 @@ const Settings = () => {
                                     placeholder="Enter your Openrouter API key (optional)"
                                     value={openrouterApi}
                                     onChange={(e) => setopenrouterApi(e.target.value)}
+                                />
+                            </Form.Group>
+
+                            <Form.Group className="mb-3">
+                                <Form.Label>Gemini API Key</Form.Label>
+                                <Form.Control
+                                    type="text"
+                                    placeholder="Enter your Gemini API key (optional)"
+                                    value={geminiApi}
+                                    onChange={(e) => setGeminiApi(e.target.value)}
                                 />
                             </Form.Group>
 
@@ -334,6 +355,18 @@ const Settings = () => {
                         Open router
                     </ToggleButton>
                     <ToggleButton
+                        id="provider-gemini"
+                        type="radio"
+                        variant={provider === 'gemini' ? 'dark' : 'outline-primary'}
+                        name="provider"
+                        value="gemini"
+                        checked={provider === 'gemini'}
+                        onChange={(e) => setProvider(e.currentTarget.value)}
+                        className="mb-2 me-3"
+                    >
+                        Gemini
+                    </ToggleButton>
+                    <ToggleButton
                         id="provider-ollama"
                         type="radio"
                         variant={provider === 'ollama' ? 'dark' : 'outline-primary'}
@@ -345,6 +378,19 @@ const Settings = () => {
                     >
                         Ollama
                     </ToggleButton>
+                {provider === 'gemini' && (
+                    <div className="mb-3">
+                        <span className="me-3">Select Model:</span>
+                        <Form.Select value={model} onChange={(e) => setModel(e.target.value)}>
+                            <option value="">-- Select a Model --</option>
+                            {geminiModels.map((m) => (
+                                <option key={m.name} value={m.name}>
+                                    {m.name}
+                                </option>
+                            ))}
+                        </Form.Select>
+                    </div>
+                )}
                 </ButtonGroup>
 
                 {provider === 'groq' && (
@@ -462,6 +508,18 @@ const Settings = () => {
                         Openrouter
                     </ToggleButton>
                     <ToggleButton
+                        id="providerex-gemini"
+                        type="radio"
+                        variant={providerex === 'gemini' ? 'dark' : 'outline-primary'}
+                        name="providerex"
+                        value="gemini"
+                        checked={providerex === 'gemini'}
+                        onChange={(e) => setProviderex(e.currentTarget.value)}
+                        className="mb-2 me-3"
+                    >
+                        Gemini
+                    </ToggleButton>
+                    <ToggleButton
                         id="providerex-ollama"
                         type="radio"
                         variant={providerex === 'ollama' ? 'dark' : 'outline-primary'}
@@ -473,6 +531,19 @@ const Settings = () => {
                     >
                         Ollama
                     </ToggleButton>
+                {providerex === 'gemini' && (
+                    <div className="mb-3">
+                        <span className="me-3">Select Model:</span>
+                        <Form.Select value={modelex} onChange={(e) => setModelex(e.target.value)}>
+                            <option value="">-- Select a Model --</option>
+                            {geminiModels.map((m) => (
+                                <option key={m.name} value={m.name}>
+                                    {m.name}
+                                </option>
+                            ))}
+                        </Form.Select>
+                    </div>
+                )}
                 </ButtonGroup>
 
                 {providerex === 'groq' && (
