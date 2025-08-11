@@ -23,7 +23,7 @@ def get_bert_embedding(text):
     elif not isinstance(text, str):
         text = str(text)
     inputs = tokenizer(text, return_tensors='pt')
-    with torch.no_grad():   
+    with torch.no_grad():
         outputs = model(**inputs)
     embeddings = outputs.last_hidden_state.mean(dim=1).squeeze()
     return embeddings.numpy()
@@ -51,22 +51,22 @@ def weighted_accuracy(ground_truth, predicted_exp, ner_pipe=None, row_reference=
         entities = ner_pipe(text)
         words = [entity['word'] for entity in entities]
         return set(words)
-    
+
     ground_truth_words = extract_words_from_ner(ground_truth)
     predicted_words = extract_words_from_ner(predicted_exp)
-    
+
     if predicted_words:
         overlap_fraction = len(ground_truth_words & predicted_words) / len(predicted_words)
     else:
         overlap_fraction = 1e-8
-    
+
     final_accuracy = (overlap_fraction ** 0.2) * base_acc
-    
+
     if save:
         row_reference['predicted_explanation'] = predicted_exp
         row_reference['accuracy'] = final_accuracy
         # save_to_references(row_reference)
-    
+
     return final_accuracy
 
 def context_relevancy(predicted_explanation, ground_question, groq, row_reference={}):
@@ -76,35 +76,35 @@ def context_relevancy(predicted_explanation, ground_question, groq, row_referenc
     # Generate a new question from the predicted explanation using the larger Llama model
     prompt = f"Generate a question that can be completely answered from the below explanation. Just give me the question. Don't add anything else to your response:\n\nExplanation: {predicted_explanation}"
     generated_question = call_llama(prompt, groq).strip()
-    
-    
+
+
     # Compute cosine similarity between the generated question and the ground question
     context_relevancy_score = compute_cosine_similarity_bert(generated_question, ground_question)
-    
+
     # Save the new question in references
     row_reference['generated_question'] = generated_question
     row_reference['context_relevancy'] = context_relevancy_score
     # save_to_references(row_reference)
-    
+
     return context_relevancy_score
 
 def correctness(ground_explanation, predicted_explanation, ground_question, groq, ner_pipe=None, row_reference={}):
 
-    
+
     """
     Compute the final correctness as the average of final accuracy and context relevancy.
     """
     accuracy_score = weighted_accuracy(ground_explanation, predicted_explanation, ner_pipe, row_reference)
     context_relevancy_score = context_relevancy(predicted_explanation, ground_question, groq, row_reference)
     print("Computing Correctness\n")
-    
+
     correctness_score = (accuracy_score + context_relevancy_score) / 2.0
-    
+
     # Print and save results
     print(f"Accuracy: {accuracy_score}, Context Relevancy: {context_relevancy_score}, Correctness: {correctness_score}\n")
     row_reference['final_accuracy'] = accuracy_score
     row_reference['final_context_relevancy'] = context_relevancy_score
     row_reference['correctness'] = correctness_score
     # save_to_references(row_reference)
-    
+
     return accuracy_score, context_relevancy_score, correctness_score

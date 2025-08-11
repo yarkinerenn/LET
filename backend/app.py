@@ -1910,18 +1910,31 @@ def classify_and_explain(dataset_id):
                         "predicted_explanation": explanation,
                         "predicted_label": label,
                     }
-                    context = (
-                        f"Question: {question}\n"
-                        f"Choices:\n"
-                        f"1. {choices[0]}\n"
-                        f"2. {choices[1]}\n"
-                        f"3. {choices[2]}\n"
-                        f"4. {choices[3]}\n"
-                        f"5. {choices[4]}\n"
-                        f"Gold Answer: {gold_label}"
-                    )
+                    context = None
+
+                    # --- DEBUG: Log inputs to LExT for ECQA ---
+                    def _mask_key(k):
+                        try:
+                            if not k:
+                                return str(k)
+                            s = str(k)
+                            return s[:4] + '...' + s[-2:] if len(s) > 8 else '***'
+                        except Exception:
+                            return '<unprintable>'
+
+                    print('[LExT DEBUG][ECQA] context_len         =', 0 if context is None else len(str(context)))
+                    print('[LExT DEBUG][ECQA] question_preview    =', (question[:120] + '...') if isinstance(question, str) and len(question) > 120 else question)
+                    print('[LExT DEBUG][ECQA] ground_expl    =', 0 if not ground_explanation else str(ground_explanation))
+                    print('[LExT DEBUG][ECQA] gold_label          =', gold_label)
+                    print('[LExT DEBUG][ECQA] model_name          =', model_name)
+                    print('[LExT DEBUG][ECQA] provider            =', provider)
+                    print('[LExT DEBUG][ECQA] groq_key            =', _mask_key(groq))
+                    print('[LExT DEBUG][ECQA] api_key             =', _mask_key(api))
+                    print('[LExT DEBUG][ECQA] ner_pipe            =', None)
+                    print('[LExT DEBUG][ECQA] row_reference_keys  =', list(row_reference.keys()))
+
                     trust_score = lext(
-                        context, question, long_answer, gold_label,
+                        context, question, ground_explanation, gold_label,
                         model_name, groq, provider, api, None, row_reference
                     )
                     plausibility_metrics = {

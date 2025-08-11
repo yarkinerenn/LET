@@ -35,12 +35,16 @@ def contextual_faithfulness(context, ground_question, predicted_label, target_mo
               f"For the above question, you predicted {predicted_label}."
               f"Give me 5 most important words from the question that led to this answer without which you would not be able to predict this label. "
               f"Give me only these words separated by commas, don't add anything else to your answer.")
-        important_words = call_model(prompt, target_model,provider,api,)
+        important_words = call_model(prompt, target_model,provider,api)
         if not important_words:
             print("No important words returned for Contextual Faithfulness!")
             return 0
         else: 
             redacted_context = redact_words(ground_question, important_words)
+            print(important_words,'these are important words:')
+            print(redacted_context,'this is the redacted context:')
+
+
     
 
     # Run prediction on redacted context
@@ -50,11 +54,13 @@ def contextual_faithfulness(context, ground_question, predicted_label, target_mo
                     f" Using this, label it as one of these: yes, no, unknown, or random. Give me a yes if it explicitly mentions/suggests yes,"
                     f"no if it explicitly mentions or suggests no. Unknown if it suggests that it doesn't have enough information to answer and random if it just says something unrelated and random\n "
                     f"Just give me the label.Don't add anything else to your answer.")
+    print(label_prompt,'this is the redacted label:')
     label_result = call_llama(label_prompt, groq).strip().lower()
     print(label_result,"this is the label result")
     
     if "unknown" in label_result:
         # Second level: redact one word at a time
+        print('gone into second level of faithfulness')
         words_list = [w.strip() for w in important_words.split(",") if w.strip()]
         unknown_count = 0
         for word in words_list:
