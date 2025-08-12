@@ -51,25 +51,17 @@ def call_model(prompt, target_model, provider,api_key, **kwargs):
     else:
         raise ValueError(f"Unknown provider: {provider}")
 
-def call_llama(prompt, groq_key, model="llama3-70b-8192"):
+def call_llama(prompt, groq_key, model='gpt-4.1-2025-04-14'):
     """
     Call the bigger Llama model using Groq.
     """
     # Set your Groq API key
-    GROQ_API_KEY = groq_key
-    
-    client = Groq(api_key=GROQ_API_KEY) 
+    client = OpenAI(api_key=groq_key)
     chat_completion = client.chat.completions.create(
-        messages=[
-            {
-                "role": "user",
-                "content": f"{prompt}\n\n"
-            }
-        ],
-        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        model=model
     )
-    result = chat_completion.choices[0].message.content
-    return result
+    return chat_completion.choices[0].message.content
 
 
 def get_prediction(context, question, target_model, groq_key,provider,api, include_context=True):

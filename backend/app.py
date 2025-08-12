@@ -1892,7 +1892,7 @@ def classify_and_explain(dataset_id):
                     api = get_user_api_key_gemini()
                 else:
                     api = 'api'
-                groq = get_user_api_key_groq()
+                groq = get_user_api_key_openai()
                 if data_type == "medical":
                     result_data = {
                         "question": question,
