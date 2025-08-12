@@ -16,6 +16,8 @@ interface ECQAEntry {
   shapwithllm_explanations?: Record<string, string>;
   taskB: string;               // Long explanation (as ground-truth explanation)
   trustworthiness_score: number;
+  plausibility_score: number;
+  faithfulness_score: number;
   ratings?: Record<string, { llm?: number; combined?: number }>;
   prediction: string;
   question: string;
@@ -471,10 +473,20 @@ const ExplanationPageECQA = () => {
                               )}
                             </div>
                             {entry.trustworthiness_score !== undefined && entry.trustworthiness_score !== null ? (
-                              <div className="d-flex align-items-center my-3">
+                              <div className="d-flex align-items-center gap-2 my-3 flex-wrap">
                                 <span className="badge rounded-pill bg-warning fs-6 px-3 py-2">
-                                  LExT: {entry.trustworthiness_score.toFixed(2)}
+                                  LExT: {Number(entry.trustworthiness_score).toFixed(2)}
                                 </span>
+                                {entry.plausibility_score !== undefined && entry.plausibility_score !== null && (
+                                  <span className="badge rounded-pill bg-info fs-6 px-3 py-2">
+                                    Plausibility: {Number(entry.plausibility_score).toFixed(2)}
+                                  </span>
+                                )}
+                                {entry.faithfulness_score !== undefined && entry.faithfulness_score !== null && (
+                                  <span className="badge rounded-pill bg-secondary fs-6 px-3 py-2">
+                                    Faithfulness: {Number(entry.faithfulness_score).toFixed(2)}
+                                  </span>
+                                )}
                               </div>
                             ) : (
                               <div className="d-flex align-items-center gap-3 my-3">
@@ -506,7 +518,7 @@ const ExplanationPageECQA = () => {
                                     <span className="text-danger ms-2">{faithfulnessError}</span>
                                   )}
                               </div>
-)}
+                            )}
                             <RatingSection
                               title="Direct Explanation"
                               value={ratings[activeModel]?.llm || 0}

@@ -19,7 +19,9 @@ const Settings = () => {
     ];
     // Ollama models
     const ollamaModels = [
-        { name: "jsk/bio-mistral" }
+        { name: "jsk/bio-mistral" },
+        {name:"phi3.5:latest"},
+        {name:"gemma:2b"},
     ];
     const groqModels = [
         { name: "allam-2-7b" },

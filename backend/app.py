@@ -1719,7 +1719,7 @@ def classify_and_explain(dataset_id):
                     choices = [row.get('q_op1', ''), row.get('q_op2', ''), row.get('q_op3', ''), row.get('q_op4', ''), row.get('q_op5', '')]
                     gold_label = row[label_column]
                     long_answer = row.get("taskB", "")
-                    prompt = f"""Given the following question and five answer options, select the best answer and explain your choice in 2-3 sentences.
+                    prompt = f"""Given the following question and five answer options, select the best answer and explain your choice in 2-3 sentences. YOU MUST ONLY CHOOSE ONE OF THE CHOICES
 
                     Question: {question}
                     
@@ -1731,7 +1731,7 @@ def classify_and_explain(dataset_id):
                     5. {choices[4]}
                     
                     Format your answer as:
-                    Answer: <answer text>
+                    Answer: <Choice as number >
                     Explanation: <your explanation here>
                     """
                 else:
@@ -1742,8 +1742,10 @@ def classify_and_explain(dataset_id):
                     if provider == "ollama":
                         llm = Ollama(model=model_name)
                         content = llm.invoke([prompt])
-                        gatherer_prompt=f''' Format this '{content}' answer as:
-                        Answer: <yes/no/maybe>
+                        print(content, 'this is what ollama prompt')
+
+                        gatherer_prompt=f''' Without changing anything, format this '{content}' answer as:
+                        Answer: <whatever the answer is>
                         Explanation: <explanation here>'''
 
                         response = client.chat.completions.create(
@@ -1752,7 +1754,7 @@ def classify_and_explain(dataset_id):
                             temperature=0
                         )
                         content = response.choices[0].message.content.strip()
-                        print(content, 'this is what ollama prompt')
+                        print(content, 'this is what ollama prompt after gpt')
                         # Parse output
                         if data_type == "sentiment":
                             m = re.search(r"Sentiment:\s*(POSITIVE|NEGATIVE)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
@@ -1782,6 +1784,19 @@ def classify_and_explain(dataset_id):
                             else:
                                 lines = content.split('\n')
                                 label = lines[0].replace("Answer:", "").strip().lower()
+                                explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
+                            score = 1.0
+                        elif data_type == "ecqa":
+                            # Example expected format:
+                            # Answer: <answer text>
+                            # Explanation: <explanation here>
+                            m = re.search(r"Answer:\s*(.+)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
+                            if m:
+                                label = m.group(1).strip()
+                                explanation = m.group(2).strip()
+                            else:
+                                lines = content.split('\n')
+                                label = lines[0].replace("Answer:", "").strip()
                                 explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
                             score = 1.0
                         else:
@@ -2740,6 +2755,8 @@ def get_classificationentry(classification_id, result_id):
                 "context": result.get('context', ''),
                 "long_answer": result.get('long_answer', ''),
                 "trustworthiness_score": result.get("metrics", {}).get("trustworthiness_score"),
+                "plausibility_score": result.get("metrics", {}).get("plausibility_metrics", {}).get("plausibility"),
+                "faithfulness_score": result.get("metrics", {}).get("faithfulness_metrics", {}).get("faithfulness"),
             })
         elif data_type == "sentiment":
             response_data.update({
@@ -2753,6 +2770,9 @@ def get_classificationentry(classification_id, result_id):
                 "ground_explanation": result.get('ground_explanation', ''),
                 "text": result.get('question', ''),
                 "trustworthiness_score": result.get("metrics", {}).get("trustworthiness_score"),
+                "plausibility_score": result.get("metrics", {}).get("plausibility_metrics", {}).get("plausibility"),
+                "faithfulness_score": result.get("metrics", {}).get("faithfulness_metrics", {}).get("faithfulness"),
+
 
             })
         else:
