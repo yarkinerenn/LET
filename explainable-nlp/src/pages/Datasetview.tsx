@@ -167,7 +167,11 @@ const DatasetView = () => {
             // Navigate to classification dashboard after successful classification
             if (["sentiment", "legal"].includes((dataType || "").toLowerCase())) {
               navigate(`/datasets/${datasetId}/classifications/${response.data.classification_id}`);
-            } else {
+            }
+            else if ([ "cqa"].includes((dataType || "").toLowerCase())) {
+              navigate(`/datasets/${datasetId}/classifications_ecqa/${response.data.classification_id}`);
+            }
+            else {
               navigate(`/datasets/${datasetId}/classificationsp/${response.data.classification_id}`);
               console.log('uuumedical');
             }

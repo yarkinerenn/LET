@@ -1749,7 +1749,7 @@ def classify_and_explain(dataset_id):
                         Explanation: <explanation here>'''
 
                         response = client.chat.completions.create(
-                            model='gpt-4.1-2025-04-14',
+                            model='gpt-5-nano-2025-08-07',
                             messages=[{"role": "user", "content":gatherer_prompt }],
                             temperature=0
                         )
@@ -1919,6 +1919,7 @@ def classify_and_explain(dataset_id):
                         context, question, long_answer, row[label_column],
                         model_name, groq, provider, api, ner_pipe, row_reference
                     )
+                    print(row_reference)
                     plausibility_metrics = {
                         "iterative_stability": row_reference.get("iterative_stability"),
                         "paraphrase_stability": row_reference.get("paraphrase_stability"),
@@ -1988,9 +1989,10 @@ def classify_and_explain(dataset_id):
                         context, question, ground_explanation, gold_label,
                         model_name, groq, provider, api, None, row_reference
                     )
+                    print(row_reference)
+
                     plausibility_metrics = {
-                        "iterative_stability": row_reference.get("iterative_stability"),
-                        "paraphrase_stability": row_reference.get("paraphrase_stability"),
+                        "correctness": row_reference.get("correctness"),
                         "consistency": row_reference.get("consistency"),
                         "plausibility": row_reference.get("plausibility")
                     }
@@ -2771,7 +2773,12 @@ def get_classificationentry(classification_id, result_id):
                 "text": result.get('question', ''),
                 "trustworthiness_score": result.get("metrics", {}).get("trustworthiness_score"),
                 "plausibility_score": result.get("metrics", {}).get("plausibility_metrics", {}).get("plausibility"),
+                "correctness": result.get("metrics", {}).get("plausibility_metrics", {}).get("correctness"),
+                "consistency": result.get("metrics", {}).get("plausibility_metrics", {}).get("consistency"),
                 "faithfulness_score": result.get("metrics", {}).get("faithfulness_metrics", {}).get("faithfulness"),
+                "qag_score": result.get("metrics", {}).get("faithfulness_metrics", {}).get("qag_score"),
+                "counterfactual": result.get("metrics", {}).get("faithfulness_metrics", {}).get("counterfactual"),
+                "contextual_faithfulness": result.get("metrics", {}).get("faithfulness_metrics", {}).get("contextual_faithfulness"),
 
 
             })

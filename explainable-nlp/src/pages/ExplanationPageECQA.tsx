@@ -22,6 +22,11 @@ interface ECQAEntry {
   prediction: string;
   question: string;
   ground_explanation: string;
+  correctness: number;
+  consistency: number;
+  qag_score: number;
+  counterfactual: number;
+  contextual_faithfulness: number;
 }
 
 interface ModelInfo {
@@ -473,21 +478,50 @@ const ExplanationPageECQA = () => {
                               )}
                             </div>
                             {entry.trustworthiness_score !== undefined && entry.trustworthiness_score !== null ? (
-                              <div className="d-flex align-items-center gap-2 my-3 flex-wrap">
-                                <span className="badge rounded-pill bg-warning fs-6 px-3 py-2">
-                                  LExT: {Number(entry.trustworthiness_score).toFixed(2)}
-                                </span>
-                                {entry.plausibility_score !== undefined && entry.plausibility_score !== null && (
-                                  <span className="badge rounded-pill bg-info fs-6 px-3 py-2">
-                                    Plausibility: {Number(entry.plausibility_score).toFixed(2)}
+                              <>
+                                <div className="d-flex align-items-center gap-2 my-3 flex-wrap">
+                                  <span className="badge rounded-pill bg-warning fs-6 px-3 py-2">
+                                    LExT: {Number(entry.trustworthiness_score).toFixed(2)}
                                   </span>
+                                  {entry.plausibility_score !== undefined && entry.plausibility_score !== null && (
+                                    <span className="badge rounded-pill bg-info fs-6 px-3 py-2">
+                                      Plausibility: {Number(entry.plausibility_score).toFixed(2)}
+                                    </span>
+                                  )}
+                                  {entry.faithfulness_score !== undefined && entry.faithfulness_score !== null && (
+                                    <span className="badge rounded-pill bg-secondary fs-6 px-3 py-2">
+                                      Faithfulness: {Number(entry.faithfulness_score).toFixed(2)}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Sub-metrics under Plausibility */}
+                                {(entry.correctness !== undefined || entry.consistency !== undefined) && (
+                                  <div className="mt-1 ms-1 small text-muted d-flex flex-wrap gap-3">
+                                    {entry.correctness !== undefined && entry.correctness !== null && (
+                                      <span>Correctness: {Number(entry.correctness).toFixed(2)}</span>
+                                    )}
+                                    {entry.consistency !== undefined && entry.consistency !== null && (
+                                      <span>Consistency: {Number(entry.consistency).toFixed(2)}</span>
+                                    )}
+                                  </div>
                                 )}
-                                {entry.faithfulness_score !== undefined && entry.faithfulness_score !== null && (
-                                  <span className="badge rounded-pill bg-secondary fs-6 px-3 py-2">
-                                    Faithfulness: {Number(entry.faithfulness_score).toFixed(2)}
-                                  </span>
+
+                                {/* Sub-metrics under Faithfulness */}
+                                {(entry.qag_score !== undefined || entry.counterfactual !== undefined) && (
+                                  <div className="mt-1 ms-1 small text-muted d-flex flex-wrap gap-3">
+                                    {entry.qag_score !== undefined && entry.qag_score !== null && (
+                                      <span>QAG: {Number(entry.qag_score).toFixed(2)}</span>
+                                    )}
+                                    {entry.counterfactual !== undefined && entry.counterfactual !== null && (
+                                      <span>Counterfactual: {Number(entry.counterfactual).toFixed(2)}</span>
+                                    )}
+                                    {entry.contextual_faithfulness !== undefined && entry.contextual_faithfulness !== null && (
+                                      <span>Contextual: {Number(entry.contextual_faithfulness).toFixed(2)}</span>
+                                    )}
+                                  </div>
                                 )}
-                              </div>
+                              </>
                             ) : (
                               <div className="d-flex align-items-center gap-3 my-3">
                                 <Button

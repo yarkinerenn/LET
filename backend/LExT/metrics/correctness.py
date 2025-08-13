@@ -9,6 +9,7 @@ from ..src.utils import save_to_references
 # Initialize BERT model and tokenizer
 tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 model = BertModel.from_pretrained('bert-base-uncased')
+model.eval()
 
 # Set transformers logging to error only
 loggers = [logging.getLogger(name) for name in logging.root.manager.loggerDict]
@@ -18,21 +19,35 @@ for logger in loggers:
 
 
 def get_bert_embedding(text):
-    if pd.isna(text):
+    # Guard rails for None/NaN/non-str
+    if text is None or (isinstance(text, float) and pd.isna(text)):
         return None
-    elif not isinstance(text, str):
+    if not isinstance(text, str):
         text = str(text)
-    inputs = tokenizer(text, return_tensors='pt')
+    text = text.strip()
+    if text == "":
+        return None
+
+    # Truncate to BERT's max sequence length to avoid position embedding mismatch (512)
+    inputs = tokenizer(
+        text,
+        return_tensors='pt',
+        truncation=True,
+        max_length=512
+    )
     with torch.no_grad():
         outputs = model(**inputs)
-    embeddings = outputs.last_hidden_state.mean(dim=1).squeeze()
-    return embeddings.numpy()
+    # Mean-pool token embeddings
+    embeddings = outputs.last_hidden_state.mean(dim=1).squeeze(0)
+    return embeddings.cpu().numpy()
 
 def compute_cosine_similarity_bert(text1, text2):
-    if text1 is None or text2 is None:
+    if not text1 or not text2:
         return 0
     vec1 = get_bert_embedding(text1)
     vec2 = get_bert_embedding(text2)
+    if vec1 is None or vec2 is None:
+        return 0
     return cosine_similarity([vec1], [vec2])[0][0]
 
 def weighted_accuracy(ground_truth, predicted_exp, ner_pipe=None, row_reference={}, save=True):
