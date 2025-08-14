@@ -254,6 +254,9 @@ def classify_dataset(dataset_id):
         elif data_type == 'sentiment':
             text_column = data.get('text_column', 'text')
             label_column = data.get('label_column', 'label')
+        elif data_type == 'snarks':
+            text_column='input'
+            label_column='target'
         else:
             text_column = "question"
             label_column = "final_decision"
@@ -1569,6 +1572,9 @@ def classify_and_explain(dataset_id):
         elif data_type == 'ecqa':
             text_column = "q_text"
             label_column = "q_ans"
+        elif data_type == 'snarks':
+            text_column = "input"
+            label_column = "target"
         else:
             text_column = "question"
             label_column = "final_decision"
@@ -1648,7 +1654,7 @@ def classify_and_explain(dataset_id):
 
         sample_size = limit
         print(df[label_column].value_counts(),'dist of labels')
-        if data_type == "ecqa":
+        if data_type == "ecqa" or data_type == "snarks":
             # For ECQA, don't stratify, just sample N entries
             df_sampled = df.sample(n=sample_size, random_state=42)
         elif label_column in df.columns:
@@ -1706,6 +1712,7 @@ def classify_and_explain(dataset_id):
                         Answer: <yes/no/maybe>
                         Explanation: <your explanation here>
                         """
+
                     else:
                         prompt=f"""Assume you are a Medical advisor 
     
@@ -1734,6 +1741,18 @@ def classify_and_explain(dataset_id):
                     Answer: <Choice as number >
                     Explanation: <your explanation here>
                     """
+                elif data_type == "snarks":
+                    question = str(row[text_column])
+                    gold_label = row[label_column]
+                    prompt = f"""Given the following question and two answer options, select the best answer and explain your choice in 2-3 sentences. YOU MUST ONLY CHOOSE ONE OF THE CHOICES
+
+                    Question: {question}
+                    
+            
+                    Format your answer as:
+                    Answer: <Choice as (A) or (B) >
+                    Explanation: <your explanation here>
+                    """
                 else:
                     continue  # skip unknown type
 
@@ -1742,18 +1761,18 @@ def classify_and_explain(dataset_id):
                     if provider == "ollama":
                         llm = Ollama(model=model_name)
                         content = llm.invoke([prompt])
-                        print(content, 'this is what ollama prompt')
-
-                        gatherer_prompt=f''' Without changing anything, format this '{content}' answer as:
-                        Answer: <whatever the answer is>
-                        Explanation: <explanation here>'''
-
-                        response = client.chat.completions.create(
-                            model='gpt-5-nano-2025-08-07',
-                            messages=[{"role": "user", "content":gatherer_prompt }],
-                            temperature=0
-                        )
-                        content = response.choices[0].message.content.strip()
+                        # print(content, 'this is what ollama prompt')
+                        #
+                        # gatherer_prompt=f''' Without changing anything, format this '{content}' answer as:
+                        # Answer: <whatever the answer is>
+                        # Explanation: <explanation here>'''
+                        #
+                        # response = client.chat.completions.create(
+                        #     model='gpt-5-nano-2025-08-07',
+                        #     messages=[{"role": "user", "content":gatherer_prompt }],
+                        #     temperature=0
+                        # )
+                        # content = response.choices[0].message.content.strip()
                         print(content, 'this is what ollama prompt after gpt')
                         # Parse output
                         if data_type == "sentiment":
@@ -1786,7 +1805,7 @@ def classify_and_explain(dataset_id):
                                 label = lines[0].replace("Answer:", "").strip().lower()
                                 explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
                             score = 1.0
-                        elif data_type == "ecqa":
+                        elif data_type == "ecqa" or data_type == "snarks":
                             # Example expected format:
                             # Answer: <answer text>
                             # Explanation: <explanation here>
@@ -1856,7 +1875,7 @@ def classify_and_explain(dataset_id):
                                 label = lines[0].replace("Answer:", "").strip().lower()
                                 explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
                             score = 1.0
-                        elif data_type == "ecqa":
+                        elif data_type == "ecqa" or data_type == "snarks":
                             # Example expected format:
                             # Answer: <answer text>
                             # Explanation: <explanation here>
@@ -1892,7 +1911,7 @@ def classify_and_explain(dataset_id):
                     api = get_user_api_key_gemini()
                 else:
                     api = 'api'
-                groq = get_user_api_key_openai()
+                groq = get_user_api_key_groq()
                 if data_type == "medical":
                     result_data = {
                         "question": question,
@@ -2010,6 +2029,42 @@ def classify_and_explain(dataset_id):
                         "lext_score": trust_score
                     }
                     result_data["metrics"] = metrics
+                elif data_type == "snarks":
+                    question = str(row[text_column])
+                    gold_label = row[label_column]
+                    result_data = {
+                        "question": question,
+                        "label": label,
+                        "score": score,
+                        "llm_explanation": explanation,
+                        "actualLabel": gold_label,
+                        "df_index": int(df_idx),
+                    }
+                    row_reference = {
+                        "ground_question": question,
+                        "ground_explanation": None,
+                        "ground_label": gold_label,
+                        "predicted_explanation": explanation,
+                        "predicted_label": label,
+                    }
+                    context = None
+
+                    faithfulness_score = faithfulness(
+                        explanation, label, question, gold_label,None,
+                        groq, model_name, provider, api, row_reference
+                    )
+                    print(row_reference)
+
+                    faithfulness_metrics = {
+                        "qag_score": row_reference.get("qag_score"),
+                        "counterfactual": row_reference.get("counterfactual_scaled"),
+                        "contextual_faithfulness": row_reference.get("contextual_faithfulness"),
+                        "faithfulness": faithfulness_score
+                    }
+                    metrics = {
+                        "faithfulness_metrics": faithfulness_metrics,
+                    }
+                    result_data["metrics"] = metrics
                 else:
                     # Existing logic for other types
                     result_data = {
@@ -2112,6 +2167,52 @@ def classify_and_explain(dataset_id):
                     "labels": labels,
                     "matrix": cm.tolist()
                 }
+            elif data_type == "snarks":
+                # Binary metrics for snarks: answers are (A) or (B). Treat A as positive (1), B as negative (0).
+                def _snarks_to_bin(x):
+                    if x is None:
+                        return None
+                    t = str(x).strip().upper()
+                    # remove common wrappers
+                    t = t.replace('(', '').replace(')', '').replace('.', '').replace(' ', '')
+                    # normalize prefixes like CHOICEA / OPTIONA / ANSWERA
+                    t = re.sub(r'^(CHOICE|OPTION|ANSWER)', '', t)
+                    if t == 'A':
+                        return 1
+                    if t == 'B':
+                        return 0
+                    return None
+
+                y_true_bin_raw = [_snarks_to_bin(x) for x in y_true]
+                y_pred_bin_raw = [_snarks_to_bin(x) for x in y_pred]
+
+                # keep only pairs where both labels are recognized
+                pairs = [(t, p) for t, p in zip(y_true_bin_raw, y_pred_bin_raw) if t is not None and p is not None]
+                if len(pairs) == 0:
+                    # If nothing recognizable, set zeros and a degenerate confusion matrix
+                    stats["accuracy"] = 0.0
+                    stats["precision"] = 0.0
+                    stats["recall"] = 0.0
+                    stats["f1_score"] = 0.0
+                    stats["confusion_matrix"] = {
+                        "true_negative": 0,
+                        "false_positive": 0,
+                        "false_negative": 0,
+                        "true_positive": 0
+                    }
+                else:
+                    y_true_bin, y_pred_bin = map(list, zip(*pairs))
+                    stats["accuracy"]  = accuracy_score(y_true_bin, y_pred_bin)
+                    stats["precision"] = precision_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+                    stats["recall"]    = recall_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+                    stats["f1_score"]  = f1_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+                    tn, fp, fn, tp = confusion_matrix(y_true_bin, y_pred_bin, labels=[0, 1]).ravel()
+                    stats["confusion_matrix"] = {
+                        "true_negative": int(tn),
+                        "false_positive": int(fp),
+                        "false_negative": int(fn),
+                        "true_positive": int(tp)
+                    }
             else:
                 # For legal and other types, keep previous logic if needed
                 y_true_bin = [1 if x == 'yes' else 0 for x in y_true]
@@ -2148,8 +2249,8 @@ def classify_and_explain(dataset_id):
                 for label in set(y_pred):
                     stats[label] = pred_counts[label]
             else:
-                stats["yes"] = int(sum(y_pred_bin))
-                stats["no"] = int(len(y_pred_bin) - sum(y_pred_bin))
+                stats["(A)"] = int(sum(y_pred_bin))
+                stats["(B)"] = int(len(y_pred_bin) - sum(y_pred_bin))
         except Exception as e:
             print(f"Error calculating metrics: {str(e)}")
 
@@ -2779,8 +2880,19 @@ def get_classificationentry(classification_id, result_id):
                 "qag_score": result.get("metrics", {}).get("faithfulness_metrics", {}).get("qag_score"),
                 "counterfactual": result.get("metrics", {}).get("faithfulness_metrics", {}).get("counterfactual"),
                 "contextual_faithfulness": result.get("metrics", {}).get("faithfulness_metrics", {}).get("contextual_faithfulness"),
-
-
+            })
+        elif data_type == "snarks":
+            # --- Snarks-specific fields ---
+            response_data.update({
+                "question": result.get('question', ''),
+                "text": result.get('question', ''),  # keep a generic 'text' alias like other types
+                'label': result.get('label', ''),
+                # Snarks typically has no separate choices array; options are embedded in question
+                # Expose faithfulness-style metrics if present (matches classify_and_explain storage)
+                "faithfulness_score": result.get("metrics", {}).get("faithfulness_metrics", {}).get("faithfulness"),
+                "qag_score": result.get("metrics", {}).get("faithfulness_metrics", {}).get("qag_score"),
+                "counterfactual": result.get("metrics", {}).get("faithfulness_metrics", {}).get("counterfactual"),
+                "contextual_faithfulness": result.get("metrics", {}).get("faithfulness_metrics", {}).get("contextual_faithfulness"),
             })
         else:
             # fallback for unknown types

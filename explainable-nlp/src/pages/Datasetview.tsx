@@ -33,7 +33,7 @@ const DatasetView = () => {
     const [classifications, setClassifications] = useState<ClassificationItem[]>([]);
     const [classificationLimit, setClassificationLimit] = useState<number | null>(null);
     const { provider, model } = useProvider();
-    const [dataType, setDataType] = useState<'sentiment' | 'legal'|'medical'|'ecqa'>('sentiment');
+    const [dataType, setDataType] = useState<'sentiment' | 'legal'|'medical'|'ecqa'|'snarks'>('sentiment');
     const [exploreLoading, setExploreLoading] = useState(false);
     const handleExploreDataset = async () => {
         setExploreLoading(true);
@@ -165,15 +165,18 @@ const DatasetView = () => {
             );
 
             // Navigate to classification dashboard after successful classification
-            if (["sentiment", "legal"].includes((dataType || "").toLowerCase())) {
-              navigate(`/datasets/${datasetId}/classifications/${response.data.classification_id}`);
+            if (dataType === "sentiment" || dataType === "legal") {
+             navigate(`/datasets/${datasetId}/classifications/${response.data.classification_id}`);
             }
-            else if ([ "cqa"].includes((dataType || "").toLowerCase())) {
-              navigate(`/datasets/${datasetId}/classifications_ecqa/${response.data.classification_id}`);
+            else if(dataType === "ecqa") {
+                 navigate(`/datasets/${datasetId}/classifications_ecqa/${response.data.classification_id}`);
             }
+            else if(dataType === "snarks") {
+                 navigate(`/datasets/${datasetId}/classifications_snarks/${response.data.classification_id}`);
+            }
+
             else {
               navigate(`/datasets/${datasetId}/classificationsp/${response.data.classification_id}`);
-              console.log('uuumedical');
             }
 
 
@@ -218,6 +221,9 @@ const DatasetView = () => {
                   } else if (lowerName.includes('legal') || lowerName.includes('casehold')) {
                     setDataType('legal');
 
+                  }
+                  else if (lowerName.includes('bigbench')){
+                    setDataType('snarks');
                   }
                   else if (lowerName.includes('cqa')){
                     setDataType('ecqa');
@@ -269,7 +275,7 @@ const DatasetView = () => {
                                 className="form-select w-auto"
                                 value={dataType}
                                 onChange={e => {
-                                  setDataType(e.target.value as 'sentiment' | 'legal' | 'medical'|'ecqa');
+                                  setDataType(e.target.value as 'sentiment' | 'legal' | 'medical'|'ecqa'|'snarks');
                                   setUserChangedDataType(true);
 
                                 }}
@@ -279,6 +285,7 @@ const DatasetView = () => {
                                 <option value="legal">Legal</option>
                                   <option value="medical">Medical</option>
                                   <option value="ecqa">CommonsenseQA</option>
+                                  <option value="snarks">Snarks</option>
 
                               </select>
                             </div>
@@ -358,6 +365,10 @@ const DatasetView = () => {
                                             else if(dataType === "ecqa") {
                                                  navigate(`/datasets/${datasetId}/classifications_ecqa/${classification._id}`);
                                             }
+                                            else if(dataType === "snarks") {
+                                                 navigate(`/datasets/${datasetId}/classifications_snarks/${classification._id}`);
+                                            }
+
                                             else {
                                               navigate(`/datasets/${datasetId}/classificationsp/${classification._id}`);
                                             }
