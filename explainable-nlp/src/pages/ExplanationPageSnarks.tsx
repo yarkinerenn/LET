@@ -170,11 +170,11 @@ const ExplanationPageSnarks: React.FC = () => {
 
   const handlePrevious = () => {
     const newIndex = currentResultIndex - 1;
-    navigate(`/datasets/${datasetId}/classifications/${classificationId}/results/${newIndex}`);
+    navigate(`/datasets/${datasetId}/classifications_snarks/${classificationId}/results/${newIndex}`);
   };
   const handleNext = () => {
     const newIndex = currentResultIndex + 1;
-    navigate(`/datasets/${datasetId}/classifications/${classificationId}/results/${newIndex}`);
+    navigate(`/datasets/${datasetId}/classifications_snarks/${classificationId}/results/${newIndex}`);
   };
 
   if (loading) {
