@@ -1936,7 +1936,7 @@ def classify_and_explain(dataset_id):
 
                     trust_score = lext(
                         context, question, long_answer, row[label_column],
-                        model_name, groq, provider, api, ner_pipe, row_reference
+                        model_name, groq, provider, api, ner_pipe,data_type, row_reference
                     )
                     print(row_reference)
                     plausibility_metrics = {
@@ -2006,7 +2006,7 @@ def classify_and_explain(dataset_id):
 
                     trust_score = lext(
                         context, question, ground_explanation, gold_label,
-                        model_name, groq, provider, api, None, row_reference
+                        model_name, groq, provider, api, None,data_type, row_reference
                     )
                     print(row_reference)
 
@@ -2051,7 +2051,7 @@ def classify_and_explain(dataset_id):
 
                     faithfulness_score = faithfulness(
                         explanation, label, question, gold_label,None,
-                        groq, model_name, provider, api, row_reference
+                        groq, model_name, provider, api,data_type, row_reference
                     )
                     print(row_reference)
 

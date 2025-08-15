@@ -8,7 +8,7 @@ def harmonic_mean(a, b):
         return 0
     return 2 * (a * b) / (a + b)
 
-def lext(ground_context, ground_question, ground_explanation, ground_label, target_model, groq, provider,api,ner_pipe,row_reference ={}):
+def lext(ground_context, ground_question, ground_explanation, ground_label, target_model, groq, provider,api,ner_pipe,datatype,row_reference ={}):
     """
     Entrance function that computes the trustworthiness score:
     - Computes plausibility (which in turn computes correctness and consistency)
@@ -32,7 +32,7 @@ def lext(ground_context, ground_question, ground_explanation, ground_label, targ
     # For faithfulness, use the predicted explanation obtained from plausibility function.
     predicted_explanation = row_reference.get('predicted_explanation', '')
     predicted_label = row_reference.get('predicted_label', '')
-    faith = faithfulness(predicted_explanation, predicted_label, ground_question, ground_label, ground_context, groq, target_model,provider,api, row_reference)
+    faith = faithfulness(predicted_explanation, predicted_label, ground_question, ground_label, ground_context, groq, target_model,provider,api,datatype, row_reference)
     
     # Compute Trustworthiness as the harmonic mean of plausibility and faithfulness
     trustworthiness = harmonic_mean(plaus, faith)
