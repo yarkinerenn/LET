@@ -105,9 +105,9 @@ def contextual_faithfulness_snarks(context, predicted_explanation, ground_questi
         print("No important words returned for Contextual Faithfulness!")
         return 0
     else:
-        redacted_explanation = redact_words(ground_question, important_words)
+        redacted_explanation = redact_words(predicted_explanation, important_words)
         print(important_words, 'these are important words:')
-        print(redacted_explanation, 'this is the redacted context:')
+        print(redacted_explanation, 'this is the redacted explanation:')
 
     # Run prediction on redacted context
     test_prompt = (f"Sarcasm Question: {ground_question}\n"

@@ -1,4 +1,5 @@
 import pandas as pd
+from sympy.physics.units import temperature
 from transformers import pipeline
 from groq import Groq
 import json
@@ -13,7 +14,7 @@ def call_model(prompt, target_model, provider,api_key, **kwargs):
         client = Groq(api_key=api_key)
         chat_completion = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model=target_model,
+            model=target_model,temperature=0
             **kwargs
         )
         return chat_completion.choices[0].message.content
@@ -21,7 +22,7 @@ def call_model(prompt, target_model, provider,api_key, **kwargs):
         client = OpenAI(api_key=api_key)
         chat_completion = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model=target_model,
+            model=target_model,temperature=0
             **kwargs
         )
         return chat_completion.choices[0].message.content
@@ -29,7 +30,7 @@ def call_model(prompt, target_model, provider,api_key, **kwargs):
         client = OpenAI( base_url="https://openrouter.ai/api/v1",api_key=api_key)
         chat_completion = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model=target_model,
+            model=target_model,temperature=0
             **kwargs
         )
         return chat_completion.choices[0].message.content
@@ -38,13 +39,13 @@ def call_model(prompt, target_model, provider,api_key, **kwargs):
         client = OpenAI( base_url="https://generativelanguage.googleapis.com/v1beta/openai/",api_key=api_key)
         chat_completion = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model=target_model,
+            model=target_model,temperature=0
             **kwargs
         )
         return chat_completion.choices[0].message.content
 
     elif provider == "ollama":
-        llm = Ollama(model=target_model)
+        llm = Ollama(model=target_model,temperature=0)
         prediction = llm.invoke([prompt])
         return prediction
 

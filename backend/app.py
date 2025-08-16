@@ -1767,7 +1767,7 @@ def classify_and_explain(dataset_id):
                 # --- LLM call (classify + explain) ---
                 if method == "llm":
                     if provider == "ollama":
-                        llm = Ollama(model=model_name)
+                        llm = Ollama(model=model_name,temperature=0)
                         content = llm.invoke([prompt])
                         # print(content, 'this is what ollama prompt')
                         #

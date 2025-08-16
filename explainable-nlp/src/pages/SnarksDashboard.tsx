@@ -1,5 +1,5 @@
 // SnarksDashboard.tsx
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Container, Row, Col, Card, Table, Alert, Spinner, Button, Badge } from 'react-bootstrap';
 import axios from 'axios';
@@ -102,12 +102,18 @@ const SnarksDashboard = () => {
           <Row className="mb-4 align-items-center justify-content-between">
             <Col md="auto">
               <h2 className="mb-2">Snarks Classification Report</h2>
-              <div className="d-flex gap-2 flex-wrap">
+              <div className="d-flex gap-2 flex-wrap mb-4">
                 <Badge bg="info">Method: {classification?.method?.toUpperCase()}</Badge>
                 {classification?.provider && <Badge bg="secondary">Provider: {classification.provider}</Badge>}
                 {classification?.model && <Badge bg="dark">Model: {classification.model}</Badge>}
                 <Badge bg="warning" text="dark">Type: {dataType}</Badge>
               </div>
+              <Button
+            variant="outline-secondary"
+            onClick={() => navigate(`/dataset/${datasetId}`)}
+          >
+            ← Back to datasetview
+          </Button>
               {dataType !== 'snarks' && (
                 <Alert variant="warning" className="mt-3 mb-0 p-2">
                   This run is <strong>{dataType}</strong>, but you opened the Snarks page. Metrics/UI here expect (A)/(B).
