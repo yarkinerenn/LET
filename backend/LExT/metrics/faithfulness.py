@@ -10,7 +10,10 @@ def faithfulness(predicted_explanation, predicted_label, ground_question, ground
       - Contextual Faithfulness
     """
     faithfulness_score = 0
-    counter = counterfactual_faithfulness(predicted_explanation, ground_question, predicted_label, target_model, groq,provider,api, row_reference)
+    if datatype == "snarks":
+        counter = counterfactual_faithfulness(predicted_explanation, ground_question, predicted_label, target_model, groq,provider,api,datatype, row_reference)
+    else:
+        counter = counterfactual_faithfulness(predicted_explanation, ground_question, predicted_label, target_model, groq,provider,api,datatype, row_reference)
     qag_score = qag(predicted_explanation, groq, target_model,provider,api, row_reference)
     if datatype == "medical":
         contextual = contextual_faithfulness(context, predicted_explanation,ground_question, predicted_label, target_model, groq,provider,api, row_reference)
