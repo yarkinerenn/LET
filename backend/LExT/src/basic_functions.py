@@ -14,7 +14,7 @@ def call_model(prompt, target_model, provider,api_key, **kwargs):
         client = Groq(api_key=api_key)
         chat_completion = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model=target_model,temperature=0
+            model=target_model,
             **kwargs
         )
         return chat_completion.choices[0].message.content
@@ -22,7 +22,7 @@ def call_model(prompt, target_model, provider,api_key, **kwargs):
         client = OpenAI(api_key=api_key)
         chat_completion = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model=target_model,temperature=0
+            model=target_model,
             **kwargs
         )
         return chat_completion.choices[0].message.content
@@ -30,7 +30,7 @@ def call_model(prompt, target_model, provider,api_key, **kwargs):
         client = OpenAI( base_url="https://openrouter.ai/api/v1",api_key=api_key)
         chat_completion = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model=target_model,temperature=0
+            model=target_model,
             **kwargs
         )
         return chat_completion.choices[0].message.content
@@ -39,7 +39,7 @@ def call_model(prompt, target_model, provider,api_key, **kwargs):
         client = OpenAI( base_url="https://generativelanguage.googleapis.com/v1beta/openai/",api_key=api_key)
         chat_completion = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model=target_model,temperature=0
+            model=target_model,
             **kwargs
         )
         return chat_completion.choices[0].message.content

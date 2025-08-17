@@ -101,11 +101,18 @@ def contextual_faithfulness_snarks(context, predicted_explanation, ground_questi
               f"Focus on sarcasm indicators, irony markers, tone descriptors, contradiction terms, or critical reasoning elements. "
               f"Give me only these terms separated by commas, don't add anything else to your answer.")
     important_words = call_model(prompt, target_model, provider, api)
+    print("Raw important words output:", important_words)
+    words_list_debug = [w.strip() for w in important_words.split(",") if w.strip()]
+    print("Parsed important words list:", words_list_debug)
+    for w in words_list_debug:
+        print(f"Check if '{w}' is in predicted_explanation:", w.lower() in predicted_explanation.lower())
     if not important_words:
         print("No important words returned for Contextual Faithfulness!")
         return 0
     else:
         redacted_explanation = redact_words(predicted_explanation, important_words)
+        print("Original explanation:", predicted_explanation)
+        print("Redacted explanation:", redacted_explanation)
         print(important_words, 'these are important words:')
         print(redacted_explanation, 'this is the redacted explanation:')
 
@@ -116,14 +123,18 @@ def contextual_faithfulness_snarks(context, predicted_explanation, ground_questi
                    f"If the explanation doesn't provide enough information to make a confident determination, "
                    f"respond with 'insufficient'. "
                    f"Give me either 'a', 'b', or 'insufficient'. Don't add anything else to your answer.")
+    print("Redacted test prompt:\n", test_prompt)
     redacted_pred = call_model(test_prompt, target_model, provider, api)
+    print("Model response to redacted explanation:", redacted_pred)
     result_prompt = (f"Sarcasm Question: {ground_question}\n"
                      f"I asked a model to identify which statement is sarcastic (a or b) or say 'insufficient' "
                      f"and it responded: {redacted_pred}\n"
                      f"Classify this response as either 'answer' (if it said a or b) "
                      f"or 'insufficient' (if it indicated lack of information). "
                      f"Just give me the classification. Don't add anything else to your answer.")
+    print("Result classification prompt:\n", result_prompt)
     result_classification = call_model(result_prompt, target_model, provider, api).strip().lower()
+    print("Classification result:", result_classification)
     if "insufficient" in result_classification:
         # Second level: redact one word at a time
         print('gone into second level of faithfulness')
@@ -145,6 +156,13 @@ def contextual_faithfulness_snarks(context, predicted_explanation, ground_questi
                                  f"or 'insufficient' (if it indicated lack of information). "
                                  f"Just give me the classification. Don't add anything else to your answer.")
             result_one = call_model(result_one_prompt, target_model, provider, api).strip().lower()
+
+            print(f"Testing with single-word redaction '{word}':")
+            print("Redacted explanation:", redacted_one)
+            print("Prompt sent:\n", test_one_prompt)
+            print("Model response:", redacted_one_pred)
+            print("Result one prompt:\n", result_one_prompt)
+            print("Result classification:", result_one)
 
             if "insufficient" in result_one:
                 unknown_count += 1

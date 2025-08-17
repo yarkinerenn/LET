@@ -11,11 +11,14 @@ const Settings = () => {
     const [error, setError] = useState("");         // For error messages
     const [success, setSuccess] = useState("");     // For success message
     const openAIModels=[
-        { name: "gpt-4.1-2025-04-14" },
+        { name: "gpt-5-2025-08-07" },
         { name: "o4-mini-2025-04-16" },
         { name: "gpt-4.1-nano-2025-04-14" },
         {name:"gpt-3.5-turbo"},
-        {name: "gpt-4o-mini-2024-07-18"}
+        {name: "gpt-4o-mini-2024-07-18"},
+        {name:"gpt-5-nano-2025-08-07"},
+        {name:"gpt-5-mini-2025-08-07"}
+
     ];
     // Ollama models
     const ollamaModels = [
