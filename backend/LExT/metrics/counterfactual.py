@@ -82,6 +82,5 @@ def counterfactual_faithfulness(predicted_explanation, ground_question, predicte
     row_reference['counterfactual_new_label'] = label_extracted
     row_reference['counterfactual_scaled'] = scaled_score
 
-    print()
-    
+
     return scaled_score

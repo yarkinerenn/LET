@@ -119,7 +119,7 @@ def contextual_faithfulness_snarks(context, predicted_explanation, ground_questi
     # Run prediction on redacted context
     test_prompt = (f"Sarcasm Question: {ground_question}\n"
                    f"Explanation: {redacted_explanation}\n\n"
-                   f"Based on this explanation, which statement is sarcastic - (a) or (b)? "
+                   f"You must decide which statement (a or b) is sarcastic using ONLY the explanation"
                    f"If the explanation doesn't provide enough information to make a confident determination, "
                    f"respond with 'insufficient'. "
                    f"Give me either 'a', 'b', or 'insufficient'. Don't add anything else to your answer.")
@@ -136,37 +136,48 @@ def contextual_faithfulness_snarks(context, predicted_explanation, ground_questi
     result_classification = call_model(result_prompt, target_model, provider, api).strip().lower()
     print("Classification result:", result_classification)
     if "insufficient" in result_classification:
-        # Second level: redact one word at a time
+        # Second level: ADD-BACK one word at a time
         print('gone into second level of faithfulness')
         words_list = [w.strip() for w in important_words.split(",") if w.strip()]
-        unknown_count = 0
+        answer_count = 0
+
+        def redact_all_except(text, terms, keep):
+            to_redact = [t for t in terms if t.lower() != keep.lower()]
+            return redact_words(text, ",".join(to_redact)) if to_redact else text
+
         for word in words_list:
-            redacted_one = redact_words(predicted_explanation, word)
-            test_one_prompt = (f"Sarcasm Question: {ground_question}\n"
-                               f"Explanation: {redacted_one}\n\n"
-                               f"Based on this explanation, which statement is sarcastic - (a) or (b)? "
-                               f"If the explanation doesn't provide enough information to make a confident determination, "
-                               f"respond with 'insufficient'. "
-                               f"Give me either 'a', 'b', or 'insufficient'. Don't add anything else to your answer.")
+            restored_one = redact_all_except(predicted_explanation, words_list, word)
+            test_one_prompt = (
+                f"Sarcasm Question: {ground_question}\n"
+                f"Explanation: {restored_one}\n\n"
+                f"You must decide which statement (A or B) is sarcastic using ONLY the explanation. "
+                f"If the explanation doesn't provide enough information to make a confident determination, "
+                f"respond with 'insufficient'. "
+                f"Give me either 'a', 'b', or 'insufficient'. Don't add anything else to your answer."
+            )
             redacted_one_pred = call_model(test_one_prompt, target_model, provider, api)
-            result_one_prompt = (f"Sarcasm Question: {ground_question}\n"
-                                 f"I asked a model to identify which statement is sarcastic (a or b) or say 'insufficient' "
-                                 f"and it responded: {redacted_one_pred}\n"
-                                 f"Classify this response as either 'answer' (if it said a or b) "
-                                 f"or 'insufficient' (if it indicated lack of information). "
-                                 f"Just give me the classification. Don't add anything else to your answer.")
+
+            result_one_prompt = (
+                f"Sarcasm Question: {ground_question}\n"
+                f"I asked a model to identify which statement is sarcastic (a or b) or say 'insufficient' "
+                f"and it responded: {redacted_one_pred}\n"
+                f"Classify this response as either 'answer' (if it said a or b) "
+                f"or 'insufficient' (if it indicated lack of information). "
+                f"Just give me the classification. Don't add anything else to your answer."
+            )
             result_one = call_model(result_one_prompt, target_model, provider, api).strip().lower()
 
-            print(f"Testing with single-word redaction '{word}':")
-            print("Redacted explanation:", redacted_one)
+            print(f"Testing with single-word ADD-BACK '{word}':")
+            print("Partially restored explanation:", restored_one)
             print("Prompt sent:\n", test_one_prompt)
             print("Model response:", redacted_one_pred)
             print("Result one prompt:\n", result_one_prompt)
             print("Result classification:", result_one)
 
-            if "insufficient" in result_one:
-                unknown_count += 1
-        final_score = unknown_count / len(words_list) if words_list else 0
+            if "answer" in result_one:
+                answer_count += 1
+
+        final_score = answer_count / len(words_list) if words_list else 0
     else:
         print('no insufficient ')
         final_score = 0

@@ -1744,7 +1744,7 @@ def classify_and_explain(dataset_id):
                 elif data_type == "snarks":
                     question = str(row[text_column])
                     gold_label = row[label_column]
-                    prompt = f"""You are a sarcasm detection system. You will chose (A) or (B) as your answer and explain your decision in 2-3 sentences .
+                    prompt = f"""You are a sarcasm detection system. You will chose (A) or (B) as your answer and explain your decision in 2-3 sentences. Do not quoute from the question any words in your explnanation.
     
                     Question: {question}
                     
@@ -1752,7 +1752,7 @@ def classify_and_explain(dataset_id):
                     Answer: <Choice as (A) or (B) >
                     Explanation: <your explanation here>
                     
-                    An Example:
+                    An Example: 
                     Which statement is sarcastic?
                     Options:
                     (A) yeah just jump from the mountain like everybody else.
