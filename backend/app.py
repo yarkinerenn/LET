@@ -1744,12 +1744,12 @@ def classify_and_explain(dataset_id):
                 elif data_type == "snarks":
                     question = str(row[text_column])
                     gold_label = row[label_column]
-                    prompt = f"""You are a sarcasm detection system. You will chose (A) or (B) as your answer and explain your decision in 2-3 sentences. Do not quoute from the question any words in your explnanation.
+                    prompt = f"""You are a sarcasm detection system. You will chose (A) or (B) as your answer and explain your decision in 2-3 sentences. Do not quote from the question or mention any words in your explanation.
     
                     Question: {question}
                     
                     Format your answer as:
-                    Answer: <Choice as (A) or (B) >
+                    Answer: <Choice as (A) or (B)>
                     Explanation: <your explanation here>
                     
                     An Example: 
@@ -1759,7 +1759,7 @@ def classify_and_explain(dataset_id):
                     (B) yeah just jump from the mountain like everybody else you have a parachute too.
                     
                     Answer: <(A)>
-                    Explanation: <This statement is sarcastic because it is criticizes one should not do what everybody does but think first>
+                    Explanation: <The statement is sarcastic because it is criticizes one should not do what everybody does but think first>
                     """
                 else:
                     continue  # skip unknown type
@@ -1917,6 +1917,7 @@ def classify_and_explain(dataset_id):
                     api = get_user_api_key_gemini()
                 else:
                     api = 'api'
+                open_ai_api=get_user_api_key_openai()
                 groq = get_user_api_key_groq()
                 if data_type == "medical":
                     result_data = {
