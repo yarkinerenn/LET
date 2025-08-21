@@ -1575,6 +1575,9 @@ def classify_and_explain(dataset_id):
         elif data_type == 'snarks':
             text_column = "input"
             label_column = "target"
+        elif data_type == 'hotel':
+            text_column = "text"
+            label_column = "deceptive"
         else:
             text_column = "question"
             label_column = "final_decision"
@@ -1649,6 +1652,8 @@ def classify_and_explain(dataset_id):
             stats.update({"correct": 0, "incorrect": 0})
         elif data_type == "medical":
             stats.update({"correct": 0, "incorrect": 0, "maybe": 0})
+        elif data_type == "hotel":
+            stats.update({"correct": 0, "incorrect": 0})
         elif data_type == "ecqa":
             stats.update({})  # multiclass; will update after
 
@@ -1761,6 +1766,17 @@ def classify_and_explain(dataset_id):
                     Answer: <(A)>
                     Explanation: <The statement is sarcastic because it is criticizes one should not do what everybody does but think first>
                     """
+                elif data_type == "hotel":
+                    question = str(row[text_column])
+                    gold_label = row[label_column]
+                    prompt = f"""You are a deceptive hotel review detection system. You will chose "truthful" or "deceptive" as your answer and explain your decision in 2-3 sentences.
+    
+                    Question: {question}
+                    
+                    Format your answer as:
+                    Answer: <Choice as "truthful" or "deceptive">
+                    Explanation: <your explanation here>
+                    """
                 else:
                     continue  # skip unknown type
 
@@ -1813,7 +1829,7 @@ def classify_and_explain(dataset_id):
                                 label = lines[0].replace("Answer:", "").strip().lower()
                                 explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
                             score = 1.0
-                        elif data_type == "ecqa" or data_type == "snarks":
+                        elif data_type == "ecqa" or data_type == "snarks" or data_type == "hotel":
                             # Example expected format:
                             # Answer: <answer text>
                             # Explanation: <explanation here>
@@ -1881,7 +1897,7 @@ def classify_and_explain(dataset_id):
                                 label = lines[0].replace("Answer:", "").strip().lower()
                                 explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
                             score = 1.0
-                        elif data_type == "ecqa" or data_type == "snarks":
+                        elif data_type == "ecqa" or data_type == "snarks" or data_type == "hotel":
                             # Example expected format:
                             # Answer: <answer text>
                             # Explanation: <explanation here>
@@ -2072,6 +2088,42 @@ def classify_and_explain(dataset_id):
                         "faithfulness_metrics": faithfulness_metrics,
                     }
                     result_data["metrics"] = metrics
+                elif data_type == "hotel":
+                    question = str(row[text_column])
+                    gold_label = row[label_column]
+                    result_data = {
+                        "question": question,
+                        "label": label,
+                        "score": score,
+                        "llm_explanation": explanation,
+                        "actualLabel": gold_label,
+                        "df_index": int(df_idx),
+                    }
+                    row_reference = {
+                        "ground_question": question,
+                        "ground_explanation": None,
+                        "ground_label": gold_label,
+                        "predicted_explanation": explanation,
+                        "predicted_label": label,
+                    }
+                    context = None
+
+                    faithfulness_score = faithfulness(
+                        explanation, label, question, gold_label,None,
+                        groq, model_name, provider, api,data_type, row_reference
+                    )
+                    print(row_reference)
+
+                    faithfulness_metrics = {
+                        "qag_score": row_reference.get("qag_score"),
+                        "counterfactual": row_reference.get("counterfactual_scaled"),
+                        "contextual_faithfulness": row_reference.get("contextual_faithfulness"),
+                        "faithfulness": faithfulness_score
+                    }
+                    metrics = {
+                        "faithfulness_metrics": faithfulness_metrics,
+                    }
+                    result_data["metrics"] = metrics
                 else:
                     # Existing logic for other types
                     result_data = {
@@ -2197,6 +2249,52 @@ def classify_and_explain(dataset_id):
                 pairs = [(t, p) for t, p in zip(y_true_bin_raw, y_pred_bin_raw) if t is not None and p is not None]
                 if len(pairs) == 0:
                     # If nothing recognizable, set zeros and a degenerate confusion matrix
+                    stats["accuracy"] = 0.0
+                    stats["precision"] = 0.0
+                    stats["recall"] = 0.0
+                    stats["f1_score"] = 0.0
+                    stats["confusion_matrix"] = {
+                        "true_negative": 0,
+                        "false_positive": 0,
+                        "false_negative": 0,
+                        "true_positive": 0
+                    }
+                else:
+                    y_true_bin, y_pred_bin = map(list, zip(*pairs))
+                    stats["accuracy"]  = accuracy_score(y_true_bin, y_pred_bin)
+                    stats["precision"] = precision_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+                    stats["recall"]    = recall_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+                    stats["f1_score"]  = f1_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+                    tn, fp, fn, tp = confusion_matrix(y_true_bin, y_pred_bin, labels=[0, 1]).ravel()
+                    stats["confusion_matrix"] = {
+                        "true_negative": int(tn),
+                        "false_positive": int(fp),
+                        "false_negative": int(fn),
+                        "true_positive": int(tp)
+                    }
+            elif data_type == "hotel":
+                y_true_bin, y_pred_bin = [], []
+                # Binary metrics for hotel deception detection: "truthful" vs "deceptive".
+                # Map truthful -> 1, deceptive -> 0
+                def _hotel_to_bin(x):
+                    if x is None:
+                        return None
+                    t = str(x).strip().lower()
+                    # remove punctuation and extra spaces
+                    t = re.sub(r"[^a-z]", "", t)
+                    if t == "truthful":
+                        return 1
+                    if t == "deceptive":
+                        return 0
+                    return None
+
+                y_true_bin_raw = [_hotel_to_bin(x) for x in y_true]
+                y_pred_bin_raw = [_hotel_to_bin(x) for x in y_pred]
+
+                # Keep only valid pairs
+                pairs = [(t, p) for t, p in zip(y_true_bin_raw, y_pred_bin_raw) if t is not None and p is not None]
+                if len(pairs) == 0:
+                    # No valid pairs -> define zeros and a degenerate confusion matrix to avoid ravel() crash
                     stats["accuracy"] = 0.0
                     stats["precision"] = 0.0
                     stats["recall"] = 0.0
@@ -2888,7 +2986,7 @@ def get_classificationentry(classification_id, result_id):
                 "counterfactual": result.get("metrics", {}).get("faithfulness_metrics", {}).get("counterfactual"),
                 "contextual_faithfulness": result.get("metrics", {}).get("faithfulness_metrics", {}).get("contextual_faithfulness"),
             })
-        elif data_type == "snarks":
+        elif data_type == "snarks" or data_type=='hotel':
             # --- Snarks-specific fields ---
             response_data.update({
                 "question": result.get('question', ''),

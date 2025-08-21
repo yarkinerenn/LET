@@ -33,7 +33,7 @@ const DatasetView = () => {
     const [classifications, setClassifications] = useState<ClassificationItem[]>([]);
     const [classificationLimit, setClassificationLimit] = useState<number | null>(null);
     const { provider, model } = useProvider();
-    const [dataType, setDataType] = useState<'sentiment' | 'legal'|'medical'|'ecqa'|'snarks'>('sentiment');
+    const [dataType, setDataType] = useState<'sentiment' | 'legal'|'medical'|'ecqa'|'snarks'|'hotel'>('sentiment');
     const [exploreLoading, setExploreLoading] = useState(false);
     const handleExploreDataset = async () => {
         setExploreLoading(true);
@@ -171,7 +171,7 @@ const DatasetView = () => {
             else if(dataType === "ecqa") {
                  navigate(`/datasets/${datasetId}/classifications_ecqa/${response.data.classification_id}`);
             }
-            else if(dataType === "snarks") {
+            else if(dataType === "snarks" || dataType === "hotel" ) {
                  navigate(`/datasets/${datasetId}/classifications_snarks/${response.data.classification_id}`);
             }
 
@@ -228,6 +228,9 @@ const DatasetView = () => {
                   else if (lowerName.includes('cqa')){
                     setDataType('ecqa');
                   }
+                  else if (lowerName.includes('deceptive')){
+                    setDataType('hotel');
+                  }
                   else {
                     setDataType('sentiment');
                   }
@@ -275,7 +278,7 @@ const DatasetView = () => {
                                 className="form-select w-auto"
                                 value={dataType}
                                 onChange={e => {
-                                  setDataType(e.target.value as 'sentiment' | 'legal' | 'medical'|'ecqa'|'snarks');
+                                  setDataType(e.target.value as 'sentiment' | 'legal' | 'medical'|'ecqa'|'snarks'|'hotel');
                                   setUserChangedDataType(true);
 
                                 }}
@@ -286,6 +289,7 @@ const DatasetView = () => {
                                   <option value="medical">Medical</option>
                                   <option value="ecqa">CommonsenseQA</option>
                                   <option value="snarks">Snarks</option>
+                                  <option value="hotel">Deceptive Hotel</option>
 
                               </select>
                             </div>

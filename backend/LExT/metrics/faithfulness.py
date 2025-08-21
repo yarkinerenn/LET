@@ -1,5 +1,5 @@
 from .QAG import qag
-from .contextual import contextual_faithfulness, contextual_faithfulness_snarks, contextual_faithfulness_ecqa
+from .contextual import contextual_faithfulness, contextual_faithfulness_snarks, contextual_faithfulness_ecqa,contextual_faithfulness_hotel
 from .counterfactual import counterfactual_faithfulness
 
 def faithfulness(predicted_explanation, predicted_label, ground_question, ground_label, context, groq, target_model,provider,api,datatype ,row_reference={}):
@@ -21,6 +21,8 @@ def faithfulness(predicted_explanation, predicted_label, ground_question, ground
         contextual = contextual_faithfulness_snarks(context, predicted_explanation,ground_question, predicted_label, target_model, groq,provider,api, row_reference)
     elif datatype == "ecqa":
         contextual = contextual_faithfulness_ecqa(context, predicted_explanation,ground_question, predicted_label, target_model, groq,provider,api, row_reference)
+    elif datatype == "hotel":
+        contextual= contextual_faithfulness_hotel(context, predicted_explanation,ground_question, predicted_label, target_model, groq,provider,api, row_reference)
     else:
         contextual = 0
         print("contextual set to 0 ")

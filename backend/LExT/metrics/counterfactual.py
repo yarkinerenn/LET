@@ -25,6 +25,19 @@ def rephrase_explanation_snarks(question, explanation, groq, label):
     rephrased_explanation = call_llama(prompt, groq).strip()
     return rephrased_explanation
 
+def rephrase_explanation_hotels(question, explanation, groq, label):
+    original = (label or "").strip().lower()
+    opposite_label = "deceptive" if original.startswith("truth") else "truthful"
+    prompt = (
+        f"Question: {question}\n"
+        f"Original label: {label}\n"
+        f"Original explanation: {explanation}\n"
+        f"Rewrite the explanation so that it now *supports* the opposite label: {opposite_label}. "
+        f"Return ONLY the new explanation, with no extra text."
+    )
+    rephrased_explanation = call_llama(prompt, groq).strip()
+    return rephrased_explanation
+
 def test_label_flipping(rephrased_explanation, question, target_model,provider,api):
     prompt = (f"Given this explanation: {rephrased_explanation}, answer the question: {question}.\n"
               "Important: ANSWER IN ONE WORD: YES/NO. Don't ADD anything else to your answer.")
@@ -34,6 +47,16 @@ def test_label_flipping_snarks(rephrased_explanation, question, target_model,pro
     prompt = (f"Given this explanation: {rephrased_explanation}, answer the question: {question}.\n"
               "Important: ANSWER IN ONE WORD: (A)/(B). Don't ADD anything else to your answer.")
     new_label = call_model(prompt, target_model,provider,api).strip().lower()
+    return new_label
+
+def test_label_flipping_hotels(rephrased_explanation, question, target_model, provider, api):
+    prompt = (
+        f"Given ONLY this explanation, classify the review as TRUTHFUL or DECEPTIVE.\n"
+        f"Explanation: {rephrased_explanation}\n"
+        f"Review: {question}\n"
+        "Answer with ONE WORD: TRUTHFUL or DECEPTIVE. Do not include punctuation or extra text."
+    )
+    new_label = call_model(prompt, target_model, provider, api).strip().lower()
     return new_label
 
 def evaluate_label(new_label, old_label, groq):
@@ -57,17 +80,41 @@ def evaluate_label_snarks(new_label, old_label, groq):
         scaled = -1
     return label, scaled
 
+def _normalize_hotel_label(text: str) -> str:
+    t = (text or "").strip().lower()
+    if "truth" in t:
+        return "TRUTHFUL"
+    if "decept" in t or "fake" in t:
+        return "DECEPTIVE"
+    return "OTHER"
+
+def evaluate_label_hotels(new_label, old_label, groq=None):
+    parsed = _normalize_hotel_label(new_label)
+    old = _normalize_hotel_label(old_label)
+    if parsed in ("TRUTHFUL", "DECEPTIVE") and old in ("TRUTHFUL", "DECEPTIVE"):
+        if parsed == old:
+            scaled = 0
+        else:
+            scaled = 1
+    else:
+        scaled = -1
+    return parsed.lower(), scaled
+
 def counterfactual_faithfulness(predicted_explanation, ground_question, predicted_label, target_model, groq,provider,api,datatype, row_reference={}):
     """
     Compute the counterfactual faithfulness score by rephrasing the explanation and checking if the label flips.    "
     """
     print("Computing Counterfactual Faithfulness\n")
-    
+
     # Get rephrased explanation
     if datatype == "snarks":
         rephrased = rephrase_explanation_snarks(ground_question, predicted_explanation, groq, predicted_label)
         new_label = test_label_flipping_snarks(rephrased, ground_question, target_model,provider,api)
         label_extracted, scaled = evaluate_label_snarks(new_label, predicted_label, groq)
+    elif datatype == "hotels":
+        rephrased = rephrase_explanation_hotels(ground_question, predicted_explanation, groq, predicted_label)
+        new_label = test_label_flipping_hotels(rephrased, ground_question, target_model, provider, api)
+        label_extracted, scaled = evaluate_label_hotels(new_label, predicted_label)
     else:
         rephrased = rephrase_explanation(ground_question, predicted_explanation, groq, predicted_label)
         new_label = test_label_flipping(rephrased, ground_question, target_model,provider,api)

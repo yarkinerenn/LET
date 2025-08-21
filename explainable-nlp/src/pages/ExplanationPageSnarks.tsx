@@ -69,6 +69,7 @@ const ExplanationPageSnarks: React.FC = () => {
         ]);
 
         const e: SnarksEntry = entryRes.data;
+        console.log(entryRes.data);
         setEntry(e);
         setTotalResults(classRes.data.results?.length || 0);
         setCurrentResultIndex(Number(resultId) || 0);
@@ -250,7 +251,7 @@ const ExplanationPageSnarks: React.FC = () => {
                 <div className="text-center">
                   <div className="text-muted small">Actual Label</div>
                   <Badge pill bg="success" className="px-3 py-2 fs-6">
-                    {goldAB || "N/A"}
+                    {entry.actualLabel }
                   </Badge>
                 </div>
               </div>
