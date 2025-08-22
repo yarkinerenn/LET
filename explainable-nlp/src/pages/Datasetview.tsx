@@ -369,7 +369,7 @@ const DatasetView = () => {
                                             else if(dataType === "ecqa") {
                                                  navigate(`/datasets/${datasetId}/classifications_ecqa/${classification._id}`);
                                             }
-                                            else if(dataType === "snarks") {
+                                            else if(dataType === "snarks" || dataType==='hotel') {
                                                  navigate(`/datasets/${datasetId}/classifications_snarks/${classification._id}`);
                                             }
 

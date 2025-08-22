@@ -46,8 +46,8 @@ def call_model(prompt, target_model, provider,api_key, **kwargs):
         return chat_completion.choices[0].message.content
 
     elif provider == "ollama":
-        llm = Ollama(model=target_model,temperature=0)
-        prediction = llm.invoke([prompt])
+        llm = Ollama(model=target_model)
+        prediction = llm.invoke(prompt)
         return prediction
 
     else:

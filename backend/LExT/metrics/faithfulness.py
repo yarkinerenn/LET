@@ -14,14 +14,18 @@ def faithfulness(predicted_explanation, predicted_label, ground_question, ground
         counter = counterfactual_faithfulness(predicted_explanation, ground_question, predicted_label, target_model, groq,provider,api,datatype, row_reference)
     else:
         counter = counterfactual_faithfulness(predicted_explanation, ground_question, predicted_label, target_model, groq,provider,api,datatype, row_reference)
-    qag_score = qag(predicted_explanation, groq, target_model,provider,api, row_reference)
     if datatype == "medical":
+        qag_score = qag(predicted_explanation, groq, target_model,provider,api,datatype, row_reference)
+
         contextual = contextual_faithfulness(context, predicted_explanation,ground_question, predicted_label, target_model, groq,provider,api, row_reference)
     elif datatype == "snarks":
+        qag_score = qag(predicted_explanation, groq, target_model,provider,api,datatype, row_reference)
         contextual = contextual_faithfulness_snarks(context, predicted_explanation,ground_question, predicted_label, target_model, groq,provider,api, row_reference)
     elif datatype == "ecqa":
+        qag_score = qag(predicted_explanation, groq, target_model,provider,api,datatype, row_reference)
         contextual = contextual_faithfulness_ecqa(context, predicted_explanation,ground_question, predicted_label, target_model, groq,provider,api, row_reference)
     elif datatype == "hotel":
+        qag_score = qag(predicted_explanation, groq, target_model,provider,api,datatype, row_reference)
         contextual= contextual_faithfulness_hotel(context, predicted_explanation,ground_question, predicted_label, target_model, groq,provider,api, row_reference)
     else:
         contextual = 0

@@ -1662,6 +1662,23 @@ def classify_and_explain(dataset_id):
         if data_type == "ecqa" or data_type == "snarks":
             # For ECQA, don't stratify, just sample N entries
             df_sampled = df.sample(n=sample_size, random_state=42)
+        elif data_type == "hotel":
+            # stratify by BOTH gold label and polarity
+            strat_cols = [label_column, "polarity"]
+            if all(c in df.columns for c in strat_cols):
+                strata = df[strat_cols].astype(str).agg("||".join, axis=1)
+                try:
+                    df_sampled, _ = train_test_split(
+                        df,
+                        train_size=sample_size,
+                        stratify=strata,
+                        random_state=42,
+                    )
+                except ValueError:
+                    # Fallback if some strata have too few samples
+                    df_sampled = df.sample(n=sample_size, random_state=42)
+            else:
+                df_sampled = df.sample(n=sample_size, random_state=42)
         elif label_column in df.columns:
             df_sampled, _ = train_test_split(
                 df,
@@ -1784,7 +1801,7 @@ def classify_and_explain(dataset_id):
                 if method == "llm":
                     if provider == "ollama":
                         llm = Ollama(model=model_name,temperature=0)
-                        content = llm.invoke([prompt])
+                        content = llm.invoke(prompt)
                         # print(content, 'this is what ollama prompt')
                         #
                         # gatherer_prompt=f''' Without changing anything, format this '{content}' answer as:
