@@ -25,6 +25,7 @@ const Settings = () => {
         { name: "jsk/bio-mistral" },
         {name:"phi3.5:latest"},
         {name:"gemma:2b"},
+        {name:"llama3:8b"},
     ];
     const groqModels = [
         { name: "allam-2-7b" },

@@ -317,6 +317,9 @@ def contextual_faithfulness_hotel(context, predicted_explanation, ground_questio
     result_classification = call_model(result_prompt, target_model, provider, api).strip().lower()
     print("Classification result:", result_classification)
     if "insufficient" in result_classification:
+        row_reference['important_words'] = important_words
+        row_reference['contextual_faithfulness'] = 1
+        return 1
         # Second level: ADD-BACK one word at a time
         print('gone into second level of faithfulness')
         words_list = [w.strip() for w in important_words.split(",") if w.strip()]
