@@ -25,27 +25,14 @@ const Settings = () => {
         { name: "jsk/bio-mistral" },
         {name:"phi3.5:latest"},
         {name:"gemma:2b"},
-        {name:"llama3:8b"},
+        {name:"llama3.1:8b"},
+        {name:"mistral:7b"},
     ];
     const groqModels = [
         { name: "allam-2-7b" },
-        { name: "deepseek-r1-distill-llama-70b" },
-        { name: "deepseek-r1-distill-qwen-32b" },
-        { name: "gemma2-9b-it" },
-        { name: "llama-3.1-8b-instant" },
-        { name: "llama-3.2-11b-vision-preview" },
-        { name: "llama-3.2-1b-preview" },
-        { name: "llama-3.2-3b-preview" },
-        { name: "llama-3.2-90b-vision-preview" },
-        { name: "llama-3.3-70b-specdec" },
         { name: "llama-3.3-70b-versatile" },
-        { name: "llama-guard-3-8b" },
-        { name: "llama3-70b-8192" },
-        { name: "llama3-8b-8192" },
-        { name: "mistral-saba-24b" },
-        { name: "qwen-2.5-32b" },
-        { name: "qwen-2.5-coder-32b" },
-        { name: "qwen-qwq-32b" }
+        { name: "llama-3.1-8b-instant" },
+
     ];
     const openrouterModels = [
         { name: "deepseek/deepseek-r1-0528-qwen3-8b:free" },

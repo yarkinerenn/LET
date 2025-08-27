@@ -278,12 +278,13 @@ def contextual_faithfulness_hotel(context, predicted_explanation, ground_questio
         f"You predicted '{predicted_label}' for the deceptive hotel review detection task. "
         f"Extract the 5 most important words, phrases, or linguistic markers from your explanation "
         f"that were essential to making this prediction. "
-        f"These should be sarcasm indicators, irony markers, tone descriptors, contradiction cues, or critical reasoning elements. "
         f"Return ONLY these 5 items, separated by commas, with no additional text."
     )
     important_words = call_model(prompt, target_model, provider, api)
     print("Raw important words output:", important_words)
-    words_list_debug = [w.strip() for w in important_words.split(",") if w.strip()]
+    words_list_debug = list(
+    {w.strip() for w in important_words.split(",") if w.strip()} | {"truthful", "deceptive"}
+    )
     print("Parsed important words list:", words_list_debug)
     for w in words_list_debug:
         print(f"Check if '{w}' is in predicted_explanation:", w.lower() in predicted_explanation.lower())
