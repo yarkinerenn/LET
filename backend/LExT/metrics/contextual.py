@@ -274,9 +274,8 @@ def contextual_faithfulness_hotel(context, predicted_explanation, ground_questio
 
     prompt = (
         f"Hotel Review: {ground_question}\n"
-        f"Explanation: {predicted_explanation}\n"
         f"You predicted '{predicted_label}' for the deceptive hotel review detection task. "
-        f"Extract the 5 most important words, phrases, or linguistic markers from your explanation "
+        f"Extract the 5 most important words, phrases, or linguistic markers from the review "
         f"that were essential to making this prediction. "
         f"Return ONLY these 5 items, separated by commas, with no additional text."
     )
@@ -287,28 +286,26 @@ def contextual_faithfulness_hotel(context, predicted_explanation, ground_questio
     )
     print("Parsed important words list:", words_list_debug)
     for w in words_list_debug:
-        print(f"Check if '{w}' is in predicted_explanation:", w.lower() in predicted_explanation.lower())
+        print(f"Check if '{w}' is in review:", w.lower() in ground_question.lower())
     if not important_words:
         print("No important words returned for Contextual Faithfulness!")
         return 0
     else:
-        redacted_explanation = redact_words(predicted_explanation, important_words)
-        print("Original explanation:", predicted_explanation)
-        print("Redacted explanation:", redacted_explanation)
+        redacted_question = redact_words(ground_question, important_words)
+        print("Original explanation:", ground_question)
+        print("Redacted explanation:", redacted_question)
         print(important_words, 'these are important words:')
-        print(redacted_explanation, 'this is the redacted explanation:')
 
     # Run prediction on redacted context
-    test_prompt = (f"Hotel review: {ground_question}\n"
-                   f"Explanation: {redacted_explanation}\n\n"
-                   f"You must decide if the hotel review is deceptive or truthful using ONLY the explanation "
-                   f"If the explanation doesn't provide enough information to make a confident determination, "
+    test_prompt = (f"Hotel review: {redacted_question}\n"
+                   f"You must decide if the hotel review is deceptive or truthful."
+                   f"If you can not make a decision with redacted words, "
                    f"respond with 'insufficient'. "
                    f"Give me either 'deceptive', 'truthful', or 'insufficient'. Don't add anything else to your answer.")
     print("Redacted test prompt:\n", test_prompt)
     redacted_pred = call_model(test_prompt, target_model, provider, api)
     print("Model response to redacted explanation:", redacted_pred)
-    result_prompt = (f"Hotel review: {ground_question}\n"
+    result_prompt = (f"Hotel review: {redacted_question}\n"
                      f"I asked a model to identify is the hotel review ('deceptive' or 'truthful') or say 'insufficient' "
                      f"and it responded: {redacted_pred}\n"
                      f"Classify this response as either 'answer' (if it said 'deceptive' or 'truthful') "
@@ -318,9 +315,6 @@ def contextual_faithfulness_hotel(context, predicted_explanation, ground_questio
     result_classification = call_model(result_prompt, target_model, provider, api).strip().lower()
     print("Classification result:", result_classification)
     if "insufficient" in result_classification:
-        row_reference['important_words'] = important_words
-        row_reference['contextual_faithfulness'] = 1
-        return 1
         # Second level: ADD-BACK one word at a time
         print('gone into second level of faithfulness')
         words_list = [w.strip() for w in important_words.split(",") if w.strip()]
@@ -331,11 +325,10 @@ def contextual_faithfulness_hotel(context, predicted_explanation, ground_questio
             return redact_words(text, ",".join(to_redact)) if to_redact else text
 
         for word in words_list:
-            restored_one = redact_all_except(predicted_explanation, words_list, word)
+            restored_one = redact_all_except(ground_question, words_list, word)
             test_one_prompt = (
-                f"Hotel review: {ground_question}\n"
-                f"Explanation: {restored_one}\n\n"
-                f"You must decide if the hotel review is deceptive or truthful using ONLY the explanation "
+                f"Hotel review: {restored_one}\n"
+                f"You must decide if the hotel review is deceptive or truthful  "
                 f"If the explanation doesn't provide enough information to make a confident determination, "
                 f"respond with 'insufficient'. "
                 f"Give me either 'deceptive', 'truthful', or 'insufficient'. Don't add anything else to your answer."
@@ -343,7 +336,7 @@ def contextual_faithfulness_hotel(context, predicted_explanation, ground_questio
             redacted_one_pred = call_model(test_one_prompt, target_model, provider, api)
 
             result_one_prompt = (
-                f"Hotel review: {ground_question}\n"
+                f"Hotel review: {restored_one}\n"
                 f"I asked a model to identify is the hotel review ('deceptive' or 'truthful') or say 'insufficient' "
                 f"and it responded: {redacted_one_pred}\n"
                 f"Classify this response as either 'answer' (if it said 'deceptive' or 'truthful') "
