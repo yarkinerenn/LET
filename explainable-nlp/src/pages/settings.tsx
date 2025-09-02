@@ -371,10 +371,15 @@ const Settings = () => {
                     >
                         Ollama
                     </ToggleButton>
+                </ButtonGroup>
+
                 {provider === 'gemini' && (
                     <div className="mb-3">
                         <span className="me-3">Select Model:</span>
-                        <Form.Select value={model} onChange={(e) => setModel(e.target.value)}>
+                        <Form.Select
+                            value={model}
+                            onChange={(e) => setModel(e.target.value)}
+                        >
                             <option value="">-- Select a Model --</option>
                             {geminiModels.map((m) => (
                                 <option key={m.name} value={m.name}>
@@ -384,7 +389,6 @@ const Settings = () => {
                         </Form.Select>
                     </div>
                 )}
-                </ButtonGroup>
 
                 {provider === 'groq' && (
                     <div className="mb-3">
@@ -524,10 +528,15 @@ const Settings = () => {
                     >
                         Ollama
                     </ToggleButton>
+                </ButtonGroup>
+
                 {providerex === 'gemini' && (
                     <div className="mb-3">
                         <span className="me-3">Select Model:</span>
-                        <Form.Select value={modelex} onChange={(e) => setModelex(e.target.value)}>
+                        <Form.Select
+                            value={modelex}
+                            onChange={(e) => setModelex(e.target.value)}
+                        >
                             <option value="">-- Select a Model --</option>
                             {geminiModels.map((m) => (
                                 <option key={m.name} value={m.name}>
@@ -537,7 +546,6 @@ const Settings = () => {
                         </Form.Select>
                     </div>
                 )}
-                </ButtonGroup>
 
                 {providerex === 'groq' && (
                     <div className="mb-3">
