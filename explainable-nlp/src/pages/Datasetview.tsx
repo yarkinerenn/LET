@@ -366,7 +366,9 @@ const DatasetView = () => {
                                 </div>
                             ) : classifications.length > 0 ? (
                                 <div className="classifications-list" style={{ maxHeight: '400px', overflowY: 'auto', padding: '0 4px' }}>
-                                    {classifications.map((classification) => (
+                                    {classifications
+                                      .filter(c => c.method !== "explore")
+                                      .map((classification) => (
                                        <Card
                                           key={classification._id}
                                           className="mb-3 border-0"
