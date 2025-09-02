@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Container, Row, Col, Table, Button, Alert, Spinner, Card, Badge, Pagination, Form, Modal } from "react-bootstrap";
 import axios from "axios";
@@ -252,6 +252,7 @@ const DatasetView = () => {
             <Row className="py-4">
                 {/* Classification Sidebar */}
 
+
                 <Col md={4} className="border-end border-2">
 
                     <Card className="border-0">
@@ -269,6 +270,14 @@ const DatasetView = () => {
                             "Explore/Annotate Dataset (One by One)"
                         )}
                     </Button>
+                        <div className="d-flex justify-content-between m-4">
+                            <Button
+                                variant="outline-secondary"
+                                onClick={() => navigate(`/datasets`)}
+                            >
+                                ← Back to Datasets
+                            </Button>
+                        </div>
                         <Card.Body>
 
                             <Card.Title className="mb-4">Classification Methods</Card.Title>
