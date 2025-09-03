@@ -1380,6 +1380,9 @@ def classify_and_explain(dataset_id):
                 pred_counts = Counter(y_pred)
                 for label in set(y_pred):
                     stats[label] = pred_counts[label]
+            elif data_type == "snarks":
+                stats["(A)"] = int(sum(y_pred_bin))
+                stats["(B)"] = int(len(y_pred_bin) - sum(y_pred_bin))
             else:
                 stats["(A)"] = int(sum(y_pred_bin))
                 stats["(B)"] = int(len(y_pred_bin) - sum(y_pred_bin))

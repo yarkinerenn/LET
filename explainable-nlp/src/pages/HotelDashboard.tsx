@@ -24,8 +24,8 @@ interface ClassificationStats {
   precision?: number;
   recall?: number;
   f1_score?: number;
-  Deceptive?: number;
-  Truthful?: number;
+   "(A)"?: number;
+  "(B)"?: number;
 }
 
 interface ClassificationData {
@@ -68,6 +68,7 @@ const HotelDashboard = () => {
           axios.get(`http://localhost:5000/api/classification/${classificationId}`, { withCredentials: true }),
           axios.get(`http://localhost:5000/api/classification/stats/${classificationId}`, { withCredentials: true })
         ]);
+        console.log(statsRes.data);
         setClassification(detailRes.data);
         setStats(statsRes.data.stats);
         setLoading(false);
@@ -86,8 +87,8 @@ const HotelDashboard = () => {
   );
 
   const pieData = [
-    { name: "Deceptive", value: stats?.Deceptive || 0 },
-    { name: "Truthful", value: stats?.Truthful || 0 }
+    { name: "Deceptive", value: stats?.["(A)"] || 0 },
+    { name: "Truthful", value: stats?.["(B)"] || 0 }
   ];
 
   return (
@@ -136,7 +137,7 @@ const HotelDashboard = () => {
               <Card className="mb-3">
                 <Card.Body>
                   <Card.Title>Deceptive</Card.Title>
-                  <Card.Text className="display-6 text-danger">{stats?.Deceptive ?? 0}</Card.Text>
+                  <Card.Text className="display-6 text-danger">{stats?.["(A)"] ?? 0}</Card.Text>
                 </Card.Body>
               </Card>
             </Col>
@@ -144,7 +145,7 @@ const HotelDashboard = () => {
               <Card className="mb-3">
                 <Card.Body>
                   <Card.Title>Truthful</Card.Title>
-                  <Card.Text className="display-6 text-success">{stats?.Truthful ?? 0}</Card.Text>
+                  <Card.Text className="display-6 text-success">{stats?.["(B)"] ?? 0}</Card.Text>
                 </Card.Body>
               </Card>
             </Col>
