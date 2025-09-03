@@ -1,6 +1,6 @@
 # routes/classify.py
 import traceback
-
+import re
 import pandas as pd
 from datasets import tqdm
 from flask import Blueprint, jsonify, request, current_app
@@ -558,892 +558,1130 @@ def analyze_text_with_llm():
 @classify_bp.route('/api/classify_and_explain/<dataset_id>', methods=['POST'])
 @login_required
 def classify_and_explain(dataset_id):
-    import re
-    from datetime import datetime
-    from tqdm import tqdm
-    from sklearn.model_selection import train_test_split
-    import pandas as pd
-
-    data = request.json
-    if not data:
-        return jsonify({"error": "No JSON data provided"}), 400
-
     try:
-        # --- Extract parameters ---
-        method = data.get('method')
-        data_type = data.get('dataType', 'sentiment')
-        limit = data.get('limit')
-        if data_type == 'legal':
-            text_column = data.get('text_column', 'citing_prompt')
-            label_column = data.get('label_column', 'label')
-        elif data_type == 'sentiment':
-            text_column = data.get('text_column', 'text')
-            label_column = data.get('label_column', 'label')
-        elif data_type == 'ecqa':
-            text_column = "q_text"
-            label_column = "q_ans"
-        elif data_type == 'snarks':
-            text_column = "input"
-            label_column = "target"
-        elif data_type == 'hotel':
-            text_column = "text"
-            label_column = "deceptive"
-        else:
-            text_column = "question"
-            label_column = "final_decision"
+        # Extract and validate request data
+        data = request.json
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
 
-        if method not in CLASSIFICATION_METHODS:
-            return jsonify({"error": f"Invalid method. Must be one of: {CLASSIFICATION_METHODS}"}), 400
-
-        user_doc = mongo.db.users.find_one({"_id": ObjectId(current_user.id)})
-        provider = user_doc.get('preferred_provider', 'openai')
-        model_name = user_doc.get('preferred_model', 'gpt-3.5-turbo')
-
-
-        dataset = mongo.db.datasets.find_one({"_id": ObjectId(dataset_id)})
-        if not dataset:
-            return jsonify({"error": "Dataset not found"}), 404
-
-        # --- Load dataset ---
-        try:
-            df = pd.read_csv(dataset['filepath'])
-            if text_column not in df.columns:
-                return jsonify({"error": f"Text column '{text_column}' not found in dataset"}), 400
-            if label_column and label_column not in df.columns:
-                return jsonify({"error": f"Label column '{label_column}' not found in dataset"}), 400
-        except Exception as e:
-            return jsonify({"error": f"Failed to load dataset: {str(e)}"}), 500
-
-        # --- Init client ---
-        client = None
-        if method == 'llm':
-            if provider == 'openai':
-                api_key = get_user_api_key_openai()
-                if not api_key:
-                    return jsonify({"error": "OpenAI API key not configured"}), 400
-                client = OpenAI(api_key=api_key)
-            elif provider == 'groq':
-                api_key = get_user_api_key_groq()
-                if not api_key:
-                    return jsonify({"error": "Groq API key not configured"}), 400
-                client = Groq(api_key=api_key)
-            elif provider == 'deepseek':
-                api_key = get_user_api_key_deepseek_api()
-                if not api_key:
-                    return jsonify({"error": "Deepseek API key not configured"}), 400
-                client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com/v1")
-            elif provider == 'ollama':
-                myapi= get_user_api_key_openai()
-                if not myapi:
-                    return jsonify({"error": "OpenAI API key not configured"}), 400
-                client = OpenAI(api_key=myapi)
-                print('using ollama')
-            elif provider =='openrouter':
-                api_key = get_user_api_key_openrouter()
-                if not api_key:
-                    return jsonify({"error": "Openrouter API key not configured"}), 400
-                client = OpenAI( base_url="https://openrouter.ai/api/v1",api_key=api_key)
-            elif provider =='gemini':
-                api_key = get_user_api_key_gemini()
-                print('using gemini', api_key)
-                if not api_key:
-                    return jsonify({"error": "Gemini API key not configured"}), 400
-                client = OpenAI( base_url="https://generativelanguage.googleapis.com/v1beta/openai/",api_key=api_key)
-            else:
-                return jsonify({"error": "Invalid LLM provider"}), 400
-
-        # --- Process rows ---
-        results = []
-        explanations_to_save = []  # To save after we get classification_id
-        stats = {"total": 0}
-        if data_type == "sentiment":
-            stats.update({"positive": 0, "negative": 0})
-        elif data_type == "legal":
-            stats.update({"correct": 0, "incorrect": 0})
-        elif data_type == "medical":
-            stats.update({"correct": 0, "incorrect": 0, "maybe": 0})
-        elif data_type == "hotel":
-            stats.update({"correct": 0, "incorrect": 0})
-        elif data_type == "ecqa":
-            stats.update({})  # multiclass; will update after
-
-        sample_size = limit
-        print(df[label_column].value_counts(),'dist of labels')
-        if data_type == "ecqa" or data_type == "snarks":
-            # For ECQA, don't stratify, just sample N entries
-            df_sampled = df.sample(n=sample_size, random_state=42)
-        elif data_type == "hotel":
-            # stratify by BOTH gold label and polarity
-            strat_cols = [label_column, "polarity"]
-            if all(c in df.columns for c in strat_cols):
-                strata = df[strat_cols].astype(str).agg("||".join, axis=1)
-                try:
-                    df_sampled, _ = train_test_split(
-                        df,
-                        train_size=sample_size,
-                        stratify=strata,
-                        random_state=42,
-                    )
-                except ValueError:
-                    # Fallback if some strata have too few samples
-                    df_sampled = df.sample(n=sample_size, random_state=42)
-            else:
-                df_sampled = df.sample(n=sample_size, random_state=42)
-        elif label_column in df.columns:
-            df_sampled, _ = train_test_split(
-                df,
-                train_size=sample_size,
-                stratify=df[label_column],
-                random_state=42,
-            )
-        else:
-            df_sampled = df.sample(n=sample_size, random_state=42)
-
-        samples = list(df_sampled.iterrows())
-
-        for df_idx, row in samples:
-            try:
-                # --- Prompt Templates ---
-                if data_type == "sentiment":
-                    text = str(row[text_column])
-                    prompt = f"""Given the text below, classify the sentiment as either POSITIVE or NEGATIVE, and briefly explain your reasoning in 2-3 sentences.
-
-                    Text: {text}
-                    
-                    Format your answer as:
-                    Sentiment: <POSITIVE/NEGATIVE>
-                    Explanation: <your explanation here>
-                    """
-                elif data_type == "legal":
-                    context = str(row[text_column])
-                    choices = [row.get(f'holding_{i}', '') for i in range(5)]
-                    holdings_str = "\n".join([f"{i}: {c}" for i, c in enumerate(choices)])
-                    prompt = f"""Assume you are a legal advisor
-
-                    Statement: {context}
-                    Holdings:
-                    {holdings_str}
-                    select the most appropriate holding (choose 0, 1, 2, 3, or 4)  and explain your recommendation
-                    Format your answer as:
-                    Holding: <number>
-                    Explanation: <your explanation here>
-                    """
-                elif data_type == "medical":
-                    question = str(row.get("question", ""))
-                    context = pretty_pubmed_qa(row.get("context", ""))
-                    long_answer= str(row.get("long_answer", ""))
-                    if provider!='ollama':
-                        prompt = f"""Assume you are a Medical advisor 
-    
-                        Question: {question}
-                        Context: {context}
-                        
-                        Answer the questions with Yes/No/maybe and give an explanation for your recommendation.
-                        
-                        Format your answer as:
-                        Answer: <yes/no/maybe>
-                        Explanation: <your explanation here>
-                        """
-
-                    else:
-                        prompt=f"""Assume you are a Medical advisor 
-    
-                        Question: {question}
-                        Context: {context}
-                        
-                        Answer the questions with Yes/No/maybe and give an explanation for your recommendation.
-                        """
-                elif data_type == "ecqa":
-                    question = str(row[text_column])
-                    choices = [row.get('q_op1', ''), row.get('q_op2', ''), row.get('q_op3', ''), row.get('q_op4', ''), row.get('q_op5', '')]
-                    gold_label = row[label_column]
-                    long_answer = row.get("taskB", "")
-                    prompt = f"""Given the following question and five answer options, select the best answer and explain your choice in 2-3 sentences. YOU MUST ONLY CHOOSE ONE OF THE CHOICES
-
-                    Question: {question}
-                    
-                    Choices:
-                    1. {choices[0]}
-                    2. {choices[1]}
-                    3. {choices[2]}
-                    4. {choices[3]}
-                    5. {choices[4]}
-                    
-                    Format your answer as:
-                    Answer: <Choice as number >
-                    Explanation: <your explanation here>
-                    """
-                elif data_type == "snarks":
-                    question = str(row[text_column])
-                    gold_label = row[label_column]
-                    prompt = f"""You are a sarcasm detection system. You will chose (A) or (B) as your answer and explain your decision in 2-3 sentences. Do not quote from the question or mention any words in your explanation.
-    
-                    Question: {question}
-                    
-                    Format your answer as:
-                    Answer: <Choice as (A) or (B)>
-                    Explanation: <your explanation here>
-                    
-                    An Example: 
-                    Which statement is sarcastic?
-                    Options:
-                    (A) yeah just jump from the mountain like everybody else.
-                    (B) yeah just jump from the mountain like everybody else you have a parachute too.
-                    
-                    Answer: <(A)>
-                    Explanation: <The statement is sarcastic because it is criticizes one should not do what everybody does but think first>
-                    """
-                elif data_type == "hotel":
-                    question = str(row[text_column])
-                    gold_label = row[label_column]
-                    prompt = f"""You are a deceptive hotel review detection system. You will chose "truthful" or "deceptive" as your answer and explain your decision in 2-3 sentences.
-    
-                    Question: {question}
-                    
-                    Format your answer as:
-                    Answer: <Choice as "truthful" or "deceptive">
-                    Explanation: <your explanation here>
-                    """
-                else:
-                    continue  # skip unknown type
-
-                # --- LLM call (classify + explain) ---
-                if method == "llm":
-                    if provider == "ollama":
-                        llm = Ollama(model=model_name,temperature=0)
-                        content = llm.invoke(prompt)
-                        # print(content, 'this is what ollama prompt')
-                        #
-                        # gatherer_prompt=f''' Without changing anything, format this '{content}' answer as:
-                        # Answer: <whatever the answer is>
-                        # Explanation: <explanation here>'''
-                        #
-                        # response = client.chat.completions.create(
-                        #     model='gpt-5-nano-2025-08-07',
-                        #     messages=[{"role": "user", "content":gatherer_prompt }],
-                        #     temperature=0
-                        # )
-                        # content = response.choices[0].message.content.strip()
-                        print(content, 'this is what ollama prompt after gpt')
-                        # Parse output
-                        if data_type == "sentiment":
-                            m = re.search(r"Sentiment:\s*(POSITIVE|NEGATIVE)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
-                            if m:
-                                label = m.group(1).upper()
-                                explanation = m.group(2).strip()
-                            else:
-                                lines = content.split('\n')
-                                label = lines[0].replace("Sentiment:", "").strip().upper()
-                                explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
-                            score = 1.0
-                        elif data_type == "legal":
-                            m = re.search(r"Holding:\s*([0-4])[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
-                            if m:
-                                label = int(m.group(1))
-                                explanation = m.group(2).strip()
-                            else:
-                                num_match = re.search(r"[0-4]", content)
-                                label = int(num_match.group(0)) if num_match else -1
-                                explanation = content
-                            score = 1.0
-                        elif data_type == "medical":
-                            m = re.search(r"Answer:\s*(yes|no|maybe)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
-                            if m:
-                                label = m.group(1).lower()
-                                explanation = m.group(2).strip()
-                            else:
-                                lines = content.split('\n')
-                                label = lines[0].replace("Answer:", "").strip().lower()
-                                explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
-                            score = 1.0
-                        elif data_type == "ecqa" or data_type == "snarks" or data_type == "hotel":
-                            # Example expected format:
-                            # Answer: <answer text>
-                            # Explanation: <explanation here>
-                            m = re.search(r"Answer:\s*(.+)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
-                            if m:
-                                label = m.group(1).strip()
-                                explanation = m.group(2).strip()
-                            else:
-                                lines = content.split('\n')
-                                label = lines[0].replace("Answer:", "").strip()
-                                explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
-                            score = 1.0
-                        else:
-                            continue
-                        explanations_to_save.append({
-                            "df_index": int(df_idx),
-                            "explanation": explanation,
-                            "model": model_name,
-                            "type": "llm",
-                        })
-                        # Skip further LLM calls for this row
-                        # Continue to result handling logic
-                        # Use this indentation to match surrounding block
-                        # Rest of code continues unchanged
-                        # Add an "else" after this for non-Ollama providers (keep existing OpenAI/Groq/etc.)
-                        # Example: else: (existing code)
-                        # Do not indent the next 'else' branch for OpenAI/Groq
-                    else:
-                        response = client.chat.completions.create(
-                            model=model_name,
-                            messages=[{"role": "user", "content": prompt}]                        )
-                        content = response.choices[0].message.content.strip()
-                        print(content, 'this is what llm prompt')
-
-                        # Parse output
-                        if data_type == "sentiment":
-                            m = re.search(r"Sentiment:\s*(POSITIVE|NEGATIVE)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
-                            if m:
-                                label = m.group(1).upper()
-                                explanation = m.group(2).strip()
-                            else:
-                                lines = content.split('\n')
-                                label = lines[0].replace("Sentiment:", "").strip().upper()
-                                explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
-                            score = 1.0
-
-                        elif data_type == "legal":
-                            m = re.search(r"Holding:\s*([0-4])[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
-                            if m:
-                                label = int(m.group(1))
-                                explanation = m.group(2).strip()
-                            else:
-                                num_match = re.search(r"[0-4]", content)
-                                label = int(num_match.group(0)) if num_match else -1
-                                explanation = content
-                            score = 1.0
-
-                        elif data_type == "medical":
-                            m = re.search(r"Answer:\s*(yes|no|maybe)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
-                            if m:
-                                label = m.group(1).lower()
-                                explanation = m.group(2).strip()
-                            else:
-                                lines = content.split('\n')
-                                label = lines[0].replace("Answer:", "").strip().lower()
-                                explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
-                            score = 1.0
-                        elif data_type == "ecqa" or data_type == "snarks" or data_type == "hotel":
-                            # Example expected format:
-                            # Answer: <answer text>
-                            # Explanation: <explanation here>
-                            m = re.search(r"Answer:\s*(.+)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
-                            if m:
-                                label = m.group(1).strip()
-                                explanation = m.group(2).strip()
-                            else:
-                                lines = content.split('\n')
-                                label = lines[0].replace("Answer:", "").strip()
-                                explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
-                            score = 1.0
-                        else:
-                            continue
-
-                        # Save explanation for later, track by DataFrame index
-                        explanations_to_save.append({
-                            "df_index": int(df_idx),
-                            "explanation": explanation,
-                            "model": model_name,
-                            "type": "llm",
-                        })
-                else:
-                    label, score, explanation = None, 0.0, ""
-                # --- Assemble result_data for medical and ecqa types ---
-                if provider == "openrouter":
-                    api = get_user_api_key_openrouter()
-                elif provider == "openai":
-                    api = get_user_api_key_openai()
-                elif provider == "groq":
-                    api = get_user_api_key_groq()
-                elif provider == "gemini":
-                    api = get_user_api_key_gemini()
-                else:
-                    api = 'api'
-                open_ai_api=get_user_api_key_openai()
-                groq = get_user_api_key_groq()
-                if data_type == "medical":
-                    result_data = {
-                        "question": question,
-                        "context": context,
-                        "long_answer": long_answer,
-                        "label": label,
-                        "score": score,
-                        "llm_explanation": explanation,
-                        "actualLabel": row[label_column],
-                        "df_index": int(df_idx),
-                    }
-                    # Compute trustworthiness & metrics here
-                    ner_pipe = pipeline("token-classification", model="Clinical-AI-Apollo/Medical-NER", aggregation_strategy='simple')
-                    row_reference = {
-                        "ground_question": question,
-                        "ground_explanation": long_answer,
-                        "ground_label": row[label_column],
-                        "predicted_explanation": explanation,
-                        "predicted_label": label,
-                        "ground_context": context,
-                    }
-
-                    trust_score = lext(
-                        context, question, long_answer, row[label_column],
-                        model_name, groq, provider, api, ner_pipe,data_type, row_reference
-                    )
-                    print(row_reference)
-                    plausibility_metrics = {
-                        "iterative_stability": row_reference.get("iterative_stability"),
-                        "paraphrase_stability": row_reference.get("paraphrase_stability"),
-                        "consistency": row_reference.get("consistency"),
-                        "plausibility": row_reference.get("plausibility")
-                    }
-                    faithfulness_metrics = {
-                        "qag_score": row_reference.get("qag_score"),
-                        "counterfactual": row_reference.get("counterfactual_scaled"),
-                        "contextual_faithfulness": row_reference.get("contextual_faithfulness"),
-                        "faithfulness": row_reference.get("faithfulness")
-                    }
-                    trustworthiness_score = row_reference.get("trustworthiness")
-                    metrics = {
-                        "plausibility_metrics": plausibility_metrics,
-                        "faithfulness_metrics": faithfulness_metrics,
-                        "trustworthiness_score": trustworthiness_score,
-                        "lext_score": trust_score
-                    }
-                    result_data["metrics"] = metrics
-                elif data_type == "ecqa":
-                    question = str(row[text_column])
-                    choices = [row.get('q_op1', ''), row.get('q_op2', ''), row.get('q_op3', ''), row.get('q_op4', ''), row.get('q_op5', '')]
-                    gold_label = row[label_column]
-                    ground_explanation = row.get("taskB", "")
-                    result_data = {
-                        "question": question,
-                        "choices": choices,
-                        "label": label,
-                        "score": score,
-                        "llm_explanation": explanation,
-                        "actualLabel": gold_label,
-                        "ground_explanation": ground_explanation,
-                        "df_index": int(df_idx),
-                    }
-                    row_reference = {
-                        "ground_question": question,
-                        "ground_explanation": ground_explanation,
-                        "ground_label": gold_label,
-                        "predicted_explanation": explanation,
-                        "predicted_label": label,
-                    }
-                    context = None
-
-                    # --- DEBUG: Log inputs to LExT for ECQA ---
-                    def _mask_key(k):
-                        try:
-                            if not k:
-                                return str(k)
-                            s = str(k)
-                            return s[:4] + '...' + s[-2:] if len(s) > 8 else '***'
-                        except Exception:
-                            return '<unprintable>'
-
-                    print('[LExT DEBUG][ECQA] context_len         =', 0 if context is None else len(str(context)))
-                    print('[LExT DEBUG][ECQA] question_preview    =', (question[:120] + '...') if isinstance(question, str) and len(question) > 120 else question)
-                    print('[LExT DEBUG][ECQA] ground_expl    =', 0 if not ground_explanation else str(ground_explanation))
-                    print('[LExT DEBUG][ECQA] gold_label          =', gold_label)
-                    print('[LExT DEBUG][ECQA] model_name          =', model_name)
-                    print('[LExT DEBUG][ECQA] provider            =', provider)
-                    print('[LExT DEBUG][ECQA] groq_key            =', _mask_key(groq))
-                    print('[LExT DEBUG][ECQA] api_key             =', _mask_key(api))
-                    print('[LExT DEBUG][ECQA] ner_pipe            =', None)
-                    print('[LExT DEBUG][ECQA] row_reference_keys  =', list(row_reference.keys()))
-
-                    trust_score = lext(
-                        context, question, ground_explanation, gold_label,
-                        model_name, groq, provider, api, None,data_type, row_reference
-                    )
-                    print(row_reference)
-
-                    plausibility_metrics = {
-                        "correctness": row_reference.get("correctness"),
-                        "consistency": row_reference.get("consistency"),
-                        "plausibility": row_reference.get("plausibility")
-                    }
-                    faithfulness_metrics = {
-                        "qag_score": row_reference.get("qag_score"),
-                        "counterfactual": row_reference.get("counterfactual_scaled"),
-                        "contextual_faithfulness": row_reference.get("contextual_faithfulness"),
-                        "faithfulness": row_reference.get("faithfulness")
-                    }
-                    trustworthiness_score = row_reference.get("trustworthiness")
-                    metrics = {
-                        "plausibility_metrics": plausibility_metrics,
-                        "faithfulness_metrics": faithfulness_metrics,
-                        "trustworthiness_score": trustworthiness_score,
-                        "lext_score": trust_score
-                    }
-                    result_data["metrics"] = metrics
-                elif data_type == "snarks":
-                    question = str(row[text_column])
-                    gold_label = row[label_column]
-                    result_data = {
-                        "question": question,
-                        "label": label,
-                        "score": score,
-                        "llm_explanation": explanation,
-                        "actualLabel": gold_label,
-                        "df_index": int(df_idx),
-                    }
-                    row_reference = {
-                        "ground_question": question,
-                        "ground_explanation": None,
-                        "ground_label": gold_label,
-                        "predicted_explanation": explanation,
-                        "predicted_label": label,
-                    }
-                    context = None
-
-                    faithfulness_score = faithfulness(
-                        explanation, label, question, gold_label,None,
-                        groq, model_name, provider, api,data_type, row_reference
-                    )
-                    print(row_reference)
-
-                    faithfulness_metrics = {
-                        "qag_score": row_reference.get("qag_score"),
-                        "counterfactual": row_reference.get("counterfactual_scaled"),
-                        "contextual_faithfulness": row_reference.get("contextual_faithfulness"),
-                        "faithfulness": faithfulness_score
-                    }
-                    metrics = {
-                        "faithfulness_metrics": faithfulness_metrics,
-                    }
-                    result_data["metrics"] = metrics
-                elif data_type == "hotel":
-                    question = str(row[text_column])
-                    gold_label = row[label_column]
-                    result_data = {
-                        "question": question,
-                        "label": label,
-                        "score": score,
-                        "llm_explanation": explanation,
-                        "actualLabel": gold_label,
-                        "df_index": int(df_idx),
-                    }
-                    row_reference = {
-                        "ground_question": question,
-                        "ground_explanation": None,
-                        "ground_label": gold_label,
-                        "predicted_explanation": explanation,
-                        "predicted_label": label,
-                    }
-                    context = None
-
-                    faithfulness_score = faithfulness(
-                        explanation, label, question, gold_label,None,
-                        groq, model_name, provider, api,data_type, row_reference
-                    )
-                    print(row_reference)
-
-                    faithfulness_metrics = {
-                        "qag_score": row_reference.get("qag_score"),
-                        "counterfactual": row_reference.get("counterfactual_scaled"),
-                        "contextual_faithfulness": row_reference.get("contextual_faithfulness"),
-                        "faithfulness": faithfulness_score
-                    }
-                    metrics = {
-                        "faithfulness_metrics": faithfulness_metrics,
-                    }
-                    result_data["metrics"] = metrics
-                else:
-                    # Existing logic for other types
-                    result_data = {
-                        "label": label,
-                        "score": score,
-                        "llm_explanation": explanation,
-                        "original_data": row.to_dict(),
-                    }
-                    if data_type == "sentiment":
-                        result_data["text"] = text
-                    elif data_type == "legal":
-                        result_data["citing_prompt"] = context
-                        result_data["choices"] = choices
-                    # Include ground truth if present
-                    if label_column:
-                        result_data["actualLabel"] = row[label_column]
-                    # Add DataFrame index for robust tracking
-                    result_data["df_index"] = int(df_idx)
-
-                results.append(result_data)
-                stats["total"] += 1
-                if data_type == "sentiment":
-                    if label == "POSITIVE":
-                        stats["positive"] += 1
-                    else:
-                        stats["negative"] += 1
-                elif data_type == "legal":
-                    if "actualLabel" in result_data and label == result_data["actualLabel"]:
-                        stats["correct"] += 1
-                    else:
-                        stats["incorrect"] += 1
-                elif data_type == "medical":
-                    if label == "maybe":
-                        stats["maybe"] += 1
-                    if "actualLabel" in result_data and label == result_data["actualLabel"]:
-                        stats["correct"] += 1
-                    else:
-                        stats["incorrect"] += 1
-
-            except Exception as e:
-                traceback.print_exc()
-                print(f"Error processing row: {str(e)}")
-                continue
-        model_name = model_name.replace('.', '_') if model_name else None
-
-
-        # --- Metrics ---
-        try:
-            y_true = []
-            y_pred = []
-            for r in results:
-                pred = str(r.get('label', '')).strip().lower()
-                gold = None
-                if 'actualLabel' in r:
-                    gold = str(r['actualLabel']).strip().lower()
-                elif 'original_data' in r:
-                    if 'final_decision' in r['original_data']:
-                        gold = str(r['original_data']['final_decision']).strip().lower()
-                    elif 'label' in r['original_data']:
-                        gold = str(r['original_data']['label']).strip().lower()
-                if gold is not None and pred != '':
-                    y_true.append(gold)
-                    y_pred.append(pred)
-
-            # --- Updated metrics block: 3-class for medical, binary for sentiment, multiclass for ecqa, else binary ---
-            if data_type == "sentiment":
-                y_true_bin = [1 if x in ['positive', '1', 'yes'] else 0 for x in y_true]
-                y_pred_bin = [1 if x in ['positive', '1', 'yes'] else 0 for x in y_pred]
-                stats["accuracy"] = accuracy_score(y_true_bin, y_pred_bin)
-                stats["precision"] = precision_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
-                stats["recall"] = recall_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
-                stats["f1_score"] = f1_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
-                tn, fp, fn, tp = confusion_matrix(y_true_bin, y_pred_bin).ravel()
-                stats["confusion_matrix"] = {
-                    "true_negative": int(tn),
-                    "false_positive": int(fp),
-                    "false_negative": int(fn),
-                    "true_positive": int(tp)
-                }
-            elif data_type == "medical":
-                labels = ["yes", "no", "maybe"]
-                stats["accuracy"] = accuracy_score(y_true, y_pred)
-                stats["precision"] = precision_score(y_true, y_pred, labels=labels, average='macro', zero_division=0)
-                stats["recall"] = recall_score(y_true, y_pred, labels=labels, average='macro', zero_division=0)
-                stats["f1_score"] = f1_score(y_true, y_pred, labels=labels, average='macro', zero_division=0)
-                cm = confusion_matrix(y_true, y_pred, labels=labels)
-                stats["confusion_matrix"] = {
-                    "labels": labels,
-                    "matrix": cm.tolist()
-                }
-            elif data_type == "ecqa":
-                # Multiclass: use unique gold labels as class set
-                labels = sorted(list(set(y_true + y_pred)))
-                stats["accuracy"] = accuracy_score(y_true, y_pred)
-                stats["precision"] = precision_score(y_true, y_pred, labels=labels, average='macro', zero_division=0)
-                stats["recall"] = recall_score(y_true, y_pred, labels=labels, average='macro', zero_division=0)
-                stats["f1_score"] = f1_score(y_true, y_pred, labels=labels, average='macro', zero_division=0)
-                cm = confusion_matrix(y_true, y_pred, labels=labels)
-                stats["confusion_matrix"] = {
-                    "labels": labels,
-                    "matrix": cm.tolist()
-                }
-            elif data_type == "snarks":
-                # Binary metrics for snarks: answers are (A) or (B). Treat A as positive (1), B as negative (0).
-                def _snarks_to_bin(x):
-                    if x is None:
-                        return None
-                    t = str(x).strip().upper()
-                    # remove common wrappers
-                    t = t.replace('(', '').replace(')', '').replace('.', '').replace(' ', '')
-                    # normalize prefixes like CHOICEA / OPTIONA / ANSWERA
-                    t = re.sub(r'^(CHOICE|OPTION|ANSWER)', '', t)
-                    if t == 'A':
-                        return 1
-                    if t == 'B':
-                        return 0
-                    return None
-
-                y_true_bin_raw = [_snarks_to_bin(x) for x in y_true]
-                y_pred_bin_raw = [_snarks_to_bin(x) for x in y_pred]
-
-                # keep only pairs where both labels are recognized
-                pairs = [(t, p) for t, p in zip(y_true_bin_raw, y_pred_bin_raw) if t is not None and p is not None]
-                if len(pairs) == 0:
-                    # If nothing recognizable, set zeros and a degenerate confusion matrix
-                    stats["accuracy"] = 0.0
-                    stats["precision"] = 0.0
-                    stats["recall"] = 0.0
-                    stats["f1_score"] = 0.0
-                    stats["confusion_matrix"] = {
-                        "true_negative": 0,
-                        "false_positive": 0,
-                        "false_negative": 0,
-                        "true_positive": 0
-                    }
-                else:
-                    y_true_bin, y_pred_bin = map(list, zip(*pairs))
-                    stats["accuracy"]  = accuracy_score(y_true_bin, y_pred_bin)
-                    stats["precision"] = precision_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
-                    stats["recall"]    = recall_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
-                    stats["f1_score"]  = f1_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
-                    tn, fp, fn, tp = confusion_matrix(y_true_bin, y_pred_bin, labels=[0, 1]).ravel()
-                    stats["confusion_matrix"] = {
-                        "true_negative": int(tn),
-                        "false_positive": int(fp),
-                        "false_negative": int(fn),
-                        "true_positive": int(tp)
-                    }
-            elif data_type == "hotel":
-                y_true_bin, y_pred_bin = [], []
-                # Binary metrics for hotel deception detection: "truthful" vs "deceptive".
-                # Map truthful -> 1, deceptive -> 0
-                def _hotel_to_bin(x):
-                    if x is None:
-                        return None
-                    t = str(x).strip().lower()
-                    # remove punctuation and extra spaces
-                    t = re.sub(r"[^a-z]", "", t)
-                    if t == "truthful":
-                        return 1
-                    if t == "deceptive":
-                        return 0
-                    return None
-
-                y_true_bin_raw = [_hotel_to_bin(x) for x in y_true]
-                y_pred_bin_raw = [_hotel_to_bin(x) for x in y_pred]
-
-                # Keep only valid pairs
-                pairs = [(t, p) for t, p in zip(y_true_bin_raw, y_pred_bin_raw) if t is not None and p is not None]
-                if len(pairs) == 0:
-                    # No valid pairs -> define zeros and a degenerate confusion matrix to avoid ravel() crash
-                    stats["accuracy"] = 0.0
-                    stats["precision"] = 0.0
-                    stats["recall"] = 0.0
-                    stats["f1_score"] = 0.0
-                    stats["confusion_matrix"] = {
-                        "true_negative": 0,
-                        "false_positive": 0,
-                        "false_negative": 0,
-                        "true_positive": 0
-                    }
-                else:
-                    y_true_bin, y_pred_bin = map(list, zip(*pairs))
-                    stats["accuracy"]  = accuracy_score(y_true_bin, y_pred_bin)
-                    stats["precision"] = precision_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
-                    stats["recall"]    = recall_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
-                    stats["f1_score"]  = f1_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
-                    tn, fp, fn, tp = confusion_matrix(y_true_bin, y_pred_bin, labels=[0, 1]).ravel()
-                    stats["confusion_matrix"] = {
-                        "true_negative": int(tn),
-                        "false_positive": int(fp),
-                        "false_negative": int(fn),
-                        "true_positive": int(tp)
-                    }
-            else:
-                # For legal and other types, keep previous logic if needed
-                y_true_bin = [1 if x == 'yes' else 0 for x in y_true]
-                y_pred_bin = [1 if x == 'yes' else 0 for x in y_pred]
-                stats["accuracy"] = accuracy_score(y_true_bin, y_pred_bin)
-                stats["precision"] = precision_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
-                stats["recall"] = recall_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
-                stats["f1_score"] = f1_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
-                tn, fp, fn, tp = confusion_matrix(y_true_bin, y_pred_bin).ravel()
-                stats["confusion_matrix"] = {
-                    "true_negative": int(tn),
-                    "false_positive": int(fp),
-                    "false_negative": int(fn),
-                    "true_positive": int(tp)
-                }
-
-            # Optionally update each result row with actualLabel
-            for i, result in enumerate(results):
-                if i < len(y_true):
-                    result["actualLabel"] = y_true[i]
-
-            # Count predictions for stats
-            if data_type == "medical":
-                stats["yes"] = sum(1 for x in y_pred if x == "yes")
-                stats["no"] = sum(1 for x in y_pred if x == "no")
-                stats["maybe"] = sum(1 for x in y_pred if x == "maybe")
-            elif data_type == "sentiment":
-                stats["positive"] = sum(1 for x in y_pred if x == "positive")
-                stats["negative"] = sum(1 for x in y_pred if x == "negative")
-            elif data_type == "ecqa":
-                # Count each label
-                from collections import Counter
-                pred_counts = Counter(y_pred)
-                for label in set(y_pred):
-                    stats[label] = pred_counts[label]
-            elif data_type == "snarks":
-                stats["(A)"] = int(sum(y_pred_bin))
-                stats["(B)"] = int(len(y_pred_bin) - sum(y_pred_bin))
-            else:
-                stats["(A)"] = int(sum(y_pred_bin))
-                stats["(B)"] = int(len(y_pred_bin) - sum(y_pred_bin))
-        except Exception as e:
-            print(f"Error calculating metrics: {str(e)}")
-
-        # --- Store all results in DB ---
-        classification_data = {
-            "dataset_id": ObjectId(dataset_id),
-            "user_id": ObjectId(current_user.id),
-            "method": method,
-            "provider": provider if method == 'llm' else None,
-            "model": model_name if method == 'llm' else None,
-            "data_type": data_type,
-            "results": results,
-            "created_at": datetime.now(),
-            "stats": stats
-        }
-        classification_id = mongo.db.classifications.insert_one(classification_data).inserted_id
-        explanation_models = [{'provider': provider, 'model': model_name}]
-        mongo.db.classifications.update_one(
-            {
-                "_id": ObjectId(classification_id),
-                "user_id": ObjectId(current_user.id)  # Ensure user owns this classification
-            },
-            {
-                "$set": {
-                    "explanation_models": explanation_models,
-                    "updated_at": datetime.now()
-                }
-            }
-        )
-
-        # --- Save all explanations AFTER classification_id is known ---
-        for explanation_entry in explanations_to_save:
-            # Find the corresponding result index by matching df_index
-            result_id = next(
-                (i for i, r in enumerate(results) if r.get("df_index") == explanation_entry["df_index"]),
-                None
-            )
-            if result_id is not None:
-                save_explanation_to_db(
-                    classification_id=str(classification_id),
-                    user_id=current_user.id,
-                    result_id=result_id,
-                    explanation_type=explanation_entry["type"],
-                    content=explanation_entry["explanation"],
-                    model_id=explanation_entry["model"].replace('.', '_')
-                )
-
-        return jsonify({
-            "message": "Classification+explanation completed",
-            "classification_id": str(classification_id),
-            "stats": stats,
-            "sample_count": len(results)
-        }), 200
+        # Process the classification request
+        result = process_classification_request(dataset_id, data, current_user)
+        return jsonify(result), 200
 
     except Exception as e:
         traceback.print_exc()
-        print(f"Classification+explanation error: {str(e)}")
-        return jsonify({
-            "error": "Classification+explanation failed",
-            "details": str(e)
-        }), 500
+        return jsonify({"error": "Classification+explanation failed", "details": str(e)}), 500
+
+
+def process_classification_request(dataset_id, data, current_user):
+    """Main function to process classification requests"""
+    # Validate method
+    method = data.get('method')
+    if method not in CLASSIFICATION_METHODS:
+        raise ValueError(f"Invalid method. Must be one of: {CLASSIFICATION_METHODS}")
+
+    # Get data type and column mappings
+    data_type = data.get('dataType', 'sentiment')
+    text_column, label_column = get_column_mappings(data_type, data)
+
+    # Get user preferences
+    user_doc = mongo.db.users.find_one({"_id": ObjectId(current_user.id)})
+    provider = user_doc.get('preferred_provider', 'openai')
+    model_name = user_doc.get('preferred_model', 'gpt-3.5-turbo')
+
+    # Load dataset
+    dataset = mongo.db.datasets.find_one({"_id": ObjectId(dataset_id)})
+    if not dataset:
+        raise ValueError("Dataset not found")
+
+    df = load_and_validate_dataset(dataset['filepath'], text_column, label_column)
+
+    # Initialize client if using LLM method
+    client = initialize_llm_client(method, provider) if method == 'llm' else None
+
+    # Sample data based on data type
+    sample_size = data.get('limit')
+    df_sampled = sample_dataset(df, data_type, label_column, sample_size)
+
+    # Process each sample
+    results, explanations_to_save, stats = process_samples(
+        df_sampled, method, data_type, text_column, label_column,
+        client, provider, model_name
+    )
+
+    # Calculate metrics
+    stats = calculate_metrics(results, data_type, stats)
+
+    # Store results in database
+    classification_id = store_classification_results(
+        dataset_id, current_user.id, method, provider,
+        model_name, data_type, results, stats
+    )
+
+    # Save explanations
+    save_explanations(classification_id, current_user.id, explanations_to_save, results)
+
+    return {
+        "message": "Classification+explanation completed",
+        "classification_id": str(classification_id),
+        "stats": stats,
+        "sample_count": len(results)
+    }
+
+
+def get_column_mappings(data_type, data):
+    """Get appropriate column mappings based on data type"""
+    mappings = {
+        'legal': (data.get('text_column', 'citing_prompt'), data.get('label_column', 'label')),
+        'sentiment': (data.get('text_column', 'text'), data.get('label_column', 'label')),
+        'ecqa': ("q_text", "q_ans"),
+        'snarks': ("input", "target"),
+        'hotel': ("text", "deceptive")
+    }
+    return mappings.get(data_type, ("question", "final_decision"))
+
+
+def load_and_validate_dataset(filepath, text_column, label_column):
+    """Load dataset and validate required columns exist"""
+    try:
+        df = pd.read_csv(filepath)
+
+        if text_column not in df.columns:
+            raise ValueError(f"Text column '{text_column}' not found in dataset")
+        if label_column and label_column not in df.columns:
+            raise ValueError(f"Label column '{label_column}' not found in dataset")
+
+        return df
+    except Exception as e:
+        raise Exception(f"Failed to load dataset: {str(e)}")
+
+
+def initialize_llm_client(method, provider):
+    """Initialize the appropriate LLM client based on provider"""
+    if method != 'llm':
+        return None
+
+    clients = {
+        'openai': initialize_openai_client,
+        'groq': initialize_groq_client,
+        'deepseek': initialize_deepseek_client,
+        'ollama': initialize_ollama_client,
+        'openrouter': initialize_openrouter_client,
+        'gemini': initialize_gemini_client
+    }
+
+    if provider not in clients:
+        raise ValueError("Invalid LLM provider")
+
+    return clients[provider]()
+
+
+def initialize_openai_client():
+    """Initialize OpenAI client"""
+    api_key = get_user_api_key_openai()
+    if not api_key:
+        raise ValueError("OpenAI API key not configured")
+    return OpenAI(api_key=api_key)
+
+
+def initialize_groq_client():
+    """Initialize Groq client"""
+    api_key = get_user_api_key_groq()
+    if not api_key:
+        raise ValueError("Groq API key not configured")
+    return Groq(api_key=api_key)
+
+
+def initialize_deepseek_client():
+    """Initialize DeepSeek client"""
+    api_key = get_user_api_key_deepseek_api()
+    if not api_key:
+        raise ValueError("Deepseek API key not configured")
+    return OpenAI(api_key=api_key, base_url="https://api.deepseek.com/v1")
+
+
+def initialize_ollama_client():
+    """Initialize Ollama client"""
+    api_key = get_user_api_key_openai()  # Uses OpenAI API key for Ollama
+    if not api_key:
+        raise ValueError("OpenAI API key not configured")
+    print('using ollama')
+    return OpenAI(api_key=api_key)
+
+
+def initialize_openrouter_client():
+    """Initialize OpenRouter client"""
+    api_key = get_user_api_key_openrouter()
+    if not api_key:
+        raise ValueError("Openrouter API key not configured")
+    return OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key)
+
+
+def initialize_gemini_client():
+    """Initialize Gemini client"""
+    api_key = get_user_api_key_gemini()
+    print('using gemini', api_key)
+    if not api_key:
+        raise ValueError("Gemini API key not configured")
+    return OpenAI(base_url="https://generativelanguage.googleapis.com/v1beta/openai/", api_key=api_key)
+
+
+def sample_dataset(df, data_type, label_column, sample_size):
+    """Sample the dataset based on data type requirements"""
+    if data_type in ["ecqa", "snarks"]:
+        # For ECQA and SNARKS, don't stratify, just sample N entries
+        return df.sample(n=sample_size, random_state=42)
+
+    elif data_type == "hotel":
+        # Stratify by both gold label and polarity if available
+        strat_cols = [label_column, "polarity"]
+        if all(c in df.columns for c in strat_cols):
+            strata = df[strat_cols].astype(str).agg("||".join, axis=1)
+            try:
+                df_sampled, _ = train_test_split(
+                    df, train_size=sample_size, stratify=strata, random_state=42
+                )
+                return df_sampled
+            except ValueError:
+                # Fallback if some strata have too few samples
+                return df.sample(n=sample_size, random_state=42)
+
+    elif label_column in df.columns:
+        # Standard stratified sampling
+        df_sampled, _ = train_test_split(
+            df, train_size=sample_size, stratify=df[label_column], random_state=42
+        )
+        return df_sampled
+
+    # Default sampling
+    return df.sample(n=sample_size, random_state=42)
+
+
+def process_samples(df_sampled, method, data_type, text_column, label_column, client, provider, model_name):
+    """Process all samples in the dataset"""
+    results = []
+    explanations_to_save = []
+    stats = initialize_stats(data_type)
+
+    for df_idx, row in df_sampled.iterrows():
+        try:
+            result, explanation = process_single_sample(
+                row, df_idx, method, data_type, text_column, label_column,
+                client, provider, model_name
+            )
+
+            if result:
+                results.append(result)
+                if explanation:
+                    explanations_to_save.append(explanation)
+
+                # Update statistics
+                update_stats(stats, data_type, result)
+
+        except Exception as e:
+            traceback.print_exc()
+            print(f"Error processing row: {str(e)}")
+            continue
+
+    return results, explanations_to_save, stats
+
+
+def initialize_stats(data_type):
+    """Initialize statistics based on data type"""
+    stats = {"total": 0}
+
+    if data_type == "sentiment":
+        stats.update({"positive": 0, "negative": 0})
+    elif data_type == "legal":
+        stats.update({"correct": 0, "incorrect": 0})
+    elif data_type == "medical":
+        stats.update({"correct": 0, "incorrect": 0, "maybe": 0})
+    elif data_type == "hotel":
+        stats.update({"correct": 0, "incorrect": 0})
+    # For ECQA, we'll update stats dynamically based on labels
+
+    return stats
+
+
+def process_single_sample(row, df_idx, method, data_type, text_column, label_column, client, provider, model_name):
+    """Process a single sample row"""
+    # Generate appropriate prompt
+    prompt = generate_prompt(data_type, row, text_column, provider)
+
+    # Get LLM response if using LLM method
+    if method == 'llm':
+        label, score, explanation, content = get_llm_response(
+            client, provider, model_name, prompt, data_type
+        )
+
+        # Save explanation for later storage
+        explanation_data = {
+            "df_index": int(df_idx),
+            "explanation": explanation,
+            "model": model_name,
+            "type": "llm",
+        }
+    else:
+        label, score, explanation, content = None, 0.0, "", ""
+        explanation_data = None
+
+    # Prepare result data based on data type
+    result_data = prepare_result_data(
+        data_type, row, label_column, label, score, explanation, df_idx, content
+    )
+
+    # Calculate additional metrics for certain data types
+    if data_type in ["medical", "ecqa", "snarks", "hotel"]:
+        result_data = calculate_additional_metrics(
+            data_type, result_data, provider, model_name
+        )
+
+    return result_data, explanation_data
+
+
+def generate_prompt(data_type, row, text_column, provider):
+    """Generate appropriate prompt based on data type"""
+    prompt_generators = {
+        "sentiment": generate_sentiment_prompt,
+        "legal": generate_legal_prompt,
+        "medical": generate_medical_prompt,
+        "ecqa": generate_ecqa_prompt,
+        "snarks": generate_snarks_prompt,
+        "hotel": generate_hotel_prompt
+    }
+
+    if data_type in prompt_generators:
+        return prompt_generators[data_type](row, text_column, provider)
+
+    return ""
+
+
+def generate_sentiment_prompt(row, text_column, provider):
+    """Generate sentiment analysis prompt"""
+    text = str(row[text_column])
+    return f"""Given the text below, classify the sentiment as either POSITIVE or NEGATIVE, and briefly explain your reasoning in 2-3 sentences.
+
+Text: {text}
+
+Format your answer as:
+Sentiment: <POSITIVE/NEGATIVE>
+Explanation: <your explanation here>
+"""
+
+
+def generate_legal_prompt(row, text_column, provider):
+    """Generate legal analysis prompt"""
+    context = str(row[text_column])
+    choices = [row.get(f'holding_{i}', '') for i in range(5)]
+    holdings_str = "\n".join([f"{i}: {c}" for i, c in enumerate(choices)])
+
+    return f"""Assume you are a legal advisor
+
+        Statement: {context}
+        Holdings:
+        {holdings_str}
+        select the most appropriate holding (choose 0, 1, 2, 3, or 4) and explain your recommendation.
+        
+        Format your answer as:
+        Holding: <number>
+        Explanation: <your explanation here>
+        """
+
+
+def generate_medical_prompt(row, text_column, provider):
+    """Generate medical analysis prompt"""
+    question = str(row.get("question", ""))
+    context = pretty_pubmed_qa(row.get("context", ""))
+
+    if provider != 'ollama':
+        return f"""Assume you are a Medical advisor 
+
+Question: {question}
+Context: {context}
+
+Answer the questions with Yes/No/maybe and give an explanation for your recommendation.
+
+Format your answer as:
+Answer: <yes/no/maybe>
+Explanation: <your explanation here>
+"""
+    else:
+        return f"""Assume you are a Medical advisor 
+
+Question: {question}
+Context: {context}
+
+Answer the questions with Yes/No/maybe and give an explanation for your recommendation.
+"""
+
+
+def generate_ecqa_prompt(row, text_column, provider):
+    """Generate ECQA prompt"""
+    question = str(row[text_column])
+    choices = [
+        row.get('q_op1', ''), row.get('q_op2', ''),
+        row.get('q_op3', ''), row.get('q_op4', ''), row.get('q_op5', '')
+    ]
+
+    return f"""Given the following question and five answer options, select the best answer and explain your choice in 2-3 sentences. YOU MUST ONLY CHOOSE ONE OF THE CHOICES
+
+Question: {question}
+
+Choices:
+1. {choices[0]}
+2. {choices[1]}
+3. {choices[2]}
+4. {choices[3]}
+5. {choices[4]}
+
+Format your answer as:
+Answer: <Choice as number>
+Explanation: <your explanation here>
+"""
+
+
+def generate_snarks_prompt(row, text_column, provider):
+    """Generate SNARKS sarcasm detection prompt"""
+    question = str(row[text_column])
+
+    return f"""You are a sarcasm detection system. You will chose (A) or (B) as your answer and explain your decision in 2-3 sentences. Do not quote from the question or mention any words in your explanation.
+
+Question: {question}
+
+Format your answer as:
+Answer: <Choice as (A) or (B)>
+Explanation: <your explanation here>
+
+An Example: 
+Which statement is sarcastic?
+Options:
+(A) yeah just jump from the mountain like everybody else.
+(B) yeah just jump from the mountain like everybody else you have a parachute too.
+
+Answer: <(A)>
+Explanation: <The statement is sarcastic because it is criticizes one should not do what everybody does but think first>
+"""
+
+
+def generate_hotel_prompt(row, text_column, provider):
+    """Generate hotel review deception detection prompt"""
+    question = str(row[text_column])
+
+    return f"""You are a deceptive hotel review detection system. You will chose "truthful" or "deceptive" as your answer and explain your decision in 2-3 sentences.
+
+Question: {question}
+
+Format your answer as:
+Answer: <Choice as "truthful" or "deceptive">
+Explanation: <your explanation here>
+"""
+
+
+def get_llm_response(client, provider, model_name, prompt, data_type):
+    """Get response from LLM based on provider"""
+    if provider == "ollama":
+        return get_ollama_response(prompt, data_type, model_name)
+    else:
+        return get_standard_llm_response(client, model_name, prompt, data_type)
+
+
+def get_standard_llm_response(client, model_name, prompt, data_type):
+    """Get response from standard LLM APIs (OpenAI, Groq, etc.)"""
+    response = client.chat.completions.create(
+        model=model_name,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    content = response.choices[0].message.content.strip()
+    print(content, 'this is what llm prompt')
+
+    return parse_llm_response(content, data_type)
+
+
+def get_ollama_response(prompt, data_type, model_name):
+    """Get response from Ollama with special handling"""
+    llm = Ollama(model=model_name, temperature=0)
+    content = llm.invoke(prompt)
+    print(content, 'this is what ollama prompt')
+
+    # For Ollama, we might need additional processing
+    # This is a placeholder for any Ollama-specific processing
+
+    return parse_llm_response(content, data_type)
+
+
+def parse_llm_response(content, data_type):
+    """Parse LLM response based on data type"""
+    parsers = {
+        "sentiment": parse_sentiment_response,
+        "legal": parse_legal_response,
+        "medical": parse_medical_response,
+        "ecqa": parse_ecqa_response,
+        "snarks": parse_snarks_response,
+        "hotel": parse_hotel_response
+    }
+
+    if data_type in parsers:
+        return parsers[data_type](content)
+
+    return None, 0.0, "", content
+
+
+def parse_sentiment_response(content):
+    """Parse sentiment analysis response"""
+    m = re.search(r"Sentiment:\s*(POSITIVE|NEGATIVE)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
+    if m:
+        label = m.group(1).upper()
+        explanation = m.group(2).strip()
+    else:
+        lines = content.split('\n')
+        label = lines[0].replace("Sentiment:", "").strip().upper()
+        explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
+
+    return label, 1.0, explanation, content
+
+
+def parse_legal_response(content):
+    """Parse legal analysis response"""
+    m = re.search(r"Holding:\s*([0-4])[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
+    if m:
+        label = int(m.group(1))
+        explanation = m.group(2).strip()
+    else:
+        num_match = re.search(r"[0-4]", content)
+        label = int(num_match.group(0)) if num_match else -1
+        explanation = content
+
+    return label, 1.0, explanation, content
+
+
+def parse_medical_response(content):
+    """Parse medical analysis response"""
+    m = re.search(r"Answer:\s*(yes|no|maybe)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
+    if m:
+        label = m.group(1).lower()
+        explanation = m.group(2).strip()
+    else:
+        lines = content.split('\n')
+        label = lines[0].replace("Answer:", "").strip().lower()
+        explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
+
+    return label, 1.0, explanation, content
+
+
+def parse_ecqa_response(content):
+    """Parse ECQA response - also used for SNARKS and hotel"""
+    return parse_general_response(content)
+
+
+def parse_snarks_response(content):
+    """Parse SNARKS response"""
+    return parse_general_response(content)
+
+
+def parse_hotel_response(content):
+    """Parse hotel review response"""
+    return parse_general_response(content)
+
+
+def parse_general_response(content):
+    """Parse general response format: Answer: ... Explanation: ..."""
+    m = re.search(r"Answer:\s*(.+)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
+    if m:
+        label = m.group(1).strip()
+        explanation = m.group(2).strip()
+    else:
+        lines = content.split('\n')
+        label = lines[0].replace("Answer:", "").strip()
+        explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
+
+    return label, 1.0, explanation, content
+
+
+def prepare_result_data(data_type, row, label_column, label, score, explanation, df_idx, content):
+    """Prepare result data based on data type"""
+    result_preparers = {
+        "medical": prepare_medical_result,
+        "ecqa": prepare_ecqa_result,
+        "snarks": prepare_snarks_result,
+        "hotel": prepare_hotel_result
+    }
+
+    if data_type in result_preparers:
+        return result_preparers[data_type](row, label_column, label, score, explanation, df_idx)
+
+    # Default result preparation
+    result_data = {
+        "label": label,
+        "score": score,
+        "llm_explanation": explanation,
+        "original_data": row.to_dict(),
+        "df_index": int(df_idx)
+    }
+
+    # Add data type specific fields
+    if data_type == "sentiment":
+        result_data["text"] = str(row["text"])
+    elif data_type == "legal":
+        result_data["citing_prompt"] = str(row["citing_prompt"])
+        result_data["choices"] = [row.get(f'holding_{i}', '') for i in range(5)]
+
+    # Add ground truth if present
+    if label_column:
+        result_data["actualLabel"] = row[label_column]
+
+    return result_data
+
+
+def prepare_medical_result(row, label_column, label, score, explanation, df_idx):
+    """Prepare medical result data"""
+    return {
+        "question": str(row.get("question", "")),
+        "context": pretty_pubmed_qa(row.get("context", "")),
+        "long_answer": str(row.get("long_answer", "")),
+        "label": label,
+        "score": score,
+        "llm_explanation": explanation,
+        "actualLabel": row[label_column],
+        "df_index": int(df_idx),
+    }
+
+
+def prepare_ecqa_result(row, label_column, label, score, explanation, df_idx):
+    """Prepare ECQA result data"""
+    return {
+        "question": str(row["q_text"]),
+        "choices": [
+            row.get('q_op1', ''), row.get('q_op2', ''),
+            row.get('q_op3', ''), row.get('q_op4', ''), row.get('q_op5', '')
+        ],
+        "label": label,
+        "score": score,
+        "llm_explanation": explanation,
+        "actualLabel": row[label_column],
+        "ground_explanation": row.get("taskB", ""),
+        "df_index": int(df_idx),
+    }
+
+
+def prepare_snarks_result(row, label_column, label, score, explanation, df_idx):
+    """Prepare SNARKS result data"""
+    return {
+        "question": str(row["input"]),
+        "label": label,
+        "score": score,
+        "llm_explanation": explanation,
+        "actualLabel": row[label_column],
+        "df_index": int(df_idx),
+    }
+
+
+def prepare_hotel_result(row, label_column, label, score, explanation, df_idx):
+    """Prepare hotel result data"""
+    return {
+        "question": str(row["text"]),
+        "label": label,
+        "score": score,
+        "llm_explanation": explanation,
+        "actualLabel": row[label_column],
+        "df_index": int(df_idx),
+    }
+
+
+def calculate_additional_metrics(data_type, result_data, provider, model_name):
+    """Calculate additional metrics for specific data types"""
+    metric_calculators = {
+        "medical": calculate_medical_metrics,
+        "ecqa": calculate_ecqa_metrics,
+        "snarks": calculate_snarks_metrics,
+        "hotel": calculate_hotel_metrics
+    }
+
+    if data_type in metric_calculators:
+        return metric_calculators[data_type](result_data, provider, model_name)
+
+    return result_data
+
+
+def calculate_medical_metrics(result_data, provider, model_name):
+    """Calculate medical-specific metrics"""
+    # Get API keys
+    groq_key = get_user_api_key_groq()
+    api_key = get_api_key_for_provider(provider)
+    openai_key = get_user_api_key_openai()
+
+    # Initialize NER pipeline
+    ner_pipe = pipeline(
+        "token-classification",
+        model="Clinical-AI-Apollo/Medical-NER",
+        aggregation_strategy='simple'
+    )
+
+    # Prepare row reference
+    row_reference = {
+        "ground_question": result_data["question"],
+        "ground_explanation": result_data["long_answer"],
+        "ground_label": result_data["actualLabel"],
+        "predicted_explanation": result_data["llm_explanation"],
+        "predicted_label": result_data["label"],
+        "ground_context": result_data["context"],
+    }
+
+    # Calculate trust score
+    trust_score = lext(
+        result_data["context"], result_data["question"], result_data["long_answer"],
+        result_data["actualLabel"], model_name, groq_key, provider, api_key,
+        ner_pipe, "medical", row_reference
+    )
+
+    # Extract metrics
+    plausibility_metrics = {
+        "iterative_stability": row_reference.get("iterative_stability"),
+        "paraphrase_stability": row_reference.get("paraphrase_stability"),
+        "consistency": row_reference.get("consistency"),
+        "plausibility": row_reference.get("plausibility")
+    }
+
+    faithfulness_metrics = {
+        "qag_score": row_reference.get("qag_score"),
+        "counterfactual": row_reference.get("counterfactual_scaled"),
+        "contextual_faithfulness": row_reference.get("contextual_faithfulness"),
+        "faithfulness": row_reference.get("faithfulness")
+    }
+
+    trustworthiness_score = row_reference.get("trustworthiness")
+
+    # Add metrics to result
+    result_data["metrics"] = {
+        "plausibility_metrics": plausibility_metrics,
+        "faithfulness_metrics": faithfulness_metrics,
+        "trustworthiness_score": trustworthiness_score,
+        "lext_score": trust_score
+    }
+
+    return result_data
+
+
+def calculate_ecqa_metrics(result_data, provider, model_name):
+    """Calculate ECQA-specific metrics"""
+    # Get API keys
+    groq_key = get_user_api_key_groq()
+    api_key = get_api_key_for_provider(provider)
+
+    # Prepare row reference
+    row_reference = {
+        "ground_question": result_data["question"],
+        "ground_explanation": result_data["ground_explanation"],
+        "ground_label": result_data["actualLabel"],
+        "predicted_explanation": result_data["llm_explanation"],
+        "predicted_label": result_data["label"],
+    }
+
+    # Calculate trust score
+    trust_score = lext(
+        None, result_data["question"], result_data["ground_explanation"],
+        result_data["actualLabel"], model_name, groq_key, provider, api_key,
+        None, "ecqa", row_reference
+    )
+
+    # Extract metrics
+    plausibility_metrics = {
+        "correctness": row_reference.get("correctness"),
+        "consistency": row_reference.get("consistency"),
+        "plausibility": row_reference.get("plausibility")
+    }
+
+    faithfulness_metrics = {
+        "qag_score": row_reference.get("qag_score"),
+        "counterfactual": row_reference.get("counterfactual_scaled"),
+        "contextual_faithfulness": row_reference.get("contextual_faithfulness"),
+        "faithfulness": row_reference.get("faithfulness")
+    }
+
+    trustworthiness_score = row_reference.get("trustworthiness")
+
+    # Add metrics to result
+    result_data["metrics"] = {
+        "plausibility_metrics": plausibility_metrics,
+        "faithfulness_metrics": faithfulness_metrics,
+        "trustworthiness_score": trustworthiness_score,
+        "lext_score": trust_score
+    }
+
+    return result_data
+
+
+def calculate_snarks_metrics(result_data, provider, model_name):
+    """Calculate SNARKS-specific metrics"""
+    # Get API keys
+    groq_key = get_user_api_key_groq()
+    api_key = get_api_key_for_provider(provider)
+
+    # Prepare row reference
+    row_reference = {
+        "ground_question": result_data["question"],
+        "ground_explanation": None,
+        "ground_label": result_data["actualLabel"],
+        "predicted_explanation": result_data["llm_explanation"],
+        "predicted_label": result_data["label"],
+    }
+
+    # Calculate faithfulness score
+    faithfulness_score = faithfulness(
+        result_data["llm_explanation"], result_data["label"], result_data["question"],
+        result_data["actualLabel"], None, groq_key, model_name, provider, api_key,
+        "snarks", row_reference
+    )
+
+    # Extract metrics
+    faithfulness_metrics = {
+        "qag_score": row_reference.get("qag_score"),
+        "counterfactual": row_reference.get("counterfactual_scaled"),
+        "contextual_faithfulness": row_reference.get("contextual_faithfulness"),
+        "faithfulness": faithfulness_score
+    }
+
+    # Add metrics to result
+    result_data["metrics"] = {
+        "faithfulness_metrics": faithfulness_metrics,
+    }
+
+    return result_data
+
+
+def calculate_hotel_metrics(result_data, provider, model_name):
+    """Calculate hotel-specific metrics"""
+    # Get API keys
+    groq_key = get_user_api_key_groq()
+    api_key = get_api_key_for_provider(provider)
+
+    # Prepare row reference
+    row_reference = {
+        "ground_question": result_data["question"],
+        "ground_explanation": None,
+        "ground_label": result_data["actualLabel"],
+        "predicted_explanation": result_data["llm_explanation"],
+        "predicted_label": result_data["label"],
+    }
+
+    # Calculate faithfulness score
+    faithfulness_score = faithfulness(
+        result_data["llm_explanation"], result_data["label"], result_data["question"],
+        result_data["actualLabel"], None, groq_key, model_name, provider, api_key,
+        "hotel", row_reference
+    )
+
+    # Extract metrics
+    faithfulness_metrics = {
+        "qag_score": row_reference.get("qag_score"),
+        "counterfactual": row_reference.get("counterfactual_scaled"),
+        "contextual_faithfulness": row_reference.get("contextual_faithfulness"),
+        "faithfulness": faithfulness_score
+    }
+
+    # Add metrics to result
+    result_data["metrics"] = {
+        "faithfulness_metrics": faithfulness_metrics,
+    }
+
+    return result_data
+
+
+def get_api_key_for_provider(provider):
+    """Get API key for the specified provider"""
+    key_getters = {
+        "openrouter": get_user_api_key_openrouter,
+        "openai": get_user_api_key_openai,
+        "groq": get_user_api_key_groq,
+        "gemini": get_user_api_key_gemini
+    }
+
+    if provider in key_getters:
+        return key_getters[provider]()
+
+    return 'api'  # Default
+
+
+def update_stats(stats, data_type, result):
+    """Update statistics based on result"""
+    stats["total"] += 1
+
+    if data_type == "sentiment":
+        if result["label"] == "POSITIVE":
+            stats["positive"] += 1
+        else:
+            stats["negative"] += 1
+
+    elif data_type in ["legal", "medical", "hotel"]:
+        if "actualLabel" in result and result["label"] == result["actualLabel"]:
+            stats["correct"] += 1
+        else:
+            stats["incorrect"] += 1
+
+        if data_type == "medical" and result["label"] == "maybe":
+            stats["maybe"] += 1
+
+
+def calculate_metrics(results, data_type, stats):
+    """Calculate performance metrics"""
+    y_true = []
+    y_pred = []
+
+    # Extract true and predicted labels
+    for r in results:
+        pred = str(r.get('label', '')).strip().lower()
+        gold = extract_gold_label(r, data_type)
+
+        if gold is not None and pred != '':
+            y_true.append(gold)
+            y_pred.append(pred)
+
+    # Calculate metrics based on data type
+    metric_calculators = {
+        "sentiment": calculate_sentiment_metrics,
+        "medical": calculate_medical_type_metrics,
+        "ecqa": calculate_ecqa_metrics_type,
+        "snarks": calculate_snarks_metrics_type,
+        "hotel": calculate_hotel_metrics_type
+    }
+
+    if data_type in metric_calculators:
+        stats = metric_calculators[data_type](y_true, y_pred, stats)
+    else:
+        # Default binary classification metrics
+        stats = calculate_binary_metrics(y_true, y_pred, stats)
+
+    # Count predictions for stats
+    stats = count_predictions(y_true, y_pred, data_type, stats)
+
+    # Add actual labels to results
+    for i, result in enumerate(results):
+        if i < len(y_true):
+            result["actualLabel"] = y_true[i]
+
+    return stats
+
+
+def extract_gold_label(result, data_type):
+    """Extract the gold standard label from result"""
+    if 'actualLabel' in result:
+        return str(result['actualLabel']).strip().lower()
+
+    if 'original_data' in result:
+        original = result['original_data']
+        if 'final_decision' in original:
+            return str(original['final_decision']).strip().lower()
+        elif 'label' in original:
+            return str(original['label']).strip().lower()
+
+    return None
+
+
+def calculate_sentiment_metrics(y_true, y_pred, stats):
+    """Calculate sentiment analysis metrics"""
+    y_true_bin = [1 if x in ['positive', '1', 'yes'] else 0 for x in y_true]
+    y_pred_bin = [1 if x in ['positive', '1', 'yes'] else 0 for x in y_pred]
+
+    stats["accuracy"] = accuracy_score(y_true_bin, y_pred_bin)
+    stats["precision"] = precision_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+    stats["recall"] = recall_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+    stats["f1_score"] = f1_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
+
+    tn, fp, fn, tp = confusion_matrix(y_true_bin, y_pred_bin).ravel()
+    stats["confusion_matrix"] = {
+        "true_negative": int(tn),
+        "false_positive": int(fp),
+        "false_negative": int(fn),
+        "true_positive": int(tp)
+    }
+
+    return stats
+
+
+def calculate_medical_type_metrics(y_true, y_pred, stats):
+    """Calculate medical type metrics (multi-class)"""
+    labels = ["yes", "no", "maybe"]
+
+    stats["accuracy"] = accuracy_score(y_true, y_pred)
+    stats["precision"] = precision_score(y_true, y_pred, labels=labels, average='macro', zero_division=0)
+    stats["recall"] = recall_score(y_true, y_pred, labels=labels, average='macro', zero_division=0)
+    stats["f1_score"] = f1_score(y_true, y_pred, labels=labels, average='macro', zero_division=0)
+
+    cm = confusion_matrix(y_true, y_pred, labels=labels)
+    stats["confusion_matrix"] = {
+        "labels": labels,
+        "matrix": cm.tolist()
+    }
+
+    return stats
+
+
+def calculate_ecqa_metrics_type(y_true, y_pred, stats):
+    """Calculate ECQA metrics (multi-class)"""
+    labels = sorted(list(set(y_true + y_pred)))
+
+    stats["accuracy"] = accuracy_score(y_true, y_pred)
+    stats["precision"] = precision_score(y_true, y_pred, labels=labels, average='macro', zero_division=0)
+    stats["recall"] = recall_score(y_true, y_pred, labels=labels, average='macro', zero_division=0)
+    stats["f1_score"] = f1_score(y_true, y_pred, labels=labels, average='macro', zero_division=0)
+
+    cm = confusion_matrix(y_true, y_pred, labels=labels)
+    stats["confusion_matrix"] = {
+        "labels": labels,
+        "matrix": cm.tolist()
+    }
+
+    return stats
+
+
+def calculate_snarks_metrics_type(y_true, y_pred, stats):
+    """Calculate SNARKS metrics"""
+    def snarks_to_bin(x):
+        if x is None:
+            return None
+        t = str(x).strip().upper()
+        t = t.replace('(', '').replace(')', '').replace('.', '').replace(' ', '')
+        t = re.sub(r'^(CHOICE|OPTION|ANSWER)', '', t)
+        return 1 if t == 'A' else 0 if t == 'B' else None
+
+    y_true_bin_raw = [snarks_to_bin(x) for x in y_true]
+    y_pred_bin_raw = [snarks_to_bin(x) for x in y_pred]
+
+    # Keep only valid pairs
+    pairs = [(t, p) for t, p in zip(y_true_bin_raw, y_pred_bin_raw) if t is not None and p is not None]
+
+    if not pairs:
+        # No valid pairs
+        stats = set_default_binary_metrics(stats)
+    else:
+        y_true_bin, y_pred_bin = map(list, zip(*pairs))
+        stats = calculate_binary_metrics(y_true_bin, y_pred_bin, stats)
+
+    return stats
+
+
+def calculate_hotel_metrics_type(y_true, y_pred, stats):
+    """Calculate hotel metrics"""
+    def hotel_to_bin(x):
+        if x is None:
+            return None
+        t = str(x).strip().lower()
+        t = re.sub(r"[^a-z]", "", t)
+        return 1 if t == "truthful" else 0 if t == "deceptive" else None
+
+    y_true_bin_raw = [hotel_to_bin(x) for x in y_true]
+    y_pred_bin_raw = [hotel_to_bin(x) for x in y_pred]
+
+    # Keep only valid pairs
+    pairs = [(t, p) for t, p in zip(y_true_bin_raw, y_pred_bin_raw) if t is not None and p is not None]
+
+    if not pairs:
+        # No valid pairs
+        stats = set_default_binary_metrics(stats)
+    else:
+        y_true_bin, y_pred_bin = map(list, zip(*pairs))
+        stats = calculate_binary_metrics(y_true_bin, y_pred_bin, stats)
+
+    return stats
+
+
+def calculate_binary_metrics(y_true, y_pred, stats):
+    """Calculate binary classification metrics"""
+    stats["accuracy"] = accuracy_score(y_true, y_pred)
+    stats["precision"] = precision_score(y_true, y_pred, pos_label=1, zero_division=0)
+    stats["recall"] = recall_score(y_true, y_pred, pos_label=1, zero_division=0)
+    stats["f1_score"] = f1_score(y_true, y_pred, pos_label=1, zero_division=0)
+
+    tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+    stats["confusion_matrix"] = {
+        "true_negative": int(tn),
+        "false_positive": int(fp),
+        "false_negative": int(fn),
+        "true_positive": int(tp)
+    }
+
+    return stats
+
+
+def set_default_binary_metrics(stats):
+    """Set default values for binary metrics when no valid pairs exist"""
+    stats["accuracy"] = 0.0
+    stats["precision"] = 0.0
+    stats["recall"] = 0.0
+    stats["f1_score"] = 0.0
+    stats["confusion_matrix"] = {
+        "true_negative": 0,
+        "false_positive": 0,
+        "false_negative": 0,
+        "true_positive": 0
+    }
+
+    return stats
+
+
+def count_predictions(y_true, y_pred, data_type, stats):
+    """Count predictions for statistics"""
+    if data_type == "medical":
+        stats["yes"] = sum(1 for x in y_pred if x == "yes")
+        stats["no"] = sum(1 for x in y_pred if x == "no")
+        stats["maybe"] = sum(1 for x in y_pred if x == "maybe")
+    elif data_type == "sentiment":
+        stats["positive"] = sum(1 for x in y_pred if x == "positive")
+        stats["negative"] = sum(1 for x in y_pred if x == "negative")
+    elif data_type == "ecqa":
+        from collections import Counter
+        pred_counts = Counter(y_pred)
+        for label in set(y_pred):
+            stats[label] = pred_counts[label]
+    elif data_type == "snarks":
+        stats["(A)"] = int(sum(1 for x in y_pred if str(x).strip().upper() in ["A", "(A)"]))
+        stats["(B)"] = int(sum(1 for x in y_pred if str(x).strip().upper() in ["B", "(B)"]))
+    else:
+        stats["(A)"] = int(sum(1 for x in y_pred if str(x).strip().upper() in ["A", "(A)", "YES", "POSITIVE"]))
+        stats["(B)"] = int(sum(1 for x in y_pred if str(x).strip().upper() in ["B", "(B)", "NO", "NEGATIVE"]))
+
+    return stats
+
+
+def store_classification_results(dataset_id, user_id, method, provider, model_name, data_type, results, stats):
+    """Store classification results in database"""
+    classification_data = {
+        "dataset_id": ObjectId(dataset_id),
+        "user_id": ObjectId(user_id),
+        "method": method,
+        "provider": provider if method == 'llm' else None,
+        "model": model_name if method == 'llm' else None,
+        "data_type": data_type,
+        "results": results,
+        "created_at": datetime.now(),
+        "stats": stats
+    }
+
+    classification_id = mongo.db.classifications.insert_one(classification_data).inserted_id
+
+    # Update with explanation models
+    explanation_models = [{'provider': provider, 'model': model_name}]
+    mongo.db.classifications.update_one(
+        {"_id": ObjectId(classification_id), "user_id": ObjectId(user_id)},
+        {"$set": {"explanation_models": explanation_models, "updated_at": datetime.now()}}
+    )
+
+    return classification_id
+
+
+def save_explanations(classification_id, user_id, explanations_to_save, results):
+    """Save explanations to database"""
+    for explanation_entry in explanations_to_save:
+        # Find the corresponding result index by matching df_index
+        result_id = next(
+            (i for i, r in enumerate(results) if r.get("df_index") == explanation_entry["df_index"]),
+            None
+        )
+        if result_id is not None:
+            save_explanation_to_db(
+                classification_id=str(classification_id),
+                user_id=user_id,
+                result_id=result_id,
+                explanation_type=explanation_entry["type"],
+                content=explanation_entry["explanation"],
+                model_id=explanation_entry["model"].replace('.', '_')
+            )

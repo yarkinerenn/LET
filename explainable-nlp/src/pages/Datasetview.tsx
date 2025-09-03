@@ -171,8 +171,11 @@ const DatasetView = () => {
             else if(dataType === "ecqa") {
                  navigate(`/datasets/${datasetId}/classifications_ecqa/${response.data.classification_id}`);
             }
-            else if(dataType === "snarks" || dataType === "hotel" ) {
+            else if(dataType === "snarks") {
                  navigate(`/datasets/${datasetId}/classifications_snarks/${response.data.classification_id}`);
+            }
+            else if( dataType === "hotel" ) {
+                 navigate(`/datasets/${datasetId}/classifications_hotel/${response.data.classification_id}`);
             }
 
             else {

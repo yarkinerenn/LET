@@ -53,7 +53,7 @@ def call_model(prompt, target_model, provider,api_key, **kwargs):
     else:
         raise ValueError(f"Unknown provider: {provider}")
 
-def call_llama(prompt, groq_key, model="llama3-70b-8192"):
+def call_llama(prompt, groq_key, model="llama-3.3-70b-versatile"):
     """
     Call the bigger Llama model using Groq.
     """
