@@ -4,7 +4,7 @@
 npm start &
 FRONTEND_PID=$!
 # Start backend (in foreground)
-cd flask
+cd backend
 python app.py
 BACKEND_PID=$!
 cd ..
