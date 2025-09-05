@@ -220,6 +220,12 @@ const ClassificationDashboard = () => {
         <Alert variant="danger">{error}</Alert>
       ) : (
         <>
+        <Button
+                variant="outline-secondary"
+                onClick={() => navigate(`/dataset/${datasetId}`)}
+              >
+                ← Back to datasetview
+          </Button>
           <Row className="mb-4 align-items-center justify-content-between">
             <Col md="auto">
               <h2 className="mb-2">Classification Report</h2>
@@ -230,12 +236,14 @@ const ClassificationDashboard = () => {
                 <Badge bg="warning" text="dark">Type: {dataType}</Badge>
               </div>
             </Col>
+
             <Col md="auto">
               <Button variant="outline-primary" onClick={() => { setSelectedModels([]); setShowModelModal(true); }}>
                 Choose Different LLMs
               </Button>
             </Col>
           </Row>
+          
 
           {/* Stats */}
           <Row className="mb-4">

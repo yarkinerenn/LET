@@ -9,7 +9,7 @@ interface ClassificationEntry {
     text: string;
     prediction: string;
     confidence: number;
-    actualLabel?: number;
+    actualLabel?: string | number;
     explanation: string;
     llm_explanations?: Record<string, { content: string }>;
     shap_plot_explanation?: { content: string };
