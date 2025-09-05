@@ -110,14 +110,18 @@ def process_classification_request(dataset_id, data, current_user):
 
 def get_column_mappings(data_type, data):
     """Get appropriate column mappings based on data type"""
-    mappings = {
-        'legal': (data.get('text_column', 'citing_prompt'), data.get('label_column', 'label')),
-        'sentiment': (data.get('text_column', 'text'), data.get('label_column', 'label')),
-        'ecqa': ("q_text", "q_ans"),
-        'snarks': ("input", "target"),
-        'hotel': ("text", "deceptive")
-    }
-    return mappings.get(data_type, ("question", "final_decision"))
+    if data_type == 'legal':
+        return (data.get('text_column', 'citing_prompt'), data.get('label_column', 'label'))
+    elif data_type == 'sentiment':
+        return (data.get('text_column', 'text'), data.get('label_column', 'label'))
+    elif data_type == 'ecqa':
+        return ("q_text", "q_ans")
+    elif data_type == 'snarks':
+        return ("input", "target")
+    elif data_type == 'hotel':
+        return ("text", "deceptive")
+    else:
+        return ("question", "final_decision")
 
 
 def load_and_validate_dataset(filepath, text_column, label_column):
@@ -136,73 +140,55 @@ def load_and_validate_dataset(filepath, text_column, label_column):
 
 
 def initialize_llm_client(method, provider):
-    """Initialize the appropriate LLM client based on provider"""
+    """Initialize and return a chat-completions compatible client for the given provider.
+    Supports: openai, groq, deepseek, ollama, openrouter, gemini.
+    Returns a client object or None (for providers that don't require a client here).
+    """
     if method != 'llm':
         return None
 
-    clients = {
-        'openai': initialize_openai_client,
-        'groq': initialize_groq_client,
-        'deepseek': initialize_deepseek_client,
-        'ollama': initialize_ollama_client,
-        'openrouter': initialize_openrouter_client,
-        'gemini': initialize_gemini_client
-    }
+    prov = (provider or "").lower()
 
-    if provider not in clients:
+    if prov == 'openai':
+        api_key = get_user_api_key_openai()
+        if not api_key:
+            raise ValueError("OpenAI API key not configured")
+        return OpenAI(api_key=api_key)
+
+    elif prov == 'groq':
+        api_key = get_user_api_key_groq()
+        if not api_key:
+            raise ValueError("Groq API key not configured")
+        return Groq(api_key=api_key)
+
+    elif prov == 'deepseek':
+        api_key = get_user_api_key_deepseek_api()
+        if not api_key:
+            raise ValueError("Deepseek API key not configured")
+        # Deepseek uses OpenAI-compatible API with a custom base_url
+        return OpenAI(api_key=api_key, base_url="https://api.deepseek.com/v1")
+
+    elif prov == 'ollama':
+        # For Ollama we call a separate path (get_ollama_response) and don't need a client here.
+        # Returning None keeps downstream logic unchanged.
+        return None
+
+    elif prov == 'openrouter':
+        api_key = get_user_api_key_openrouter()
+        if not api_key:
+            raise ValueError("Openrouter API key not configured")
+        return OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key)
+
+    elif prov == 'gemini':
+        api_key = get_user_api_key_gemini()
+        if not api_key:
+            raise ValueError("Gemini API key not configured")
+        # Gemini's OpenAI-compatible endpoint
+        return OpenAI(base_url="https://generativelanguage.googleapis.com/v1beta/openai/", api_key=api_key)
+
+    else:
         raise ValueError("Invalid LLM provider")
 
-    return clients[provider]()
-
-
-def initialize_openai_client():
-    """Initialize OpenAI client"""
-    api_key = get_user_api_key_openai()
-    if not api_key:
-        raise ValueError("OpenAI API key not configured")
-    return OpenAI(api_key=api_key)
-
-
-def initialize_groq_client():
-    """Initialize Groq client"""
-    api_key = get_user_api_key_groq()
-    if not api_key:
-        raise ValueError("Groq API key not configured")
-    return Groq(api_key=api_key)
-
-
-def initialize_deepseek_client():
-    """Initialize DeepSeek client"""
-    api_key = get_user_api_key_deepseek_api()
-    if not api_key:
-        raise ValueError("Deepseek API key not configured")
-    return OpenAI(api_key=api_key, base_url="https://api.deepseek.com/v1")
-
-
-def initialize_ollama_client():
-    """Initialize Ollama client"""
-    api_key = get_user_api_key_openai()  # Uses OpenAI API key for Ollama
-    if not api_key:
-        raise ValueError("OpenAI API key not configured")
-    print('using ollama')
-    return OpenAI(api_key=api_key)
-
-
-def initialize_openrouter_client():
-    """Initialize OpenRouter client"""
-    api_key = get_user_api_key_openrouter()
-    if not api_key:
-        raise ValueError("Openrouter API key not configured")
-    return OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key)
-
-
-def initialize_gemini_client():
-    """Initialize Gemini client"""
-    api_key = get_user_api_key_gemini()
-    print('using gemini', api_key)
-    if not api_key:
-        raise ValueError("Gemini API key not configured")
-    return OpenAI(base_url="https://generativelanguage.googleapis.com/v1beta/openai/", api_key=api_key)
 
 
 def sample_dataset(df, data_type, label_column, sample_size):
@@ -320,25 +306,10 @@ def process_single_sample(row, df_idx, method, data_type, text_column, label_col
 
 def generate_prompt(data_type, row, text_column, provider):
     """Generate appropriate prompt based on data type"""
-    prompt_generators = {
-        "sentiment": generate_sentiment_prompt,
-        "legal": generate_legal_prompt,
-        "medical": generate_medical_prompt,
-        "ecqa": generate_ecqa_prompt,
-        "snarks": generate_snarks_prompt,
-        "hotel": generate_hotel_prompt
-    }
-
-    if data_type in prompt_generators:
-        return prompt_generators[data_type](row, text_column, provider)
-
-    return ""
-
-
-def generate_sentiment_prompt(row, text_column, provider):
-    """Generate sentiment analysis prompt"""
-    text = str(row[text_column])
-    return f"""Given the text below, classify the sentiment as either POSITIVE or NEGATIVE, and briefly explain your reasoning in 2-3 sentences.
+    
+    if data_type == "sentiment":
+        text = str(row[text_column])
+        return f"""Given the text below, classify the sentiment as either POSITIVE or NEGATIVE, and briefly explain your reasoning in 2-3 sentences.
 
 Text: {text}
 
@@ -347,14 +318,11 @@ Sentiment: <POSITIVE/NEGATIVE>
 Explanation: <your explanation here>
 """
 
-
-def generate_legal_prompt(row, text_column, provider):
-    """Generate legal analysis prompt"""
-    context = str(row[text_column])
-    choices = [row.get(f'holding_{i}', '') for i in range(5)]
-    holdings_str = "\n".join([f"{i}: {c}" for i, c in enumerate(choices)])
-
-    return f"""Assume you are a legal advisor
+    elif data_type == "legal":
+        context = str(row[text_column])
+        choices = [row.get(f'holding_{i}', '') for i in range(5)]
+        holdings_str = "\n".join([f"{i}: {c}" for i, c in enumerate(choices)])
+        return f"""Assume you are a legal advisor
 
         Statement: {context}
         Holdings:
@@ -366,13 +334,10 @@ def generate_legal_prompt(row, text_column, provider):
         Explanation: <your explanation here>
         """
 
-
-def generate_medical_prompt(row, text_column, provider):
-    """Generate medical analysis prompt"""
-    question = str(row.get("question", ""))
-    context = pretty_pubmed_qa(row.get("context", ""))
-
-    if provider != 'ollama':
+    elif data_type == "medical":
+        question = str(row.get("question", ""))
+        context = pretty_pubmed_qa(row.get("context", ""))
+        format_text = "Format your answer as:\nAnswer: <yes/no/maybe>\nExplanation: <your explanation here>" if provider != 'ollama' else ""
         return f"""Assume you are a Medical advisor 
 
 Question: {question}
@@ -380,29 +345,13 @@ Context: {context}
 
 Answer the questions with Yes/No/maybe and give an explanation for your recommendation.
 
-Format your answer as:
-Answer: <yes/no/maybe>
-Explanation: <your explanation here>
-"""
-    else:
-        return f"""Assume you are a Medical advisor 
-
-Question: {question}
-Context: {context}
-
-Answer the questions with Yes/No/maybe and give an explanation for your recommendation.
+{format_text}
 """
 
-
-def generate_ecqa_prompt(row, text_column, provider):
-    """Generate ECQA prompt"""
-    question = str(row[text_column])
-    choices = [
-        row.get('q_op1', ''), row.get('q_op2', ''),
-        row.get('q_op3', ''), row.get('q_op4', ''), row.get('q_op5', '')
-    ]
-
-    return f"""Given the following question and five answer options, select the best answer and explain your choice in 2-3 sentences. YOU MUST ONLY CHOOSE ONE OF THE CHOICES
+    elif data_type == "ecqa":
+        question = str(row[text_column])
+        choices = [row.get('q_op1', ''), row.get('q_op2', ''), row.get('q_op3', ''), row.get('q_op4', ''), row.get('q_op5', '')]
+        return f"""Given the following question and five answer options, select the best answer and explain your choice in 2-3 sentences. YOU MUST ONLY CHOOSE ONE OF THE CHOICES
 
 Question: {question}
 
@@ -418,12 +367,9 @@ Answer: <Choice as number>
 Explanation: <your explanation here>
 """
 
-
-def generate_snarks_prompt(row, text_column, provider):
-    """Generate SNARKS sarcasm detection prompt"""
-    question = str(row[text_column])
-
-    return f"""You are a sarcasm detection system. You will chose (A) or (B) as your answer and explain your decision in 2-3 sentences. Do not quote from the question or mention any words in your explanation.
+    elif data_type == "snarks":
+        question = str(row[text_column])
+        return f"""You are a sarcasm detection system. You will chose (A) or (B) as your answer and explain your decision in 2-3 sentences. Do not quote from the question or mention any words in your explanation.
 
 Question: {question}
 
@@ -441,12 +387,9 @@ Answer: <(A)>
 Explanation: <The statement is sarcastic because it is criticizes one should not do what everybody does but think first>
 """
 
-
-def generate_hotel_prompt(row, text_column, provider):
-    """Generate hotel review deception detection prompt"""
-    question = str(row[text_column])
-
-    return f"""You are a deceptive hotel review detection system. You will chose "truthful" or "deceptive" as your answer and explain your decision in 2-3 sentences.
+    elif data_type == "hotel":
+        question = str(row[text_column])
+        return f"""You are a deceptive hotel review detection system. You will chose "truthful" or "deceptive" as your answer and explain your decision in 2-3 sentences.
 
 Question: {question}
 
@@ -454,6 +397,8 @@ Format your answer as:
 Answer: <Choice as "truthful" or "deceptive">
 Explanation: <your explanation here>
 """
+    
+    return ""
 
 
 def get_llm_response(client, provider, model_name, prompt, data_type):
@@ -490,393 +435,209 @@ def get_ollama_response(prompt, data_type, model_name):
 
 def parse_llm_response(content, data_type):
     """Parse LLM response based on data type"""
-    parsers = {
-        "sentiment": parse_sentiment_response,
-        "legal": parse_legal_response,
-        "medical": parse_medical_response,
-        "ecqa": parse_ecqa_response,
-        "snarks": parse_snarks_response,
-        "hotel": parse_hotel_response
-    }
-
-    if data_type in parsers:
-        return parsers[data_type](content)
-
-    return None, 0.0, "", content
-
-
-def parse_sentiment_response(content):
-    """Parse sentiment analysis response"""
-    m = re.search(r"Sentiment:\s*(POSITIVE|NEGATIVE)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
-    if m:
-        label = m.group(1).upper()
-        explanation = m.group(2).strip()
-    else:
-        lines = content.split('\n')
-        label = lines[0].replace("Sentiment:", "").strip().upper()
-        explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
-
-    return label, 1.0, explanation, content
-
-
-def parse_legal_response(content):
-    """Parse legal analysis response"""
-    m = re.search(r"Holding:\s*([0-4])[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
-    if m:
-        label = int(m.group(1))
-        explanation = m.group(2).strip()
-    else:
-        num_match = re.search(r"[0-4]", content)
-        label = int(num_match.group(0)) if num_match else -1
-        explanation = content
-
-    return label, 1.0, explanation, content
-
-
-def parse_medical_response(content):
-    """Parse medical analysis response"""
-    m = re.search(r"Answer:\s*(yes|no|maybe)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
-    if m:
-        label = m.group(1).lower()
-        explanation = m.group(2).strip()
-    else:
-        lines = content.split('\n')
-        label = lines[0].replace("Answer:", "").strip().lower()
-        explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
-
-    return label, 1.0, explanation, content
-
-
-def parse_ecqa_response(content):
-    """Parse ECQA response - also used for SNARKS and hotel"""
-    return parse_general_response(content)
-
-
-def parse_snarks_response(content):
-    """Parse SNARKS response"""
-    return parse_general_response(content)
-
-
-def parse_hotel_response(content):
-    """Parse hotel review response"""
-    return parse_general_response(content)
-
-
-def parse_general_response(content):
-    """Parse general response format: Answer: ... Explanation: ..."""
-    m = re.search(r"Answer:\s*(.+)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
-    if m:
-        label = m.group(1).strip()
-        explanation = m.group(2).strip()
-    else:
-        lines = content.split('\n')
-        label = lines[0].replace("Answer:", "").strip()
-        explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
+    
+    if data_type == "sentiment":
+        # Parse sentiment analysis response
+        m = re.search(r"Sentiment:\s*(POSITIVE|NEGATIVE)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
+        if m:
+            label = m.group(1).upper()
+            explanation = m.group(2).strip()
+        else:
+            lines = content.split('\n')
+            label = lines[0].replace("Sentiment:", "").strip().upper()
+            explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
+    
+    elif data_type == "legal":
+        # Parse legal analysis response
+        m = re.search(r"Holding:\s*([0-4])[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
+        if m:
+            label = int(m.group(1))
+            explanation = m.group(2).strip()
+        else:
+            num_match = re.search(r"[0-4]", content)
+            label = int(num_match.group(0)) if num_match else -1
+            explanation = content
+    
+    elif data_type == "medical":
+        # Parse medical analysis response
+        m = re.search(r"Answer:\s*(yes|no|maybe)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
+        if m:
+            label = m.group(1).lower()
+            explanation = m.group(2).strip()
+        else:
+            lines = content.split('\n')
+            label = lines[0].replace("Answer:", "").strip().lower()
+            explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
+    
+    else:  # ecqa, snarks, hotel - general format
+        # Parse general response format: Answer: ... Explanation: ...
+        m = re.search(r"Answer:\s*(.+)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
+        if m:
+            label = m.group(1).strip()
+            explanation = m.group(2).strip()
+        else:
+            lines = content.split('\n')
+            label = lines[0].replace("Answer:", "").strip()
+            explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
 
     return label, 1.0, explanation, content
 
 
 def prepare_result_data(data_type, row, label_column, label, score, explanation, df_idx, content):
     """Prepare result data based on data type"""
-    result_preparers = {
-        "medical": prepare_medical_result,
-        "ecqa": prepare_ecqa_result,
-        "snarks": prepare_snarks_result,
-        "hotel": prepare_hotel_result
-    }
-
-    if data_type in result_preparers:
-        return result_preparers[data_type](row, label_column, label, score, explanation, df_idx)
-
-    # Default result preparation
+    
+    # Base result data
     result_data = {
         "label": label,
         "score": score,
         "llm_explanation": explanation,
-        "original_data": row.to_dict(),
         "df_index": int(df_idx)
     }
-
-    # Add data type specific fields
-    if data_type == "sentiment":
-        result_data["text"] = str(row["text"])
-    elif data_type == "legal":
-        result_data["citing_prompt"] = str(row["citing_prompt"])
-        result_data["choices"] = [row.get(f'holding_{i}', '') for i in range(5)]
-
+    
     # Add ground truth if present
     if label_column:
         result_data["actualLabel"] = row[label_column]
+    
+    # Add data type specific fields
+    if data_type == "medical":
+        result_data.update({
+            "question": str(row.get("question", "")),
+            "context": pretty_pubmed_qa(row.get("context", "")),
+            "long_answer": str(row.get("long_answer", ""))
+        })
+    elif data_type == "ecqa":
+        result_data.update({
+            "question": str(row["q_text"]),
+            "choices": [row.get('q_op1', ''), row.get('q_op2', ''), row.get('q_op3', ''), row.get('q_op4', ''), row.get('q_op5', '')],
+            "ground_explanation": row.get("taskB", "")
+        })
+    elif data_type == "snarks":
+        result_data["question"] = str(row["input"])
+    elif data_type == "hotel":
+        result_data["question"] = str(row["text"])
+    elif data_type == "sentiment":
+        result_data["text"] = str(row["text"])
+    elif data_type == "legal":
+        result_data.update({
+            "citing_prompt": str(row["citing_prompt"]),
+            "choices": [row.get(f'holding_{i}', '') for i in range(5)]
+        })
+    else:
+        # Default case - include original data
+        result_data["original_data"] = row.to_dict()
 
     return result_data
-
-
-def prepare_medical_result(row, label_column, label, score, explanation, df_idx):
-    """Prepare medical result data"""
-    return {
-        "question": str(row.get("question", "")),
-        "context": pretty_pubmed_qa(row.get("context", "")),
-        "long_answer": str(row.get("long_answer", "")),
-        "label": label,
-        "score": score,
-        "llm_explanation": explanation,
-        "actualLabel": row[label_column],
-        "df_index": int(df_idx),
-    }
-
-
-def prepare_ecqa_result(row, label_column, label, score, explanation, df_idx):
-    """Prepare ECQA result data"""
-    return {
-        "question": str(row["q_text"]),
-        "choices": [
-            row.get('q_op1', ''), row.get('q_op2', ''),
-            row.get('q_op3', ''), row.get('q_op4', ''), row.get('q_op5', '')
-        ],
-        "label": label,
-        "score": score,
-        "llm_explanation": explanation,
-        "actualLabel": row[label_column],
-        "ground_explanation": row.get("taskB", ""),
-        "df_index": int(df_idx),
-    }
-
-
-def prepare_snarks_result(row, label_column, label, score, explanation, df_idx):
-    """Prepare SNARKS result data"""
-    return {
-        "question": str(row["input"]),
-        "label": label,
-        "score": score,
-        "llm_explanation": explanation,
-        "actualLabel": row[label_column],
-        "df_index": int(df_idx),
-    }
-
-
-def prepare_hotel_result(row, label_column, label, score, explanation, df_idx):
-    """Prepare hotel result data"""
-    return {
-        "question": str(row["text"]),
-        "label": label,
-        "score": score,
-        "llm_explanation": explanation,
-        "actualLabel": row[label_column],
-        "df_index": int(df_idx),
-    }
 
 
 def calculate_additional_metrics(data_type, result_data, provider, model_name):
     """Calculate additional metrics for specific data types"""
-    metric_calculators = {
-        "medical": calculate_medical_metrics,
-        "ecqa": calculate_ecqa_metrics,
-        "snarks": calculate_snarks_metrics,
-        "hotel": calculate_hotel_metrics
-    }
-
-    if data_type in metric_calculators:
-        return metric_calculators[data_type](result_data, provider, model_name)
-
-    return result_data
-
-
-def calculate_medical_metrics(result_data, provider, model_name):
-    """Calculate medical-specific metrics"""
+    if data_type not in ["medical", "ecqa", "snarks", "hotel"]:
+        return result_data
+    
     # Get API keys
     groq_key = get_user_api_key_groq()
     api_key = get_api_key_for_provider(provider)
-    openai_key = get_user_api_key_openai()
-
-    # Initialize NER pipeline
-    ner_pipe = pipeline(
-        "token-classification",
-        model="Clinical-AI-Apollo/Medical-NER",
-        aggregation_strategy='simple'
-    )
-
-    # Prepare row reference
+    
+    # Prepare common row reference
     row_reference = {
         "ground_question": result_data["question"],
-        "ground_explanation": result_data["long_answer"],
-        "ground_label": result_data["actualLabel"],
-        "predicted_explanation": result_data["llm_explanation"],
-        "predicted_label": result_data["label"],
-        "ground_context": result_data["context"],
-    }
-
-    # Calculate trust score
-    trust_score = lext(
-        result_data["context"], result_data["question"], result_data["long_answer"],
-        result_data["actualLabel"], model_name, groq_key, provider, api_key,
-        ner_pipe, "medical", row_reference
-    )
-
-    # Extract metrics
-    plausibility_metrics = {
-        "iterative_stability": row_reference.get("iterative_stability"),
-        "paraphrase_stability": row_reference.get("paraphrase_stability"),
-        "consistency": row_reference.get("consistency"),
-        "plausibility": row_reference.get("plausibility")
-    }
-
-    faithfulness_metrics = {
-        "qag_score": row_reference.get("qag_score"),
-        "counterfactual": row_reference.get("counterfactual_scaled"),
-        "contextual_faithfulness": row_reference.get("contextual_faithfulness"),
-        "faithfulness": row_reference.get("faithfulness")
-    }
-
-    trustworthiness_score = row_reference.get("trustworthiness")
-
-    # Add metrics to result
-    result_data["metrics"] = {
-        "plausibility_metrics": plausibility_metrics,
-        "faithfulness_metrics": faithfulness_metrics,
-        "trustworthiness_score": trustworthiness_score,
-        "lext_score": trust_score
-    }
-
-    return result_data
-
-
-def calculate_ecqa_metrics(result_data, provider, model_name):
-    """Calculate ECQA-specific metrics"""
-    # Get API keys
-    groq_key = get_user_api_key_groq()
-    api_key = get_api_key_for_provider(provider)
-
-    # Prepare row reference
-    row_reference = {
-        "ground_question": result_data["question"],
-        "ground_explanation": result_data["ground_explanation"],
         "ground_label": result_data["actualLabel"],
         "predicted_explanation": result_data["llm_explanation"],
         "predicted_label": result_data["label"],
     }
-
-    # Calculate trust score
-    trust_score = lext(
-        None, result_data["question"], result_data["ground_explanation"],
-        result_data["actualLabel"], model_name, groq_key, provider, api_key,
-        None, "ecqa", row_reference
-    )
-
-    # Extract metrics
-    plausibility_metrics = {
-        "correctness": row_reference.get("correctness"),
-        "consistency": row_reference.get("consistency"),
-        "plausibility": row_reference.get("plausibility")
-    }
-
-    faithfulness_metrics = {
-        "qag_score": row_reference.get("qag_score"),
-        "counterfactual": row_reference.get("counterfactual_scaled"),
-        "contextual_faithfulness": row_reference.get("contextual_faithfulness"),
-        "faithfulness": row_reference.get("faithfulness")
-    }
-
-    trustworthiness_score = row_reference.get("trustworthiness")
-
-    # Add metrics to result
-    result_data["metrics"] = {
-        "plausibility_metrics": plausibility_metrics,
-        "faithfulness_metrics": faithfulness_metrics,
-        "trustworthiness_score": trustworthiness_score,
-        "lext_score": trust_score
-    }
-
-    return result_data
-
-
-def calculate_snarks_metrics(result_data, provider, model_name):
-    """Calculate SNARKS-specific metrics"""
-    # Get API keys
-    groq_key = get_user_api_key_groq()
-    api_key = get_api_key_for_provider(provider)
-
-    # Prepare row reference
-    row_reference = {
-        "ground_question": result_data["question"],
-        "ground_explanation": None,
-        "ground_label": result_data["actualLabel"],
-        "predicted_explanation": result_data["llm_explanation"],
-        "predicted_label": result_data["label"],
-    }
-
-    # Calculate faithfulness score
-    faithfulness_score = faithfulness(
-        result_data["llm_explanation"], result_data["label"], result_data["question"],
-        result_data["actualLabel"], None, groq_key, model_name, provider, api_key,
-        "snarks", row_reference
-    )
-
-    # Extract metrics
-    faithfulness_metrics = {
-        "qag_score": row_reference.get("qag_score"),
-        "counterfactual": row_reference.get("counterfactual_scaled"),
-        "contextual_faithfulness": row_reference.get("contextual_faithfulness"),
-        "faithfulness": faithfulness_score
-    }
-
-    # Add metrics to result
-    result_data["metrics"] = {
-        "faithfulness_metrics": faithfulness_metrics,
-    }
-
-    return result_data
-
-
-def calculate_hotel_metrics(result_data, provider, model_name):
-    """Calculate hotel-specific metrics"""
-    # Get API keys
-    groq_key = get_user_api_key_groq()
-    api_key = get_api_key_for_provider(provider)
-
-    # Prepare row reference
-    row_reference = {
-        "ground_question": result_data["question"],
-        "ground_explanation": None,
-        "ground_label": result_data["actualLabel"],
-        "predicted_explanation": result_data["llm_explanation"],
-        "predicted_label": result_data["label"],
-    }
-
-    # Calculate faithfulness score
-    faithfulness_score = faithfulness(
-        result_data["llm_explanation"], result_data["label"], result_data["question"],
-        result_data["actualLabel"], None, groq_key, model_name, provider, api_key,
-        "hotel", row_reference
-    )
-
-    # Extract metrics
-    faithfulness_metrics = {
-        "qag_score": row_reference.get("qag_score"),
-        "counterfactual": row_reference.get("counterfactual_scaled"),
-        "contextual_faithfulness": row_reference.get("contextual_faithfulness"),
-        "faithfulness": faithfulness_score
-    }
-
-    # Add metrics to result
-    result_data["metrics"] = {
-        "faithfulness_metrics": faithfulness_metrics,
-    }
-
+    
+    if data_type == "medical":
+        # Initialize NER pipeline for medical
+        ner_pipe = pipeline("token-classification", model="Clinical-AI-Apollo/Medical-NER", aggregation_strategy='simple')
+        row_reference.update({
+            "ground_explanation": result_data["long_answer"],
+            "ground_context": result_data["context"],
+        })
+        
+        # Calculate trust score
+        
+        trust_score = lext(
+            result_data["context"], result_data["question"], result_data["long_answer"],
+            result_data["actualLabel"], model_name, groq_key, provider, api_key,
+            ner_pipe, "medical", row_reference
+        )
+        
+        # Extract metrics
+        result_data["metrics"] = {
+            "plausibility_metrics": {
+                "iterative_stability": row_reference.get("iterative_stability"),
+                "paraphrase_stability": row_reference.get("paraphrase_stability"),
+                "consistency": row_reference.get("consistency"),
+                "plausibility": row_reference.get("plausibility")
+            },
+            "faithfulness_metrics": {
+                "qag_score": row_reference.get("qag_score"),
+                "counterfactual": row_reference.get("counterfactual_scaled"),
+                "contextual_faithfulness": row_reference.get("contextual_faithfulness"),
+                "faithfulness": row_reference.get("faithfulness")
+            },
+            "trustworthiness_score": row_reference.get("trustworthiness"),
+            "lext_score": trust_score
+        }
+    
+    elif data_type == "ecqa":
+        row_reference["ground_explanation"] = result_data["ground_explanation"]
+        
+        # Calculate trust score
+        trust_score = lext(
+            None, result_data["question"], result_data["ground_explanation"],
+            result_data["actualLabel"], model_name, groq_key, provider, api_key,
+            None, "ecqa", row_reference
+        )
+        
+        result_data["metrics"] = {
+            "plausibility_metrics": {
+                "correctness": row_reference.get("correctness"),
+                "consistency": row_reference.get("consistency"),
+                "plausibility": row_reference.get("plausibility")
+            },
+            "faithfulness_metrics": {
+                "qag_score": row_reference.get("qag_score"),
+                "counterfactual": row_reference.get("counterfactual_scaled"),
+                "contextual_faithfulness": row_reference.get("contextual_faithfulness"),
+                "faithfulness": row_reference.get("faithfulness")
+            },
+            "trustworthiness_score": row_reference.get("trustworthiness"),
+            "lext_score": trust_score
+        }
+    
+    elif data_type in ["snarks", "hotel"]:
+        row_reference["ground_explanation"] = None
+        
+        # Calculate faithfulness score
+        faithfulness_score = faithfulness(
+            result_data["llm_explanation"], result_data["label"], result_data["question"],
+            result_data["actualLabel"], None, groq_key, model_name, provider, api_key,
+            data_type, row_reference
+        )
+        
+        result_data["metrics"] = {
+            "faithfulness_metrics": {
+                "qag_score": row_reference.get("qag_score"),
+                "counterfactual": row_reference.get("counterfactual_scaled"),
+                "contextual_faithfulness": row_reference.get("contextual_faithfulness"),
+                "faithfulness": faithfulness_score
+            }
+        }
+    
     return result_data
 
 
 def get_api_key_for_provider(provider):
     """Get API key for the specified provider"""
-    key_getters = {
-        "openrouter": get_user_api_key_openrouter,
-        "openai": get_user_api_key_openai,
-        "groq": get_user_api_key_groq,
-        "gemini": get_user_api_key_gemini
-    }
-
-    if provider in key_getters:
-        return key_getters[provider]()
-
+    if provider == "openrouter":
+        return get_user_api_key_openrouter()
+    elif provider == "openai":
+        return get_user_api_key_openai()
+    elif provider == "groq":
+        return get_user_api_key_groq()
+    elif provider == "gemini":
+        return get_user_api_key_gemini()
     return 'api'  # Default
 
 
@@ -915,16 +676,16 @@ def calculate_metrics(results, data_type, stats):
             y_pred.append(pred)
 
     # Calculate metrics based on data type
-    metric_calculators = {
-        "sentiment": calculate_sentiment_metrics,
-        "medical": calculate_medical_type_metrics,
-        "ecqa": calculate_ecqa_metrics_type,
-        "snarks": calculate_snarks_metrics_type,
-        "hotel": calculate_hotel_metrics_type
-    }
-
-    if data_type in metric_calculators:
-        stats = metric_calculators[data_type](y_true, y_pred, stats)
+    if data_type == "sentiment":
+        stats = calculate_sentiment_metrics(y_true, y_pred, stats)
+    elif data_type == "medical":
+        stats = calculate_medical_type_metrics(y_true, y_pred, stats)
+    elif data_type == "ecqa":
+        stats = calculate_ecqa_metrics_type(y_true, y_pred, stats)
+    elif data_type == "snarks":
+        stats = calculate_snarks_metrics_type(y_true, y_pred, stats)
+    elif data_type == "hotel":
+        stats = calculate_hotel_metrics_type(y_true, y_pred, stats)
     else:
         # Default binary classification metrics
         stats = calculate_binary_metrics(y_true, y_pred, stats)
@@ -1138,7 +899,7 @@ def store_classification_results(dataset_id, user_id, method, provider, model_na
     classification_id = mongo.db.classifications.insert_one(classification_data).inserted_id
 
     # Update with explanation models
-    explanation_models = [{'provider': provider, 'model': model_name}]
+    explanation_models = [{'provider': provider, 'model': model_name.replace('.', '_')}]
     mongo.db.classifications.update_one(
         {"_id": ObjectId(classification_id), "user_id": ObjectId(user_id)},
         {"$set": {"explanation_models": explanation_models, "updated_at": datetime.now()}}
