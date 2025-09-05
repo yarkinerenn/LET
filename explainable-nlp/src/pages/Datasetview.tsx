@@ -382,12 +382,15 @@ const DatasetView = () => {
                                           className="mb-3 border-0"
                                           onClick={() => {
                                             // Make the check case-insensitive and handle undefined
-                                            if (dataType === "sentiment" || dataType === "legal") {
+                                            if (dataType === "sentiment") {
                                               navigate(`/datasets/${datasetId}/classifications/${classification._id}`);
                                             }
                                             else if(dataType === "ecqa") {
                                                  navigate(`/datasets/${datasetId}/classifications_ecqa/${classification._id}`);
                                             }
+                                            else if(dataType === "legal") {
+                                                navigate(`/datasets/${datasetId}/classifications_legal/${classification._id}`);
+                                           }
                                             else if(dataType === "snarks") {
                                                  navigate(`/datasets/${datasetId}/classifications_snarks/${classification._id}`);
                                             }

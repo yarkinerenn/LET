@@ -311,12 +311,12 @@ def generate_prompt(data_type, row, text_column, provider):
         text = str(row[text_column])
         return f"""Given the text below, classify the sentiment as either POSITIVE or NEGATIVE, and briefly explain your reasoning in 2-3 sentences.
 
-Text: {text}
+        Text: {text}
 
-Format your answer as:
-Sentiment: <POSITIVE/NEGATIVE>
-Explanation: <your explanation here>
-"""
+        Format your answer as:
+        Sentiment: <POSITIVE/NEGATIVE>
+        Explanation: <your explanation here>
+        """
 
     elif data_type == "legal":
         context = str(row[text_column])
@@ -337,16 +337,19 @@ Explanation: <your explanation here>
     elif data_type == "medical":
         question = str(row.get("question", ""))
         context = pretty_pubmed_qa(row.get("context", ""))
-        format_text = "Format your answer as:\nAnswer: <yes/no/maybe>\nExplanation: <your explanation here>" if provider != 'ollama' else ""
+         
         return f"""Assume you are a Medical advisor 
 
-Question: {question}
-Context: {context}
+        Question: {question}
+        Context: {context}
 
-Answer the questions with Yes/No/maybe and give an explanation for your recommendation.
+        Answer the questions with Yes/No/maybe and give an explanation for your recommendation.
 
-{format_text}
-"""
+        Format your answer as:
+        Answer: <yes/no/maybe>
+        Explanation: <your explanation here>
+      
+        """
 
     elif data_type == "ecqa":
         question = str(row[text_column])
