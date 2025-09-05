@@ -298,7 +298,7 @@ def process_single_sample(row, df_idx, method, data_type, text_column, label_col
     )
 
     # Calculate additional metrics for certain data types
-    if data_type in ["medical", "ecqa", "snarks", "hotel"]:
+    if data_type in ["medical", "ecqa", "snarks", "hotel",'sentiment']:
         result_data = calculate_additional_metrics(
             data_type, result_data, provider, model_name
         )
@@ -536,7 +536,7 @@ def prepare_result_data(data_type, row, label_column, label, score, explanation,
 
 def calculate_additional_metrics(data_type, result_data, provider, model_name):
     """Calculate additional metrics for specific data types"""
-    if data_type not in ["medical", "ecqa", "snarks", "hotel"]:
+    if data_type not in ["medical", "ecqa", "snarks", "hotel",'sentiment']:
         return result_data
     
     # Get API keys
@@ -544,8 +544,9 @@ def calculate_additional_metrics(data_type, result_data, provider, model_name):
     api_key = get_api_key_for_provider(provider)
     
     # Prepare common row reference
+    question_field = result_data.get("question", result_data.get("text", ""))
     row_reference = {
-        "ground_question": result_data["question"],
+        "ground_question": question_field,
         "ground_label": result_data["actualLabel"],
         "predicted_explanation": result_data["llm_explanation"],
         "predicted_label": result_data["label"],
@@ -611,12 +612,12 @@ def calculate_additional_metrics(data_type, result_data, provider, model_name):
             "lext_score": trust_score
         }
     
-    elif data_type in ["snarks", "hotel"]:
+    elif data_type in ["snarks", "hotel", "sentiment"]:
         row_reference["ground_explanation"] = None
         
         # Calculate faithfulness score
         faithfulness_score = faithfulness(
-            result_data["llm_explanation"], result_data["label"], result_data["question"],
+            result_data["llm_explanation"], result_data["label"], question_field,
             result_data["actualLabel"], None, groq_key, model_name, provider, api_key,
             data_type, row_reference
         )
@@ -723,6 +724,9 @@ def extract_gold_label(result, data_type):
 
 def calculate_sentiment_metrics(y_true, y_pred, stats):
     """Calculate sentiment analysis metrics"""
+    if not y_true or not y_pred:
+        return set_default_binary_metrics(stats)
+        
     y_true_bin = [1 if x in ['positive', '1', 'yes'] else 0 for x in y_true]
     y_pred_bin = [1 if x in ['positive', '1', 'yes'] else 0 for x in y_pred]
 
@@ -731,13 +735,20 @@ def calculate_sentiment_metrics(y_true, y_pred, stats):
     stats["recall"] = recall_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
     stats["f1_score"] = f1_score(y_true_bin, y_pred_bin, pos_label=1, zero_division=0)
 
-    tn, fp, fn, tp = confusion_matrix(y_true_bin, y_pred_bin).ravel()
-    stats["confusion_matrix"] = {
-        "true_negative": int(tn),
-        "false_positive": int(fp),
-        "false_negative": int(fn),
-        "true_positive": int(tp)
-    }
+    cm = confusion_matrix(y_true_bin, y_pred_bin)
+    if cm.size == 0:
+        return set_default_binary_metrics(stats)
+    
+    try:
+        tn, fp, fn, tp = cm.ravel()
+        stats["confusion_matrix"] = {
+            "true_negative": int(tn),
+            "false_positive": int(fp),
+            "false_negative": int(fn),
+            "true_positive": int(tp)
+        }
+    except ValueError:
+        return set_default_binary_metrics(stats)
 
     return stats
 

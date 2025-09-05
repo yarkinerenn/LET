@@ -92,14 +92,22 @@ const ECQADashboard = () => {
           <Row className="mb-4 align-items-center justify-content-between">
             <Col md="auto">
               <h2 className="mb-2">ECQA Classification Report</h2>
-              <div className="d-flex gap-2 flex-wrap">
+              <div className="d-flex gap-2 flex-wrap mb-4">
                 <Badge bg="info">Method: {classification?.method?.toUpperCase()}</Badge>
                 {classification?.provider && <Badge bg="secondary">Provider: {classification.provider}</Badge>}
                 {classification?.model && <Badge bg="dark">Model: {classification.model}</Badge>}
                 <Badge bg="warning" text="dark">Type: ECQA</Badge>
               </div>
+              <Button
+                variant="outline-secondary"
+                onClick={() => navigate(`/dataset/${datasetId}`)}
+              >
+                ← Back to datasetview
+              </Button>
             </Col>
+            
           </Row>
+          
 
           {/* Stats */}
           <Row className="mb-4">

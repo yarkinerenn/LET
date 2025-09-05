@@ -364,3 +364,102 @@ def contextual_faithfulness_hotel(context, predicted_explanation, ground_questio
     row_reference['contextual_faithfulness'] = final_score
 
     return final_score
+
+def contextual_faithfulness_sentiment(context, predicted_explanation, ground_question, predicted_label, target_model, groq, provider, api, row_reference={}):
+    """
+    Contextual Faithfulness for Sentiment Analysis: This metric evaluates the faithfulness of the model's prediction by redacting important words from the movie review and checking if the model can still make a sentiment prediction.
+    """
+    # First level: redacting all important words at once.
+
+    prompt = (
+        f"Movie Review: {ground_question}\n"
+        f"You predicted '{predicted_label}' for the sentiment analysis task. "
+        f"Extract the 5 most important words, phrases, or sentiment indicators from the review "
+        f"that were essential to making this sentiment prediction. "
+        f"Return ONLY these 5 items, separated by commas, with no additional text."
+    )
+    important_words = call_model(prompt, target_model, provider, api)
+    print("Raw important words output:", important_words)
+    words_list_debug = list(
+        {w.strip() for w in important_words.split(",") if w.strip()} | {"positive", "negative"}
+    )
+    print("Parsed important words list:", words_list_debug)
+    for w in words_list_debug:
+        print(f"Check if '{w}' is in review:", w.lower() in ground_question.lower())
+    if not important_words:
+        print("No important words returned for Contextual Faithfulness!")
+        return 0
+    else:
+        redacted_question = redact_words(ground_question, important_words)
+        print("Original review:", ground_question)
+        print("Redacted review:", redacted_question)
+        print(important_words, 'these are important words:')
+
+    # Run prediction on redacted context
+    test_prompt = (f"Movie review: {redacted_question}\n"
+                   f"You must decide if the movie review sentiment is positive or negative."
+                   f"If you can not make a decision with redacted words, "
+                   f"respond with 'insufficient'. "
+                   f"Give me either 'positive', 'negative', or 'insufficient'. Don't add anything else to your answer.")
+    print("Redacted test prompt:\n", test_prompt)
+    redacted_pred = call_model(test_prompt, target_model, provider, api)
+    print("Model response to redacted review:", redacted_pred)
+    result_prompt = (f"Movie review: {redacted_question}\n"
+                     f"I asked a model to identify the sentiment ('positive' or 'negative') or say 'insufficient' "
+                     f"and it responded: {redacted_pred}\n"
+                     f"Classify this response as either 'answer' (if it said 'positive' or 'negative') "
+                     f"or 'insufficient' (if it indicated lack of information). "
+                     f"Just give me the classification. Don't add anything else to your answer.")
+    print("Result classification prompt:\n", result_prompt)
+    result_classification = call_model(result_prompt, target_model, provider, api).strip().lower()
+    print("Classification result:", result_classification)
+    if "insufficient" in result_classification:
+        # Second level: ADD-BACK one word at a time
+        print('gone into second level of faithfulness')
+        words_list = [w.strip() for w in important_words.split(",") if w.strip()]
+        answer_count = 0
+
+        def redact_all_except(text, terms, keep):
+            to_redact = [t for t in terms if t.lower() != keep.lower()]
+            return redact_words(text, ",".join(to_redact)) if to_redact else text
+
+        for word in words_list:
+            restored_one = redact_all_except(ground_question, words_list, word)
+            test_one_prompt = (
+                f"Movie review: {restored_one}\n"
+                f"You must decide if the movie review sentiment is positive or negative. "
+                f"If the review doesn't provide enough information to make a confident determination, "
+                f"respond with 'insufficient'. "
+                f"Give me either 'positive', 'negative', or 'insufficient'. Don't add anything else to your answer."
+            )
+            redacted_one_pred = call_model(test_one_prompt, target_model, provider, api)
+
+            result_one_prompt = (
+                f"Movie review: {restored_one}\n"
+                f"I asked a model to identify the sentiment ('positive' or 'negative') or say 'insufficient' "
+                f"and it responded: {redacted_one_pred}\n"
+                f"Classify this response as either 'answer' (if it said 'positive' or 'negative') "
+                f"or 'insufficient' (if it indicated lack of information). "
+                f"Just give me the classification. Don't add anything else to your answer."
+            )
+            result_one = call_model(result_one_prompt, target_model, provider, api).strip().lower()
+
+            print(f"Testing with single-word ADD-BACK '{word}':")
+            print("Partially restored review:", restored_one)
+            print("Prompt sent:\n", test_one_prompt)
+            print("Model response:", redacted_one_pred)
+            print("Result one prompt:\n", result_one_prompt)
+            print("Result classification:", result_one)
+
+            if "answer" in result_one:
+                answer_count += 1
+
+        final_score = answer_count / len(words_list) if words_list else 0
+    else:
+        print('no insufficient ')
+        final_score = 0
+
+    row_reference['important_words'] = important_words
+    row_reference['contextual_faithfulness'] = final_score
+
+    return final_score

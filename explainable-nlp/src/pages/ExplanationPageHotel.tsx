@@ -67,7 +67,7 @@ const ExplanationPageHotel: React.FC = () => {
           axios.get(`http://localhost:5000/api/classificationentry/${classificationId}/${resultId}`, { withCredentials: true }),
           axios.get(`http://localhost:5000/api/classification/${classificationId}`, { withCredentials: true }),
         ]);
-        console.log(classRes.data);
+        console.log(classRes.data,'classRes.data');
 
         const e: HotelEntry = entryRes.data;
         setEntry(e);

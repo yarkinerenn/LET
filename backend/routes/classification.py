@@ -182,6 +182,10 @@ def get_classificationentry(classification_id, result_id):
         elif data_type == "sentiment":
             response_data.update({
                 "text": result.get('text', ''),
+                 "faithfulness_score": result.get("metrics", {}).get("faithfulness_metrics", {}).get("faithfulness"),
+                "qag_score": result.get("metrics", {}).get("faithfulness_metrics", {}).get("qag_score"),
+                "counterfactual": result.get("metrics", {}).get("faithfulness_metrics", {}).get("counterfactual"),
+                "contextual_faithfulness": result.get("metrics", {}).get("faithfulness_metrics", {}).get("contextual_faithfulness"),
             })
 
         elif data_type == "ecqa":

@@ -21,6 +21,11 @@ interface ClassificationEntry {
     data_type?: string;
     holdings?: string[] | null;
     method?: string;
+    // faithfulness-only metrics (and subs)
+    faithfulness_score?: number;
+    qag_score?: number;
+    counterfactual?: number;
+    contextual_faithfulness?: number;
 }
 
 interface ExplanationData {
@@ -478,6 +483,54 @@ const ExplanationPage = () => {
       </Card>
     )}
 
+    {/* Faithfulness Metrics */}
+    <Card className="mb-4">
+      <Card.Body>
+        <Card.Title>Faithfulness Metrics</Card.Title>
+        <Row className="mt-2 g-3">
+          <Col md={3}>
+            <div className="d-flex flex-column">
+              <span className="text-muted small">Faithfulness</span>
+              <Badge bg="secondary" className="fs-6 align-self-start mt-1">
+                {classification?.faithfulness_score !== undefined && classification?.faithfulness_score !== null
+                  ? Number(classification.faithfulness_score).toFixed(2)
+                  : 'N/A'}
+              </Badge>
+            </div>
+          </Col>
+          <Col md={3}>
+            <div className="d-flex flex-column">
+              <span className="text-muted small">QAG</span>
+              <Badge bg="info" className="fs-6 align-self-start mt-1">
+                {classification?.qag_score !== undefined && classification?.qag_score !== null
+                  ? Number(classification.qag_score).toFixed(2)
+                  : 'N/A'}
+              </Badge>
+            </div>
+          </Col>
+          <Col md={3}>
+            <div className="d-flex flex-column">
+              <span className="text-muted small">Counterfactual</span>
+              <Badge bg="warning" text="dark" className="fs-6 align-self-start mt-1">
+                {classification?.counterfactual !== undefined && classification?.counterfactual !== null
+                  ? Number(classification.counterfactual).toFixed(2)
+                  : 'N/A'}
+              </Badge>
+            </div>
+          </Col>
+          <Col md={3}>
+            <div className="d-flex flex-column">
+              <span className="text-muted small">Contextual Faithfulness</span>
+              <Badge bg="primary" className="fs-6 align-self-start mt-1">
+                {classification?.contextual_faithfulness !== undefined && classification?.contextual_faithfulness !== null
+                  ? Number(classification.contextual_faithfulness).toFixed(2)
+                  : 'N/A'}
+              </Badge>
+            </div>
+          </Col>
+        </Row>
+      </Card.Body>
+    </Card>
 
     <Row className="g-4">
       {/* SHAP Analysis only for non-LLM */}
