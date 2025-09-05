@@ -46,8 +46,11 @@ const DatasetView = () => {
             );
             if (["medical"].includes((response.data.data_type || dataType).toLowerCase())) {
                 navigate(`/datasets/${datasetId}/classifications_pub/${response.data.classification_id}/results/0`);
-            } else if (["sentiment", "legal"].includes((response.data.data_type || dataType).toLowerCase())) {
+            } else if (["legal"].includes((response.data.data_type || dataType).toLowerCase())) {
                 navigate(`/datasets/${datasetId}/classifications/${response.data.classification_id}/results/0`);
+            }
+            else if (["legal"].includes((response.data.data_type || dataType).toLowerCase())) {
+                navigate(`/datasets/${datasetId}/classifications_legal/${response.data.classification_id}/results/0`);
             } else {
                 navigate(`/datasets/${datasetId}/classifications/${response.data.classification_id}`);
             }
@@ -165,7 +168,7 @@ const DatasetView = () => {
             );
 
             // Navigate to classification dashboard after successful classification
-            if (dataType === "sentiment" || dataType === "legal") {
+            if (dataType === "sentiment") {
              navigate(`/datasets/${datasetId}/classifications/${response.data.classification_id}`);
             }
             else if(dataType === "ecqa") {
@@ -177,7 +180,9 @@ const DatasetView = () => {
             else if( dataType === "hotel" ) {
                  navigate(`/datasets/${datasetId}/classifications_hotel/${response.data.classification_id}`);
             }
-
+            else if(dataType === "legal") {
+                 navigate(`/datasets/${datasetId}/classifications_legal/${response.data.classification_id}`);
+            }
             else {
               navigate(`/datasets/${datasetId}/classificationsp/${response.data.classification_id}`);
             }
