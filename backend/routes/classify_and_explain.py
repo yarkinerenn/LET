@@ -261,6 +261,8 @@ def initialize_stats(data_type):
         stats.update({"correct": 0, "incorrect": 0})
     elif data_type == "medical":
         stats.update({"correct": 0, "incorrect": 0, "maybe": 0})
+    elif data_type == "ecqa":
+        stats.update({"correct": 0, "incorrect": 0})
     elif data_type == "hotel":
         stats.update({"correct": 0, "incorrect": 0})
     # For ECQA, we'll update stats dynamically based on labels
@@ -356,51 +358,51 @@ def generate_prompt(data_type, row, text_column, provider):
         choices = [row.get('q_op1', ''), row.get('q_op2', ''), row.get('q_op3', ''), row.get('q_op4', ''), row.get('q_op5', '')]
         return f"""Given the following question and five answer options, select the best answer and explain your choice in 2-3 sentences. YOU MUST ONLY CHOOSE ONE OF THE CHOICES
 
-Question: {question}
+            Question: {question}
 
-Choices:
-1. {choices[0]}
-2. {choices[1]}
-3. {choices[2]}
-4. {choices[3]}
-5. {choices[4]}
+            Choices:
+             {choices[0]}
+             {choices[1]}
+             {choices[2]}
+             {choices[3]}
+             {choices[4]}
 
-Format your answer as:
-Answer: <Choice as number>
-Explanation: <your explanation here>
-"""
+            Format your answer as:
+            Answer: <Your Choice>
+            Explanation: <your explanation here>
+            """
 
     elif data_type == "snarks":
         question = str(row[text_column])
         return f"""You are a sarcasm detection system. You will chose (A) or (B) as your answer and explain your decision in 2-3 sentences. Do not quote from the question or mention any words in your explanation.
 
-Question: {question}
+        Question: {question}
 
-Format your answer as:
-Answer: <Choice as (A) or (B)>
-Explanation: <your explanation here>
+        Format your answer as:
+        Answer: <Choice as (A) or (B)>
+        Explanation: <your explanation here>
 
-An Example: 
-Which statement is sarcastic?
-Options:
-(A) yeah just jump from the mountain like everybody else.
-(B) yeah just jump from the mountain like everybody else you have a parachute too.
+        An Example: 
+        Which statement is sarcastic?
+        Options:
+        (A) yeah just jump from the mountain like everybody else.
+        (B) yeah just jump from the mountain like everybody else you have a parachute too.
 
-Answer: <(A)>
-Explanation: <The statement is sarcastic because it is criticizes one should not do what everybody does but think first>
-"""
+        Answer: <(A)>
+        Explanation: <The statement is sarcastic because it is criticizes one should not do what everybody does but think first>
+        """
 
     elif data_type == "hotel":
         question = str(row[text_column])
         return f"""You are a deceptive hotel review detection system. You will chose "truthful" or "deceptive" as your answer and explain your decision in 2-3 sentences.
 
-Question: {question}
+        Question: {question}
 
-Format your answer as:
-Answer: <Choice as "truthful" or "deceptive">
-Explanation: <your explanation here>
-"""
-    
+        Format your answer as:
+        Answer: <Choice as "truthful" or "deceptive">
+        Explanation: <your explanation here>
+        """
+            
     return ""
 
 
@@ -654,7 +656,7 @@ def update_stats(stats, data_type, result):
         else:
             stats["negative"] += 1
 
-    elif data_type in ["legal", "medical", "hotel"]:
+    elif data_type in ["legal", "medical", "ecqa", "hotel"]:
         if "actualLabel" in result and result["label"] == result["actualLabel"]:
             stats["correct"] += 1
         else:

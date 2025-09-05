@@ -55,6 +55,8 @@ const ECQADashboard = () => {
           axios.get(`http://localhost:5000/api/classification/${classificationId}`, { withCredentials: true }),
           axios.get(`http://localhost:5000/api/classification/stats/${classificationId}`, { withCredentials: true })
         ]);
+        console.log(statsRes.data,'statsRes.data');
+        console.log(detailRes.data,'detailRes.data');
         setClassification(detailRes.data);
         setStats(statsRes.data.stats);
         setLoading(false);
