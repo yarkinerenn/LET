@@ -422,7 +422,7 @@ const ExplanationPage = () => {
 
                         ? (Number(classification.prediction) === Number(classification.actualLabel) ? "success" : "danger")
                           // @ts-ignore
-                        : (classification?.prediction === 1 || classification?.prediction === "POSITIVE" ? "success" : "danger")
+                        : (classification?.prediction === 1 || classification?.prediction === "1" || classification?.prediction === "POSITIVE" ? "success" : "danger")
                     }
                     className="px-3 py-2 fs-6"
                   >
@@ -430,7 +430,7 @@ const ExplanationPage = () => {
                         // @ts-ignore
                       ? String(classification?.actualLabel + 1)
                         // @ts-ignore
-                      : (classification?.prediction === 1 || classification?.prediction === "POSITIVE" ? "POSITIVE" : "NEGATIVE")}
+                      : (classification?.prediction === 1 || classification?.prediction === "1" || classification?.prediction === "POSITIVE" ? "POSITIVE" : "NEGATIVE")}
                   </Badge>
                   {/* Show holding text if legal */}
 
@@ -444,7 +444,7 @@ const ExplanationPage = () => {
                       classification?.data_type === "legal"
                         ? "primary"
                           // @ts-ignore
-                        : (classification?.actualLabel === 1 || classification?.actualLabel === "POSITIVE" ? "success" : "danger")
+                        : (classification?.actualLabel === 1 || classification?.actualLabel === "1" || classification?.actualLabel === "POSITIVE" ? "success" : "danger")
                     }
                     className="px-3 py-2 fs-6"
                   >
@@ -452,7 +452,7 @@ const ExplanationPage = () => {
                         // @ts-ignore
                       ? String(classification?.actualLabel + 1)
                         // @ts-ignore
-                      : (classification?.actualLabel === 1 || classification?.actualLabel === "POSITIVE" ? "POSITIVE" : "NEGATIVE")}
+                      : (classification?.actualLabel === 1 || classification?.actualLabel === "1" || classification?.actualLabel === "POSITIVE" ? "POSITIVE" : "NEGATIVE")}
                   </Badge>
                   {/* Show holding text if legal */}
 

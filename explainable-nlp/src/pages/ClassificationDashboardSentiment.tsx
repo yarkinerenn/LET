@@ -57,8 +57,8 @@ interface ClassificationData {
 }
 
 function toSentiment(val: string | number | undefined): "POSITIVE" | "NEGATIVE" | undefined {
-  if (val === 1 || val === "POSITIVE") return "POSITIVE";
-  if (val === 0 || val === "NEGATIVE") return "NEGATIVE";
+  if (val === 1 || val === "1" || val === "POSITIVE") return "POSITIVE";
+  if (val === 0 || val === "0" || val === "NEGATIVE") return "NEGATIVE";
   return undefined;
 }
 
