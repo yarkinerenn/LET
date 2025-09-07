@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Container, Row, Col, Card, Table, Alert, Spinner, Button, Badge, Modal, Form } from 'react-bootstrap';
+import { Container, Row, Col, Card, Table, Alert, Spinner, Button, Badge } from 'react-bootstrap';
 import axios from 'axios';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip
 } from 'recharts';
+import LLMSelector from '../components/LLMSelector';
 
 const COLORS = ['#0088FE', '#FF8042'];
 
@@ -44,8 +45,6 @@ const ECQADashboard = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const navigate = useNavigate();
-
-  // Modal to show all choices if needed
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
 
   useEffect(() => {
@@ -80,6 +79,19 @@ const ECQADashboard = () => {
     { name: "Incorrect", value: stats?.incorrect || 0 }
   ];
 
+  const handleModelsSubmit = async (selectedModels: string[]) => {
+    const explanation_models = selectedModels.map(model => {
+      const [provider, ...rest] = model.split(':');
+      return { provider, model: rest.join(':') };
+    });
+    await axios.post(
+      `http://localhost:5000/api/classification/${classificationId}/add_explanation_models`,
+      { explanation_models },
+      { withCredentials: true }
+    );
+    alert('Explanation models added successfully!');
+  };
+
   return (
     <Container fluid className="py-4">
       {loading ? (
@@ -105,7 +117,9 @@ const ECQADashboard = () => {
                 ← Back to datasetview
               </Button>
             </Col>
-            
+            <Col md="auto">
+              <LLMSelector onModelsSubmit={handleModelsSubmit} />
+            </Col>
           </Row>
           
 

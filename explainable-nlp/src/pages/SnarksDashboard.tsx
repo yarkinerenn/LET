@@ -6,6 +6,7 @@ import axios from 'axios';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell, ResponsiveContainer
 } from 'recharts';
+import LLMSelector from '../components/LLMSelector';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
@@ -90,6 +91,19 @@ const SnarksDashboard = () => {
     { name: "(B)", value: stats?.["(B)"] || 0 }
   ];
 
+  const handleModelsSubmit = async (selectedModels: string[]) => {
+    const explanation_models = selectedModels.map(model => {
+      const [provider, ...rest] = model.split(':');
+      return { provider, model: rest.join(':') };
+    });
+    await axios.post(
+      `http://localhost:5000/api/classification/${classificationId}/add_explanation_models`,
+      { explanation_models },
+      { withCredentials: true }
+    );
+    alert('Explanation models added successfully!');
+  };
+
   return (
     <Container fluid className="py-4">
       {loading ? (
@@ -119,6 +133,9 @@ const SnarksDashboard = () => {
                   This run is <strong>{dataType}</strong>, but you opened the Snarks page. Metrics/UI here expect (A)/(B).
                 </Alert>
               )}
+            </Col>
+            <Col md="auto">
+              <LLMSelector onModelsSubmit={handleModelsSubmit} />
             </Col>
           </Row>
 
