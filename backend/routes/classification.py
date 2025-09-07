@@ -158,13 +158,25 @@ def get_classificationentry(classification_id, result_id):
 
         # Per-type enrichment
         if data_type == "legal":
+            # Handle both old and new data structures for holdings
             holdings = []
-            for i in range(5):
-                holding_key = f'holding_{i}'
-                if holding_key in result.get('original_data', {}):
-                    holdings.append(result['original_data'][holding_key])
+            
+            # First, try the new structure where holdings is directly an array
+            if 'holdings' in result:
+                holdings = result['holdings']
+            else:
+                # Fallback to old structure with original_data
+                for i in range(5):
+                    holding_key = f'holding_{i}'
+                    if holding_key in result.get('original_data', {}):
+                        holdings.append(result['original_data'][holding_key])
+            
             response_data.update({
                 "text": result.get('citing_prompt', ''),
+                "faithfulness_score": result.get("metrics", {}).get("faithfulness_metrics", {}).get("faithfulness"),
+                "qag_score": result.get("metrics", {}).get("faithfulness_metrics", {}).get("qag_score"),
+                "counterfactual": result.get("metrics", {}).get("faithfulness_metrics", {}).get("counterfactual"),
+                "contextual_faithfulness": result.get("metrics", {}).get("faithfulness_metrics", {}).get("contextual_faithfulness"),
                 "holdings": holdings,
             })
 

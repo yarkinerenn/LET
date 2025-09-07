@@ -137,8 +137,8 @@ const DatasetView = () => {
         setClassifying(method);
         try {
             const response = await axios.post(
-                `http://localhost:5000/api/classify/${datasetId}`,
-                { method:method,provider: provider, model: model ,dataType: dataType },
+                `http://localhost:5000/api/classify_only/${datasetId}`,
+                { method:method,provider: provider, model: model ,dataType: dataType, limit: classificationLimit },
                 { withCredentials: true }
             );
 
@@ -290,27 +290,6 @@ const DatasetView = () => {
 
                             <Card.Title className="mb-4">Classification Methods</Card.Title>
                             <div className="mb-3 d-flex align-items-center gap-3">
-                              <span className="fw-semibold">Select Data Type:</span>
-                              <select
-                                className="form-select w-auto"
-                                value={dataType}
-                                onChange={e => {
-                                  setDataType(e.target.value as 'sentiment' | 'legal' | 'medical'|'ecqa'|'snarks'|'hotel');
-                                  setUserChangedDataType(true);
-
-                                }}
-                                style={{ minWidth: 180 }}
-                              >
-                                <option value="sentiment">Sentiment Analysis</option>
-                                <option value="legal">Legal</option>
-                                  <option value="medical">Medical</option>
-                                  <option value="ecqa">CommonsenseQA</option>
-                                  <option value="snarks">Snarks</option>
-                                  <option value="hotel">Deceptive Hotel</option>
-
-                              </select>
-                            </div>
-                            <div className="mb-3 d-flex align-items-center gap-3">
                               <span className="fw-semibold">Entries to Classify:</span>
                               <Form.Control
                                 type="number"
@@ -349,19 +328,21 @@ const DatasetView = () => {
                                         "Classify and explain with LLM"
                                     )}
                                 </Button>
-                                <Button
-                                    variant="success"
-                                    onClick={() => handleClassification("bert")}
-                                    disabled={!dataset || !!classifying}
-                                >
-                                    {classifying === "bert" ? (
-                                        <>
-                                            <Spinner animation="border" size="sm" /> Classifying...
-                                        </>
-                                    ) : (
-                                        "Classify with BERT"
-                                    )}
-                                </Button>
+                                {dataType === "sentiment" && (
+                                    <Button
+                                        variant="success"
+                                        onClick={() => handleClassification("bert")}
+                                        disabled={!dataset || !!classifying}
+                                    >
+                                        {classifying === "bert" ? (
+                                            <>
+                                                <Spinner animation="border" size="sm" /> Classifying...
+                                            </>
+                                        ) : (
+                                            "Classify with BERT"
+                                        )}
+                                    </Button>
+                                )}
                             </div>
                         </Card.Body>
                     </Card>
@@ -440,34 +421,7 @@ const DatasetView = () => {
                                                             </div>
                                                         )}
 
-                                                        <div className="d-flex align-items-center mt-3">
-                                                            <div className="me-4">
-                                                                <div className="d-flex align-items-center">
-                                                                    <div style={{
-                                                                        width: '12px',
-                                                                        height: '12px',
-                                                                        borderRadius: '50%',
-                                                                        background: '#2ecc71',
-                                                                        marginRight: '8px'
-                                                                    }}></div>
-                                                                    <span className="text-muted small">Positive:</span>
-                                                                    <span className="ms-2 fw-semibold">{classification.stats.positive}</span>
-                                                                </div>
-                                                            </div>
-                                                            <div>
-                                                                <div className="d-flex align-items-center">
-                                                                    <div style={{
-                                                                        width: '12px',
-                                                                        height: '12px',
-                                                                        borderRadius: '50%',
-                                                                        background: '#e74c3c',
-                                                                        marginRight: '8px'
-                                                                    }}></div>
-                                                                    <span className="text-muted small">Negative:</span>
-                                                                    <span className="ms-2 fw-semibold">{classification.stats.negative}</span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
+                                                        
                                                     </div>
 
                                                     <Button

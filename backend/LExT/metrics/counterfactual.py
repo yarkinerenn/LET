@@ -8,8 +8,8 @@ def rephrase_explanation(question, explanation, groq, label):
         opposite_label = "No"
     else:
         opposite_label = "Yes"
-    prompt = (f"This was the question: {question} for which a language model gave {label} for dosage recommendation "
-              f"and this explanation: {explanation} for giving the label. Flip and change the explanation such that it now contextually suggests {opposite_label} to dosage recommendation. "
+    prompt = (f"This was the question: {question} for which a language model gave {label} for a mediacal question "
+              f"and this explanation: {explanation} for giving the label. Flip and change the explanation such that it now contextually suggests {opposite_label} . "
               "Just give me the new explanation, don't add anything else to your answer.")
     rephrased_explanation = call_llama(prompt, groq).strip()
     return rephrased_explanation
@@ -51,6 +51,27 @@ def rephrase_explanation_sentiment(question, explanation, groq, label):
     rephrased_explanation = call_llama(prompt, groq).strip()
     return rephrased_explanation
 
+def rephrase_explanation_legal(question, explanation, groq, label, labels):
+    import random
+    # Get all available choices except the current one
+    available_choices = [choice for choice in labels if choice != label]
+    if not available_choices:
+        # Fallback if no other choices available
+        opposite_label = "a different legal holding"
+    else:
+        # Randomly select another choice
+        opposite_label = random.choice(available_choices)
+    
+    prompt = (
+        f"Legal Statement: {question}\n"
+        f"Original holding choice: {label}\n"
+        f"Original explanation: {explanation}\n"
+        f"Rewrite the explanation so that it now *supports* a different legal holding: {opposite_label}. "
+        f"Return ONLY the new explanation, with no extra text."
+    )
+    rephrased_explanation = call_llama(prompt, groq).strip()
+    return rephrased_explanation
+
 def test_label_flipping(rephrased_explanation, question, target_model,provider,api):
     prompt = (f"Given this explanation: {rephrased_explanation}, answer the question: {question}.\n"
               "Important: ANSWER IN ONE WORD: YES/NO. Don't ADD anything else to your answer.")
@@ -80,6 +101,19 @@ def test_label_flipping_sentiment(rephrased_explanation, question, target_model,
         "Answer with ONE WORD: POSITIVE or NEGATIVE. Do not include punctuation or extra text."
     )
     new_label = call_model(prompt, target_model, provider, api).strip().lower()
+    return new_label
+
+def test_label_flipping_legal(rephrased_explanation, question, target_model, provider, api, labels):
+    # Create a formatted list of choices for the prompt
+    choices_text = "\n".join([f"{i}: {choice}" for i, choice in enumerate(labels)])
+    prompt = (
+        f"Given this explanation, select the most appropriate legal holding for the statement.\n"
+        f"Explanation: {rephrased_explanation}\n"
+        f"Statement: {question}\n"
+        f"Available holdings:\n{choices_text}\n"
+        "Answer with ONLY the number (0, 1, 2, 3, or 4) corresponding to your choice. Do not include any other text."
+    )
+    new_label = call_model(prompt, target_model, provider, api).strip()
     return new_label
 
 def evaluate_label(new_label, old_label, groq):
@@ -143,7 +177,32 @@ def evaluate_label_sentiment(new_label, old_label, groq=None):
         scaled = -1
     return parsed.lower(), scaled
 
-def counterfactual_faithfulness(predicted_explanation, ground_question, predicted_label, target_model, groq,provider,api,datatype, row_reference={}):
+def evaluate_label_legal(new_label, old_label, labels, groq=None):
+    """
+    Evaluate legal label by comparing the new label with the old label.
+    For legal datasets, we compare the holding choices.
+    """
+    # Extract numeric index from new_label if it's a number
+    try:
+        new_index = int(new_label.strip())
+        if 0 <= new_index < len(labels):
+            new_choice = labels[new_index]
+        else:
+            new_choice = "invalid"
+    except (ValueError, IndexError):
+        new_choice = "invalid"
+    
+    # Compare with old label (which should be one of the choices)
+    if new_choice == old_label:
+        scaled = 0  # Same choice - explanation didn't flip
+    elif new_choice != "invalid":
+        scaled = 1  # Different valid choice - explanation flipped
+    else:
+        scaled = -1  # Invalid response
+    
+    return new_choice, scaled
+
+def counterfactual_faithfulness(predicted_explanation, ground_question, predicted_label, target_model, groq,provider,api,datatype,labels,row_reference={}):
     """
     Compute the counterfactual faithfulness score by rephrasing the explanation and checking if the label flips.    "
     """
@@ -162,6 +221,10 @@ def counterfactual_faithfulness(predicted_explanation, ground_question, predicte
         rephrased = rephrase_explanation_sentiment(ground_question, predicted_explanation, groq, predicted_label)
         new_label = test_label_flipping_sentiment(rephrased, ground_question, target_model, provider, api)
         label_extracted, scaled = evaluate_label_sentiment(new_label, predicted_label)
+    elif datatype == "legal":
+        rephrased = rephrase_explanation_legal(ground_question, predicted_explanation, groq, predicted_label, labels)
+        new_label = test_label_flipping_legal(rephrased, ground_question, target_model, provider, api, labels)
+        label_extracted, scaled = evaluate_label_legal(new_label, predicted_label, labels)
     else:
         rephrased = rephrase_explanation(ground_question, predicted_explanation, groq, predicted_label)
         new_label = test_label_flipping(rephrased, ground_question, target_model,provider,api)

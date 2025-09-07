@@ -109,6 +109,8 @@ interface ClassificationResult {
   score: number;
   actualLabel?: string | number;
   original_data?: any;
+  citing_prompt?: string;
+  holdings?: string[];
 }
 
 interface ClassificationStats {
@@ -431,7 +433,14 @@ const ClassificationDashboard = () => {
                           );
                         } else {
                           // Legal/CaseHold display
-                          const isMismatch = result.actualLabel !== undefined && result.label !== result.actualLabel;
+                          const isMismatch = result.actualLabel !== undefined && String(result.label) !== String(result.actualLabel);
+                          
+                          // Get citing prompt from either direct field or original_data
+                          const citingPrompt = result.citing_prompt || result.original_data?.citing_prompt || '';
+                          
+                          // Get holdings from either direct field or original_data
+                          const holdings = result.holdings || [0,1,2,3,4].map(i => result.original_data?.[`holding_${i}`]).filter(Boolean);
+                          
                           return (
                             <tr
                               key={index}
@@ -441,10 +450,10 @@ const ClassificationDashboard = () => {
                             >
                              <td style={{ maxWidth: '400px', whiteSpace: 'normal' }}>
                               {(expandedRow === index
-                                ? result.original_data?.citing_prompt
-                                : (result.original_data?.citing_prompt || '').slice(0, 180) + ((result.original_data?.citing_prompt || '').length > 180 ? '...' : '')
+                                ? citingPrompt
+                                : citingPrompt.slice(0, 180) + (citingPrompt.length > 180 ? '...' : '')
                               )}
-                              {(result.original_data?.citing_prompt || '').length > 180 && (
+                              {citingPrompt.length > 180 && (
                                 <Button
                                   variant="link"
                                   size="sm"
@@ -460,11 +469,9 @@ const ClassificationDashboard = () => {
                               </td>
                               <td>
                                 <ul className="mb-0">
-                                  {[0,1,2,3,4].map(i =>
-                                    result.original_data?.[`holding_${i}`] && (
-                                      <li key={i}><strong>{i}:</strong> {result.original_data[`holding_${i}`]}</li>
-                                    )
-                                  )}
+                                  {holdings.map((holding: string, i: number) => holding && (
+                                    <li key={i}><strong>{i}:</strong> {holding}</li>
+                                  ))}
                                 </ul>
                               </td>
                               {result.actualLabel !== undefined && (

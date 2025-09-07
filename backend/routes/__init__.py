@@ -7,6 +7,7 @@ from .predictions import predictions_bp
 from .ratings import ratings_bp
 from .trustworthiness import trust_bp
 from .classify_and_explain import classify_and_explain_bp
+from .classify_only import classify_only_bp
 
 
 def register_blueprints(app):
@@ -19,3 +20,4 @@ def register_blueprints(app):
     app.register_blueprint(classify_bp)
     app.register_blueprint(explanations_bp)
     app.register_blueprint(classify_and_explain_bp)
+    app.register_blueprint(classify_only_bp)

@@ -1,42 +1,34 @@
-# ---------- /api/classify_and_explain/<dataset_id> ----------
+# ---------- /api/classify_only/<dataset_id> ----------
 import traceback
 import re
 import pandas as pd
-from datasets import tqdm
 from flask import Blueprint, jsonify, request, current_app
 from flask_login import login_required, current_user
 from bson import ObjectId
 from datetime import datetime
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
-from transformers import pipeline,AutoModelForSequenceClassification,AutoTokenizer
+from sklearn.model_selection import train_test_split
 
 from groq import Groq
 from openai import OpenAI
-from sklearn.model_selection import train_test_split
 from langchain_community.llms import Ollama
 from extensions import mongo
-from LExT.metrics.faithfulness import faithfulness
-from LExT.metrics.trustworthiness import lext
-classifier = pipeline(
-    "text-classification",
-    model="distilbert-base-uncased-finetuned-sst-2-english"
-)
 from .auth import (
     get_user_api_key_openai,
     get_user_api_key_openrouter,
-    get_user_api_key_groq, get_user_api_key_deepseek_api, get_user_api_key_gemini,
+    get_user_api_key_groq, 
+    get_user_api_key_deepseek_api, 
+    get_user_api_key_gemini,
 )
-from .helpers import classify_with_chunks, pretty_pubmed_qa, save_explanation_to_db
+from .helpers import pretty_pubmed_qa
 
-classify_and_explain_bp = Blueprint("classif_and_explain", __name__)
+classify_only_bp = Blueprint("classify_only", __name__)
 CLASSIFICATION_METHODS = ['bert', 'llm']
 
 
-
-
-@classify_and_explain_bp.route('/api/classify_and_explain/<dataset_id>', methods=['POST'])
+@classify_only_bp.route('/api/classify_only/<dataset_id>', methods=['POST'])
 @login_required
-def classify_and_explain(dataset_id):
+def classify_only(dataset_id):
     try:
         # Extract and validate request data
         data = request.json
@@ -44,16 +36,16 @@ def classify_and_explain(dataset_id):
             return jsonify({"error": "No JSON data provided"}), 400
 
         # Process the classification request
-        result = process_classification_request(dataset_id, data, current_user)
+        result = process_classification_only_request(dataset_id, data, current_user)
         return jsonify(result), 200
 
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"error": "Classification+explanation failed", "details": str(e)}), 500
+        return jsonify({"error": "Classification failed", "details": str(e)}), 500
 
 
-def process_classification_request(dataset_id, data, current_user):
-    """Main function to process classification requests"""
+def process_classification_only_request(dataset_id, data, current_user):
+    """Main function to process classification-only requests"""
     # Validate method
     method = data.get('method')
     if method not in CLASSIFICATION_METHODS:
@@ -82,8 +74,8 @@ def process_classification_request(dataset_id, data, current_user):
     sample_size = data.get('limit')
     df_sampled = sample_dataset(df, data_type, label_column, sample_size)
 
-    # Process each sample
-    results, explanations_to_save, stats = process_samples(
+    # Process each sample (classification only)
+    results, stats = process_samples_only(
         df_sampled, method, data_type, text_column, label_column,
         client, provider, model_name
     )
@@ -97,11 +89,8 @@ def process_classification_request(dataset_id, data, current_user):
         model_name, data_type, results, stats
     )
 
-    # Save explanations
-    save_explanations(classification_id, current_user.id, explanations_to_save, results)
-
     return {
-        "message": "Classification+explanation completed",
+        "message": "Classification completed",
         "classification_id": str(classification_id),
         "stats": stats,
         "sample_count": len(results)
@@ -140,10 +129,7 @@ def load_and_validate_dataset(filepath, text_column, label_column):
 
 
 def initialize_llm_client(method, provider):
-    """Initialize and return a chat-completions compatible client for the given provider.
-    Supports: openai, groq, deepseek, ollama, openrouter, gemini.
-    Returns a client object or None (for providers that don't require a client here).
-    """
+    """Initialize and return a chat-completions compatible client for the given provider."""
     if method != 'llm':
         return None
 
@@ -165,12 +151,9 @@ def initialize_llm_client(method, provider):
         api_key = get_user_api_key_deepseek_api()
         if not api_key:
             raise ValueError("Deepseek API key not configured")
-        # Deepseek uses OpenAI-compatible API with a custom base_url
         return OpenAI(api_key=api_key, base_url="https://api.deepseek.com/v1")
 
     elif prov == 'ollama':
-        # For Ollama we call a separate path (get_ollama_response) and don't need a client here.
-        # Returning None keeps downstream logic unchanged.
         return None
 
     elif prov == 'openrouter':
@@ -183,22 +166,18 @@ def initialize_llm_client(method, provider):
         api_key = get_user_api_key_gemini()
         if not api_key:
             raise ValueError("Gemini API key not configured")
-        # Gemini's OpenAI-compatible endpoint
         return OpenAI(base_url="https://generativelanguage.googleapis.com/v1beta/openai/", api_key=api_key)
 
     else:
         raise ValueError("Invalid LLM provider")
 
 
-
 def sample_dataset(df, data_type, label_column, sample_size):
     """Sample the dataset based on data type requirements"""
-    if data_type in ["ecqa", "snarks","legal"]:
-        # For ECQA and SNARKS, don't stratify, just sample N entries
+    if data_type in ["ecqa", "snarks", "legal"]:
         return df.sample(n=sample_size, random_state=42)
 
     elif data_type == "hotel":
-        # Stratify by both gold label and polarity if available
         strat_cols = [label_column, "polarity"]
         if all(c in df.columns for c in strat_cols):
             strata = df[strat_cols].astype(str).agg("||".join, axis=1)
@@ -208,39 +187,31 @@ def sample_dataset(df, data_type, label_column, sample_size):
                 )
                 return df_sampled
             except ValueError:
-                # Fallback if some strata have too few samples
                 return df.sample(n=sample_size, random_state=42)
 
     elif label_column in df.columns:
-        # Standard stratified sampling
         df_sampled, _ = train_test_split(
             df, train_size=sample_size, stratify=df[label_column], random_state=42
         )
         return df_sampled
 
-    # Default sampling
     return df.sample(n=sample_size, random_state=42)
 
 
-def process_samples(df_sampled, method, data_type, text_column, label_column, client, provider, model_name):
-    """Process all samples in the dataset"""
+def process_samples_only(df_sampled, method, data_type, text_column, label_column, client, provider, model_name):
+    """Process all samples in the dataset (classification only)"""
     results = []
-    explanations_to_save = []
     stats = initialize_stats(data_type)
 
     for df_idx, row in df_sampled.iterrows():
         try:
-            result, explanation = process_single_sample(
+            result = process_single_sample_only(
                 row, df_idx, method, data_type, text_column, label_column,
                 client, provider, model_name
             )
 
             if result:
                 results.append(result)
-                if explanation:
-                    explanations_to_save.append(explanation)
-
-                # Update statistics
                 update_stats(stats, data_type, result)
 
         except Exception as e:
@@ -248,7 +219,7 @@ def process_samples(df_sampled, method, data_type, text_column, label_column, cl
             print(f"Error processing row: {str(e)}")
             continue
 
-    return results, explanations_to_save, stats
+    return results, stats
 
 
 def initialize_stats(data_type):
@@ -265,98 +236,72 @@ def initialize_stats(data_type):
         stats.update({"correct": 0, "incorrect": 0})
     elif data_type == "hotel":
         stats.update({"correct": 0, "incorrect": 0})
-    # For ECQA, we'll update stats dynamically based on labels
 
     return stats
 
 
-def process_single_sample(row, df_idx, method, data_type, text_column, label_column, client, provider, model_name):
-    """Process a single sample row"""
+def process_single_sample_only(row, df_idx, method, data_type, text_column, label_column, client, provider, model_name):
+    """Process a single sample row (classification only)"""
     # Generate appropriate prompt
     prompt = generate_prompt(data_type, row, text_column, provider)
 
     # Get LLM response if using LLM method
     if method == 'llm':
-        label, score, explanation, content = get_llm_response(
+        label, score = get_llm_response_only(
             client, provider, model_name, prompt, data_type
         )
-
-        # Save explanation for later storage
-        explanation_data = {
-            "df_index": int(df_idx),
-            "explanation": explanation,
-            "model": model_name,
-            "type": "llm",
-        }
     else:
-        label, score, explanation, content = None, 0.0, "", ""
-        explanation_data = None
+        label, score = None, 0.0
 
     # Prepare result data based on data type
-    result_data = prepare_result_data(
-        data_type, row, label_column, label, score, explanation, df_idx, content
+    result_data = prepare_result_data_only(
+        data_type, row, label_column, label, score, df_idx
     )
 
-    # Calculate additional metrics for certain data types
-    if data_type in ["medical", "ecqa", "snarks", "hotel",'sentiment','legal']:
-        result_data = calculate_additional_metrics(
-            data_type, result_data, provider, model_name
-        )
-
-    return result_data, explanation_data
+    return result_data
 
 
 def generate_prompt(data_type, row, text_column, provider):
-    """Generate appropriate prompt based on data type"""
+    """Generate appropriate prompt based on data type (simplified for classification only)"""
     
     if data_type == "sentiment":
         text = str(row[text_column])
-        return f"""Given the text below, classify the sentiment as either POSITIVE or NEGATIVE, and briefly explain your reasoning in 2-3 sentences.
+        return f"""Classify the sentiment of the following text as either POSITIVE or NEGATIVE.
 
         Text: {text}
 
-        Format your answer as:
-        Sentiment: <POSITIVE/NEGATIVE>
-        Explanation: <your explanation here>
+        Answer with only: POSITIVE or NEGATIVE
         """
 
     elif data_type == "legal":
         context = str(row[text_column])
         choices = [row.get(f'holding_{i}', '') for i in range(5)]
         holdings_str = "\n".join([f"{i}: {c}" for i, c in enumerate(choices)])
-        return f"""Assume you are a legal advisor
+        return f"""Select the most appropriate holding for this legal statement.
 
         Statement: {context}
         Holdings:
         {holdings_str}
-        select the most appropriate holding (choose 0, 1, 2, 3, or 4) and explain your recommendation.
         
-        Format your answer as:
-        Holding: <number>
-        Explanation: <your explanation here>
+        Answer with only the number (0, 1, 2, 3, or 4):
         """
 
     elif data_type == "medical":
         question = str(row.get("question", ""))
         context = pretty_pubmed_qa(row.get("context", ""))
          
-        return f"""Assume you are a Medical advisor 
+        return f"""Answer the medical question with Yes, No, or Maybe based on the context.
 
         Question: {question}
         Context: {context}
 
-        Answer the questions with Yes/No/maybe and give an explanation for your recommendation.
-
-        Format your answer as:
-        Answer: <yes/no/maybe>
-        Explanation: <your explanation here>
-      
+        Answer with only: yes, no, or maybe
         """
 
     elif data_type == "ecqa":
         question = str(row[text_column])
         choices = [row.get('q_op1', ''), row.get('q_op2', ''), row.get('q_op3', ''), row.get('q_op4', ''), row.get('q_op5', '')]
-        return f"""Given the following question and five answer options, select the best answer and explain your choice in 2-3 sentences. YOU MUST ONLY CHOOSE ONE OF THE CHOICES
+        return f"""Select the best answer from the choices.
 
             Question: {question}
 
@@ -367,135 +312,119 @@ def generate_prompt(data_type, row, text_column, provider):
              {choices[3]}
              {choices[4]}
 
-            Format your answer as:
-            Answer: <Your Choice>
-            Explanation: <your explanation here>
+            Answer with your choice exactly as written:
             """
 
     elif data_type == "snarks":
         question = str(row[text_column])
-        return f"""You are a sarcasm detection system. You will chose (A) or (B) as your answer and explain your decision in 2-3 sentences. Do not quote from the question or mention any words in your explanation.
+        return f"""Determine which statement is sarcastic.
 
         Question: {question}
 
-        Format your answer as:
-        Answer: <Choice as (A) or (B)>
-        Explanation: <your explanation here>
-
-        An Example: 
-        Which statement is sarcastic?
-        Options:
-        (A) yeah just jump from the mountain like everybody else.
-        (B) yeah just jump from the mountain like everybody else you have a parachute too.
-
-        Answer: <(A)>
-        Explanation: <The statement is sarcastic because it is criticizes one should not do what everybody does but think first>
+        Answer with: (A) or (B)
         """
 
     elif data_type == "hotel":
         question = str(row[text_column])
-        return f"""You are a deceptive hotel review detection system. You will chose "truthful" or "deceptive" as your answer and explain your decision in 2-3 sentences.
+        return f"""Classify this hotel review as truthful or deceptive.
 
-        Question: {question}
+        Review: {question}
 
-        Format your answer as:
-        Answer: <Choice as "truthful" or "deceptive">
-        Explanation: <your explanation here>
+        Answer with: truthful or deceptive
         """
             
     return ""
 
 
-def get_llm_response(client, provider, model_name, prompt, data_type):
-    """Get response from LLM based on provider"""
+def get_llm_response_only(client, provider, model_name, prompt, data_type):
+    """Get response from LLM based on provider (classification only)"""
     if provider == "ollama":
-        return get_ollama_response(prompt, data_type, model_name)
+        return get_ollama_response_only(prompt, data_type, model_name)
     else:
-        return get_standard_llm_response(client, model_name, prompt, data_type)
+        return get_standard_llm_response_only(client, model_name, prompt, data_type)
 
 
-def get_standard_llm_response(client, model_name, prompt, data_type):
-    """Get response from standard LLM APIs (OpenAI, Groq, etc.)"""
+def get_standard_llm_response_only(client, model_name, prompt, data_type):
+    """Get response from standard LLM APIs (classification only)"""
     response = client.chat.completions.create(
         model=model_name,
         messages=[{"role": "user", "content": prompt}]
     )
     content = response.choices[0].message.content.strip()
-    print(content, 'this is what llm prompt')
+    
+    return parse_llm_response_only(content, data_type)
 
-    return parse_llm_response(content, data_type)
 
-
-def get_ollama_response(prompt, data_type, model_name):
-    """Get response from Ollama with special handling"""
+def get_ollama_response_only(prompt, data_type, model_name):
+    """Get response from Ollama (classification only)"""
     llm = Ollama(model=model_name, temperature=0)
     content = llm.invoke(prompt)
-    print(content, 'this is what ollama prompt')
-
-    # For Ollama, we might need additional processing
-    # This is a placeholder for any Ollama-specific processing
-
-    return parse_llm_response(content, data_type)
+    
+    return parse_llm_response_only(content, data_type)
 
 
-def parse_llm_response(content, data_type):
-    """Parse LLM response based on data type"""
+def parse_llm_response_only(content, data_type):
+    """Parse LLM response based on data type (classification only)"""
     
     if data_type == "sentiment":
-        # Parse sentiment analysis response
-        m = re.search(r"Sentiment:\s*(POSITIVE|NEGATIVE)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
-        if m:
-            label = m.group(1).upper()
-            explanation = m.group(2).strip()
+        # Look for POSITIVE or NEGATIVE
+        if "POSITIVE" in content.upper():
+            return "POSITIVE", 1.0
+        elif "NEGATIVE" in content.upper():
+            return "NEGATIVE", 1.0
         else:
-            lines = content.split('\n')
-            label = lines[0].replace("Sentiment:", "").strip().upper()
-            explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
+            return content.strip().upper(), 1.0
     
     elif data_type == "legal":
-        # Parse legal analysis response
-        m = re.search(r"Holding:\s*([0-4])[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
-        if m:
-            label = int(m.group(1))
-            explanation = m.group(2).strip()
+        # Look for numbers 0-4
+        num_match = re.search(r"[0-4]", content)
+        if num_match:
+            return int(num_match.group(0)), 1.0
         else:
-            num_match = re.search(r"[0-4]", content)
-            label = int(num_match.group(0)) if num_match else -1
-            explanation = content
+            return -1, 1.0
     
     elif data_type == "medical":
-        # Parse medical analysis response
-        m = re.search(r"Answer:\s*(yes|no|maybe)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
-        if m:
-            label = m.group(1).lower()
-            explanation = m.group(2).strip()
+        # Look for yes/no/maybe
+        content_lower = content.lower()
+        if "yes" in content_lower:
+            return "yes", 1.0
+        elif "no" in content_lower:
+            return "no", 1.0
+        elif "maybe" in content_lower:
+            return "maybe", 1.0
         else:
-            lines = content.split('\n')
-            label = lines[0].replace("Answer:", "").strip().lower()
-            explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
+            return content.strip().lower(), 1.0
     
-    else:  # ecqa, snarks, hotel - general format
-        # Parse general response format: Answer: ... Explanation: ...
-        m = re.search(r"Answer:\s*(.+)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
-        if m:
-            label = m.group(1).strip()
-            explanation = m.group(2).strip()
+    elif data_type == "snarks":
+        # Look for (A) or (B)
+        if "(A)" in content.upper() or " A " in content.upper():
+            return "(A)", 1.0
+        elif "(B)" in content.upper() or " B " in content.upper():
+            return "(B)", 1.0
         else:
-            lines = content.split('\n')
-            label = lines[0].replace("Answer:", "").strip()
-            explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
+            return content.strip(), 1.0
+    
+    elif data_type == "hotel":
+        # Look for truthful or deceptive
+        content_lower = content.lower()
+        if "truthful" in content_lower:
+            return "truthful", 1.0
+        elif "deceptive" in content_lower:
+            return "deceptive", 1.0
+        else:
+            return content.strip().lower(), 1.0
+    
+    else:  # ecqa and others
+        return content.strip(), 1.0
 
-    return label, 1.0, explanation, content
 
-
-def prepare_result_data(data_type, row, label_column, label, score, explanation, df_idx, content):
-    """Prepare result data based on data type"""
+def prepare_result_data_only(data_type, row, label_column, label, score, df_idx):
+    """Prepare result data based on data type (classification only)"""
     
     # Base result data
     result_data = {
         "label": label,
         "score": score,
-        "llm_explanation": explanation,
         "df_index": int(df_idx)
     }
     
@@ -503,7 +432,7 @@ def prepare_result_data(data_type, row, label_column, label, score, explanation,
     if label_column:
         result_data["actualLabel"] = row[label_column]
     
-    # Add data type specific fields
+    # Add minimal data type specific fields
     if data_type == "medical":
         result_data.update({
             "question": str(row.get("question", "")),
@@ -514,7 +443,6 @@ def prepare_result_data(data_type, row, label_column, label, score, explanation,
         result_data.update({
             "question": str(row["q_text"]),
             "choices": [row.get('q_op1', ''), row.get('q_op2', ''), row.get('q_op3', ''), row.get('q_op4', ''), row.get('q_op5', '')],
-            "ground_explanation": row.get("taskB", "")
         })
     elif data_type == "snarks":
         result_data["question"] = str(row["input"])
@@ -527,151 +455,8 @@ def prepare_result_data(data_type, row, label_column, label, score, explanation,
             "citing_prompt": str(row["citing_prompt"]),
             "holdings": [row.get(f'holding_{i}', '') for i in range(5)]
         })
-    else:
-        # Default case - include original data
-        result_data["original_data"] = row.to_dict()
 
     return result_data
-
-
-def calculate_additional_metrics(data_type, result_data, provider, model_name):
-    """Calculate additional metrics for specific data types"""
-    if data_type not in ["medical", "ecqa", "legal", "snarks", "hotel",'sentiment']:
-        return result_data
-    
-    # Get API keys
-    groq_key = get_user_api_key_groq()
-    api_key = get_api_key_for_provider(provider)
-    
-    # Prepare common row reference
-    question_field = result_data.get("question", result_data.get("text", ""))
-    row_reference = {
-        "ground_question": question_field,
-        "ground_label": result_data["actualLabel"],
-        "predicted_explanation": result_data["llm_explanation"],
-        "predicted_label": result_data["label"],
-    }
-    
-    if data_type == "medical":
-        # Initialize NER pipeline for medical
-        ner_pipe = pipeline("token-classification", model="Clinical-AI-Apollo/Medical-NER", aggregation_strategy='simple')
-        row_reference.update({
-            "ground_explanation": result_data["long_answer"],
-            "ground_context": result_data["context"],
-        })
-        
-        # Calculate trust score
-        # Send empty labels for medical dataset as requested
-        medical_labels = []
-        trust_score = lext(
-            result_data["context"], result_data["question"], result_data["long_answer"],
-            result_data["actualLabel"], model_name, groq_key, provider, api_key,
-            ner_pipe, "medical", row_reference, medical_labels
-        )
-        
-        # Extract metrics
-        result_data["metrics"] = {
-            "plausibility_metrics": {
-                "iterative_stability": row_reference.get("iterative_stability"),
-                "paraphrase_stability": row_reference.get("paraphrase_stability"),
-                "consistency": row_reference.get("consistency"),
-                "plausibility": row_reference.get("plausibility")
-            },
-            "faithfulness_metrics": {
-                "qag_score": row_reference.get("qag_score"),
-                "counterfactual": row_reference.get("counterfactual_scaled"),
-                "contextual_faithfulness": row_reference.get("contextual_faithfulness"),
-                "faithfulness": row_reference.get("faithfulness")
-            },
-            "trustworthiness_score": row_reference.get("trustworthiness"),
-            "lext_score": trust_score
-        }
-    
-    elif data_type == "ecqa":
-        row_reference["ground_explanation"] = result_data["ground_explanation"]
-        
-        # Calculate trust score
-        # Extract real choices from ECQA dataset
-        ecqa_labels = result_data.get("choices", [])
-        trust_score = lext(
-            None, result_data["question"], result_data["ground_explanation"],
-            result_data["actualLabel"], model_name, groq_key, provider, api_key,
-            None, "ecqa", row_reference, ecqa_labels
-        )
-        
-        result_data["metrics"] = {
-            "plausibility_metrics": {
-                "correctness": row_reference.get("correctness"),
-                "consistency": row_reference.get("consistency"),
-                "plausibility": row_reference.get("plausibility")
-            },
-            "faithfulness_metrics": {
-                "qag_score": row_reference.get("qag_score"),
-                "counterfactual": row_reference.get("counterfactual_scaled"),
-                "contextual_faithfulness": row_reference.get("contextual_faithfulness"),
-                "faithfulness": row_reference.get("faithfulness")
-            },
-            "trustworthiness_score": row_reference.get("trustworthiness"),
-            "lext_score": trust_score
-        }
-    
-    elif data_type == "legal":
-        row_reference["ground_explanation"] = None  # Legal datasets typically don't have ground explanations
-        
-        # Calculate faithfulness score for legal dataset
-        # Extract real choices from legal dataset
-        legal_labels = result_data.get("holdings", [])
-        faithfulness_score = faithfulness(
-            result_data["llm_explanation"], result_data["label"], result_data["citing_prompt"],
-            result_data["actualLabel"], None, groq_key, model_name, provider, api_key,
-            "legal", legal_labels, row_reference
-        )
-        
-        result_data["metrics"] = {
-            "faithfulness_metrics": {
-                "qag_score": row_reference.get("qag_score"),
-                "counterfactual": row_reference.get("counterfactual_scaled"),
-                "contextual_faithfulness": row_reference.get("contextual_faithfulness"),
-                "faithfulness": faithfulness_score
-            }
-        }
-    
-    elif data_type in ["snarks", "hotel", "sentiment"]:
-        row_reference["ground_explanation"] = None
-        
-        # Send empty labels for sentiment, hotel, and snarks datasets as requested
-        labels = []
-        
-        # Calculate faithfulness score
-        faithfulness_score = faithfulness(
-            result_data["llm_explanation"], result_data["label"], question_field,
-            result_data["actualLabel"], None, groq_key, model_name, provider, api_key,
-            data_type, labels, row_reference
-        )
-        
-        result_data["metrics"] = {
-            "faithfulness_metrics": {
-                "qag_score": row_reference.get("qag_score"),
-                "counterfactual": row_reference.get("counterfactual_scaled"),
-                "contextual_faithfulness": row_reference.get("contextual_faithfulness"),
-                "faithfulness": faithfulness_score
-            }
-        }
-    
-    return result_data
-
-
-def get_api_key_for_provider(provider):
-    """Get API key for the specified provider"""
-    if provider == "openrouter":
-        return get_user_api_key_openrouter()
-    elif provider == "openai":
-        return get_user_api_key_openai()
-    elif provider == "groq":
-        return get_user_api_key_groq()
-    elif provider == "gemini":
-        return get_user_api_key_gemini()
-    return 'api'  # Default
 
 
 def update_stats(stats, data_type, result):
@@ -722,7 +507,6 @@ def calculate_metrics(results, data_type, stats):
     elif data_type == "legal":
         stats = calculate_legal_metrics_type(y_true, y_pred, stats)
     else:
-        # Default binary classification metrics
         stats = calculate_binary_metrics(y_true, y_pred, stats)
 
     # Count predictions for stats
@@ -740,14 +524,6 @@ def extract_gold_label(result, data_type):
     """Extract the gold standard label from result"""
     if 'actualLabel' in result:
         return str(result['actualLabel']).strip().lower()
-
-    if 'original_data' in result:
-        original = result['original_data']
-        if 'final_decision' in original:
-            return str(original['final_decision']).strip().lower()
-        elif 'label' in original:
-            return str(original['label']).strip().lower()
-
     return None
 
 
@@ -831,11 +607,9 @@ def calculate_snarks_metrics_type(y_true, y_pred, stats):
     y_true_bin_raw = [snarks_to_bin(x) for x in y_true]
     y_pred_bin_raw = [snarks_to_bin(x) for x in y_pred]
 
-    # Keep only valid pairs
     pairs = [(t, p) for t, p in zip(y_true_bin_raw, y_pred_bin_raw) if t is not None and p is not None]
 
     if not pairs:
-        # No valid pairs
         stats = set_default_binary_metrics(stats)
     else:
         y_true_bin, y_pred_bin = map(list, zip(*pairs))
@@ -856,11 +630,9 @@ def calculate_hotel_metrics_type(y_true, y_pred, stats):
     y_true_bin_raw = [hotel_to_bin(x) for x in y_true]
     y_pred_bin_raw = [hotel_to_bin(x) for x in y_pred]
 
-    # Keep only valid pairs
     pairs = [(t, p) for t, p in zip(y_true_bin_raw, y_pred_bin_raw) if t is not None and p is not None]
 
     if not pairs:
-        # No valid pairs
         stats = set_default_binary_metrics(stats)
     else:
         y_true_bin, y_pred_bin = map(list, zip(*pairs))
@@ -870,15 +642,12 @@ def calculate_hotel_metrics_type(y_true, y_pred, stats):
 
 
 def calculate_legal_metrics_type(y_true, y_pred, stats):
-    """Calculate legal metrics - only accuracy, correct, and incorrect counts"""
-    # Legal dataset uses holding indices 0, 1, 2, 3, 4
+    """Calculate legal metrics"""
     labels = ["0", "1", "2", "3", "4"]
     
-    # Convert to strings and filter valid labels
     y_true_clean = [str(x).strip() for x in y_true if str(x).strip() in labels]
     y_pred_clean = [str(x).strip() for x in y_pred if str(x).strip() in labels]
     
-    # Ensure we have matching pairs
     min_len = min(len(y_true_clean), len(y_pred_clean))
     if min_len == 0:
         return set_default_legal_metrics(stats)
@@ -886,10 +655,8 @@ def calculate_legal_metrics_type(y_true, y_pred, stats):
     y_true_clean = y_true_clean[:min_len]
     y_pred_clean = y_pred_clean[:min_len]
 
-    # Calculate accuracy
     stats["accuracy"] = accuracy_score(y_true_clean, y_pred_clean)
     
-    # Count correct and incorrect predictions
     correct = sum(1 for true, pred in zip(y_true_clean, y_pred_clean) if true == pred)
     incorrect = len(y_true_clean) - correct
     
@@ -937,7 +704,6 @@ def set_default_binary_metrics(stats):
         "false_negative": 0,
         "true_positive": 0
     }
-
     return stats
 
 
@@ -959,11 +725,9 @@ def count_predictions(y_true, y_pred, data_type, stats):
         stats["(A)"] = int(sum(1 for x in y_pred if str(x).strip().upper() in ["A", "(A)"]))
         stats["(B)"] = int(sum(1 for x in y_pred if str(x).strip().upper() in ["B", "(B)"]))
     elif data_type == "hotel":
-        # Count predictions for hotel reviews (deceptive vs truthful)
         stats["deceptive"] = int(sum(1 for x in y_pred if str(x).strip().lower() == "deceptive"))
         stats["truthful"] = int(sum(1 for x in y_pred if str(x).strip().lower() == "truthful"))
     elif data_type == "legal":
-        # Count predictions for each holding index (0-4)
         for i in range(5):
             stats[f"holding_{i}"] = int(sum(1 for x in y_pred if str(x).strip() == str(i)))
     else:
@@ -984,35 +748,9 @@ def store_classification_results(dataset_id, user_id, method, provider, model_na
         "data_type": data_type,
         "results": results,
         "created_at": datetime.now(),
-        "stats": stats
+        "stats": stats,
+        "classification_type": "classification_only"  # Mark as classification-only
     }
 
     classification_id = mongo.db.classifications.insert_one(classification_data).inserted_id
-
-    # Update with explanation models
-    explanation_models = [{'provider': provider, 'model': model_name.replace('.', '_')}]
-    mongo.db.classifications.update_one(
-        {"_id": ObjectId(classification_id), "user_id": ObjectId(user_id)},
-        {"$set": {"explanation_models": explanation_models, "updated_at": datetime.now()}}
-    )
-
     return classification_id
-
-
-def save_explanations(classification_id, user_id, explanations_to_save, results):
-    """Save explanations to database"""
-    for explanation_entry in explanations_to_save:
-        # Find the corresponding result index by matching df_index
-        result_id = next(
-            (i for i, r in enumerate(results) if r.get("df_index") == explanation_entry["df_index"]),
-            None
-        )
-        if result_id is not None:
-            save_explanation_to_db(
-                classification_id=str(classification_id),
-                user_id=user_id,
-                result_id=result_id,
-                explanation_type=explanation_entry["type"],
-                content=explanation_entry["explanation"],
-                model_id=explanation_entry["model"].replace('.', '_')
-            )

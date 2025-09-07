@@ -97,6 +97,39 @@ def evaluate_questions_sentiment(questions, explanation, target_model,provider,a
 
     return qag_score, no_i_dont_know_questions
 
+def generate_questions_legal(explanation, groq):
+    prompt = (f"Generate at least 5 legal case scenarios or questions that can be analyzed using the following explanation. "
+              f"Focus on legal holdings, case precedents, and legal reasoning that would help determine the correct legal interpretation. "
+              f"Split all the questions with a newline character. Don't add anything else to your response:\n\n"
+              f"Explanation: {explanation}")
+    questions = call_llama(prompt, groq).split("\n")
+    return [q.strip() for q in questions if q.strip()]
+
+def evaluate_questions_legal(questions, explanation, target_model,provider,api, row_reference ={}):
+    yes_count = 0
+    no_i_dont_know_questions = []
+
+    for question in questions:
+        prompt = (f"Can the following legal question or scenario be analyzed and answered using this explanation?\n\n"
+                  f"Explanation: {explanation}\nLegal Question: {question}\n"
+                  f"Just give me a yes/no. Don't add anything else to your answer.")
+        print(prompt)
+        answer = call_model(prompt, target_model,provider,api).strip().lower()
+        if "yes" in answer:
+            yes_count += 1
+        else:
+            no_i_dont_know_questions.append(question)
+
+    total_questions = len(questions)
+    qag_score = yes_count / total_questions if total_questions > 0 else 0
+
+    row_reference['qag_yes_count'] = yes_count
+    row_reference['qag_total'] = total_questions
+    row_reference['qag_score'] = qag_score
+    row_reference['qag_failed_questions'] = no_i_dont_know_questions
+
+    return qag_score, no_i_dont_know_questions
+
 def qag(explanation, groq, target_model,provider,api,datatype, row_reference={}):
     """
     Compute the QAG score by generating questions from the explanation and evaluating them. "
@@ -108,6 +141,9 @@ def qag(explanation, groq, target_model,provider,api,datatype, row_reference={})
     elif datatype == 'sentiment':
         questions = generate_questions_sentiment(explanation, groq)
         score, failed = evaluate_questions_sentiment(questions, explanation, target_model,provider,api, row_reference)
+    elif datatype == 'legal':
+        questions = generate_questions_legal(explanation, groq)
+        score, failed = evaluate_questions_legal(questions, explanation, target_model,provider,api, row_reference)
     else:
         questions = generate_questions(explanation, groq)
         score, failed = evaluate_questions(questions, explanation, target_model,provider,api, row_reference)

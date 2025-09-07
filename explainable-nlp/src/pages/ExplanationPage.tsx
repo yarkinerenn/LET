@@ -6,22 +6,56 @@ import { useProvider } from "../modules/provider";
 import '../index.css';
 
 interface ClassificationEntry {
-    text: string;
-    prediction: string;
-    confidence: number;
+    // Core fields
+    text?: string;
+    citing_prompt?: string;
+    prediction?: string;
+    label?: string | number;
+    confidence?: number;
+    score?: number;
     actualLabel?: string | number;
-    explanation: string;
-    llm_explanations?: Record<string, { content: string }>;
+    explanation?: string;
+    llm_explanation?: string;
+    
+    // Dataset specific fields
+    data_type?: string;
+    method?: string;
+    df_index?: number;
+    
+    // Legal dataset specific
+    choices?: string[];
+    holdings?: string[] | null;
+    
+    // Explanations
+    llm_explanations?: Record<string, string>;
     shap_plot_explanation?: { content: string };
     shapwithllm_explanations?: Record<string, { content: string }>;
     importantWords?: { word: string; score: number }[];
+    
+    // Model info
     provider?: string;
     model?: string;
     explanation_models?: Array<{provider: string, model: string}>;
-    data_type?: string;
-    holdings?: string[] | null;
-    method?: string;
-    // faithfulness-only metrics (and subs)
+    
+    // Metrics (nested structure from backend)
+    metrics?: {
+        faithfulness_metrics?: {
+            faithfulness?: number;
+            qag_score?: number;
+            counterfactual?: number;
+            contextual_faithfulness?: number;
+        };
+        plausibility_metrics?: {
+            iterative_stability?: number;
+            paraphrase_stability?: number;
+            consistency?: number;
+            plausibility?: number;
+        };
+        trustworthiness_score?: number;
+        lext_score?: number;
+    };
+    
+    // Legacy direct metrics (for backward compatibility)
     faithfulness_score?: number;
     qag_score?: number;
     counterfactual?: number;
@@ -78,7 +112,22 @@ const ExplanationPage = () => {
                 ]);
 
                 const entryData = entryResponse.data;
-                setClassification(entryData);
+                console.log(entryData);
+                console.log(classificationResponse.data);
+                
+                // Map backend data structure to frontend expectations
+                const mappedData: ClassificationEntry = {
+                    ...entryData,
+                    // Map legal dataset fields
+                    text: entryData.citing_prompt || entryData.text,
+                    prediction: entryData.label || entryData.prediction,
+                    explanation: entryData.llm_explanation || entryData.explanation,
+                    confidence: entryData.score || entryData.confidence,
+                    // Map choices to holdings for legal dataset
+                    holdings: entryData.choices || entryData.holdings,
+                };
+                
+                setClassification(mappedData);
                 setTotalResults(classificationResponse.data.results?.length || 0);
                 setCurrentResultIndex(Number(resultId) || 0);
 
@@ -411,9 +460,11 @@ const ExplanationPage = () => {
                   ? classification.text // This is usually the citing prompt for legal
                   : classification.text}
               </div>
-              <div className="text-muted small mt-2">
-                Confidence: {(classification.confidence * 100).toFixed(1)}%
-              </div>
+              {classification.confidence !== undefined && (
+                <div className="text-muted small mt-2">
+                  Confidence: {(classification.confidence * 100).toFixed(1)}%
+                </div>
+              )}
             </Col>
             <Col md={4}>
               <div className="d-flex flex-column gap-3">
@@ -427,15 +478,13 @@ const ExplanationPage = () => {
 
                         ? (Number(classification.prediction) === Number(classification.actualLabel) ? "success" : "danger")
                           // @ts-ignore
-                        : (classification?.prediction === 1 || classification?.prediction === "1" || classification?.prediction === "POSITIVE" ? "success" : "danger")
+                        : (String(classification?.prediction) === "1" || classification?.prediction === "POSITIVE" ? "success" : "danger")
                     }
                     className="px-3 py-2 fs-6"
                   >
                     {classification?.data_type === "legal"
-                        // @ts-ignore
-                      ? String(classification?.actualLabel + 1)
-                        // @ts-ignore
-                      : (classification?.prediction === 1 || classification?.prediction === "1" || classification?.prediction === "POSITIVE" ? "POSITIVE" : "NEGATIVE")}
+                      ? `Holding ${(Number(classification?.prediction) || 0) + 1}`
+                      : (String(classification?.prediction) === "1" || classification?.prediction === "POSITIVE" ? "POSITIVE" : "NEGATIVE")}
                   </Badge>
                   {/* Show holding text if legal */}
 
@@ -449,15 +498,13 @@ const ExplanationPage = () => {
                       classification?.data_type === "legal"
                         ? "primary"
                           // @ts-ignore
-                        : (classification?.actualLabel === 1 || classification?.actualLabel === "1" || classification?.actualLabel === "POSITIVE" ? "success" : "danger")
+                        : (String(classification?.actualLabel) === "1" || classification?.actualLabel === "POSITIVE" ? "success" : "danger")
                     }
                     className="px-3 py-2 fs-6"
                   >
                     {classification?.data_type === "legal"
-                        // @ts-ignore
-                      ? String(classification?.actualLabel + 1)
-                        // @ts-ignore
-                      : (classification?.actualLabel === 1 || classification?.actualLabel === "1" || classification?.actualLabel === "POSITIVE" ? "POSITIVE" : "NEGATIVE")}
+                      ? `Holding ${(Number(classification?.actualLabel) || 0) + 1}`
+                      : (String(classification?.actualLabel) === "1" || classification?.actualLabel === "POSITIVE" ? "POSITIVE" : "NEGATIVE")}
                   </Badge>
                   {/* Show holding text if legal */}
 
@@ -467,13 +514,17 @@ const ExplanationPage = () => {
           </Row>
 
           {/* Show holdings if it's a legal entry */}
-          {classification?.data_type === "legal" && Array.isArray(classification?.holdings) && (
+          {classification?.data_type === "legal" && Array.isArray(classification?.holdings) && classification.holdings.length > 0 && (
             <Row className="mt-4">
               <Col>
                 <h6>All Holdings:</h6>
                 <ol>
                   {classification.holdings.map((h, i) => (
-                    <li key={i}><strong></strong> {h}</li>
+                    <li key={i} className={`${i === (Number(classification.prediction) || 0) ? 'text-success fw-bold' : i === (Number(classification.actualLabel) || 0) ? 'text-primary fw-bold' : ''}`}>
+                      <strong>Holding {i + 1}:</strong> {h}
+                      {i === (Number(classification.prediction) || 0) && <span className="ms-2 badge bg-success">Predicted</span>}
+                      {i === (Number(classification.actualLabel) || 0) && <span className="ms-2 badge bg-primary">Correct</span>}
+                    </li>
                   ))}
                 </ol>
               </Col>
@@ -483,54 +534,70 @@ const ExplanationPage = () => {
       </Card>
     )}
 
-    {/* Faithfulness Metrics */}
-    <Card className="mb-4">
-      <Card.Body>
-        <Card.Title>Faithfulness Metrics</Card.Title>
-        <Row className="mt-2 g-3">
-          <Col md={3}>
-            <div className="d-flex flex-column">
-              <span className="text-muted small">Faithfulness</span>
-              <Badge bg="secondary" className="fs-6 align-self-start mt-1">
-                {classification?.faithfulness_score !== undefined && classification?.faithfulness_score !== null
-                  ? Number(classification.faithfulness_score).toFixed(2)
-                  : 'N/A'}
-              </Badge>
-            </div>
-          </Col>
-          <Col md={3}>
-            <div className="d-flex flex-column">
-              <span className="text-muted small">QAG</span>
-              <Badge bg="info" className="fs-6 align-self-start mt-1">
-                {classification?.qag_score !== undefined && classification?.qag_score !== null
-                  ? Number(classification.qag_score).toFixed(2)
-                  : 'N/A'}
-              </Badge>
-            </div>
-          </Col>
-          <Col md={3}>
-            <div className="d-flex flex-column">
-              <span className="text-muted small">Counterfactual</span>
-              <Badge bg="warning" text="dark" className="fs-6 align-self-start mt-1">
-                {classification?.counterfactual !== undefined && classification?.counterfactual !== null
-                  ? Number(classification.counterfactual).toFixed(2)
-                  : 'N/A'}
-              </Badge>
-            </div>
-          </Col>
-          <Col md={3}>
-            <div className="d-flex flex-column">
-              <span className="text-muted small">Contextual Faithfulness</span>
-              <Badge bg="primary" className="fs-6 align-self-start mt-1">
-                {classification?.contextual_faithfulness !== undefined && classification?.contextual_faithfulness !== null
-                  ? Number(classification.contextual_faithfulness).toFixed(2)
-                  : 'N/A'}
-              </Badge>
-            </div>
-          </Col>
-        </Row>
-      </Card.Body>
-    </Card>
+    {/* Faithfulness Metrics - only show if at least one metric has data */}
+    {(() => {
+      const faithfulnessMetrics = classification?.metrics?.faithfulness_metrics;
+      const hasMetrics = faithfulnessMetrics?.faithfulness !== undefined || 
+                        faithfulnessMetrics?.qag_score !== undefined || 
+                        faithfulnessMetrics?.counterfactual !== undefined || 
+                        faithfulnessMetrics?.contextual_faithfulness !== undefined ||
+                        classification?.faithfulness_score !== undefined ||
+                        classification?.qag_score !== undefined ||
+                        classification?.counterfactual !== undefined ||
+                        classification?.contextual_faithfulness !== undefined;
+      
+      if (!hasMetrics) return null;
+      
+      return (
+        <Card className="mb-4">
+          <Card.Body>
+            <Card.Title>Faithfulness Metrics</Card.Title>
+            <Row className="mt-2 g-3">
+              {(faithfulnessMetrics?.faithfulness !== undefined || classification?.faithfulness_score !== undefined) && (
+                <Col md={3}>
+                  <div className="d-flex flex-column">
+                    <span className="text-muted small">Faithfulness</span>
+                    <Badge bg="secondary" className="fs-6 align-self-start mt-1">
+                      {Number(faithfulnessMetrics?.faithfulness || classification?.faithfulness_score).toFixed(2)}
+                    </Badge>
+                  </div>
+                </Col>
+              )}
+              {(faithfulnessMetrics?.qag_score !== undefined || classification?.qag_score !== undefined) && (
+                <Col md={3}>
+                  <div className="d-flex flex-column">
+                    <span className="text-muted small">QAG</span>
+                    <Badge bg="info" className="fs-6 align-self-start mt-1">
+                      {Number(faithfulnessMetrics?.qag_score || classification?.qag_score).toFixed(2)}
+                    </Badge>
+                  </div>
+                </Col>
+              )}
+              {(faithfulnessMetrics?.counterfactual !== undefined || classification?.counterfactual !== undefined) && (
+                <Col md={3}>
+                  <div className="d-flex flex-column">
+                    <span className="text-muted small">Counterfactual</span>
+                    <Badge bg="warning" text="dark" className="fs-6 align-self-start mt-1">
+                      {Number(faithfulnessMetrics?.counterfactual || classification?.counterfactual).toFixed(2)}
+                    </Badge>
+                  </div>
+                </Col>
+              )}
+              {(faithfulnessMetrics?.contextual_faithfulness !== undefined || classification?.contextual_faithfulness !== undefined) && (
+                <Col md={3}>
+                  <div className="d-flex flex-column">
+                    <span className="text-muted small">Contextual Faithfulness</span>
+                    <Badge bg="primary" className="fs-6 align-self-start mt-1">
+                      {Number(faithfulnessMetrics?.contextual_faithfulness || classification?.contextual_faithfulness).toFixed(2)}
+                    </Badge>
+                  </div>
+                </Col>
+              )}
+            </Row>
+          </Card.Body>
+        </Card>
+      );
+    })()}
 
     <Row className="g-4">
       {/* SHAP Analysis only for non-LLM */}
