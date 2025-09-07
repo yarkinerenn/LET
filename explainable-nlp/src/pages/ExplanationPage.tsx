@@ -534,7 +534,7 @@ const ExplanationPage = () => {
       </Card>
     )}
 
-    {/* Faithfulness Metrics - only show if at least one metric has data */}
+    {/* Faithfulness Metrics - only show if NO metrics are defined */}
     {(() => {
       const faithfulnessMetrics = classification?.metrics?.faithfulness_metrics;
       const hasMetrics = faithfulnessMetrics?.faithfulness !== undefined || 
@@ -546,7 +546,7 @@ const ExplanationPage = () => {
                         classification?.counterfactual !== undefined ||
                         classification?.contextual_faithfulness !== undefined;
       
-      if (!hasMetrics) return null;
+      if (hasMetrics) return null; // Hide if metrics are defined
       
       return (
         <Card className="mb-4">

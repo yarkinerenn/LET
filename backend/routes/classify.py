@@ -38,7 +38,7 @@ CLASSIFICATION_METHODS = ['bert', 'llm']
 @classify_bp.route('/api/classify/<dataset_id>', methods=['POST'])
 @login_required
 def classify_dataset(dataset_id):
-    """Classify the whole dataset (sentiment, legal/casehold, etc) using BERT or generative AI """
+    """Classify the whole dataset using BERT only"""
     data = request.json
     if not data:
         return jsonify({"error": "No JSON data provided"}), 400
@@ -46,7 +46,11 @@ def classify_dataset(dataset_id):
     try:
         # --- Extract parameters ---
         method = data.get('method')
+        if method != 'bert':
+            return jsonify({"error": "This endpoint only supports BERT classification. Use /api/classify_only/ for LLM classification."}), 400
+            
         data_type = data.get('dataType', 'sentiment')
+        limit = data.get('limit', 20)  # Use provided limit or default to 20
         if data_type == 'legal':
             text_column = data.get('text_column', 'citing_prompt')
             label_column = data.get('label_column', 'label')
@@ -60,12 +64,7 @@ def classify_dataset(dataset_id):
             text_column = "question"
             label_column = "final_decision"
         print(text_column, label_column)
-        if method not in CLASSIFICATION_METHODS:
-            return jsonify({"error": f"Invalid method. Must be one of: {CLASSIFICATION_METHODS}"}), 400
-
-        user_doc = mongo.db.users.find_one({"_id": ObjectId(current_user.id)})
-        provider = user_doc.get('preferred_provider', 'openai')
-        model_name = user_doc.get('preferred_model', 'gpt-3.5-turbo')
+        # No need to check CLASSIFICATION_METHODS since we already validated method == 'bert'
 
         dataset = mongo.db.datasets.find_one({"_id": ObjectId(dataset_id)})
         if not dataset:
@@ -82,26 +81,7 @@ def classify_dataset(dataset_id):
         except Exception as e:
             return jsonify({"error": f"Failed to load dataset: {str(e)}"}), 500
 
-        # --- Init client ---
-        client = None
-        if method == 'llm':
-            if provider == 'openai':
-                api_key = get_user_api_key_openai()
-                if not api_key:
-                    return jsonify({"error": "OpenAI API key not configured"}), 400
-                client = OpenAI(api_key=api_key)
-            elif provider == 'groq':
-                api_key = get_user_api_key_groq()
-                if not api_key:
-                    return jsonify({"error": "Groq API key not configured"}), 400
-                client = Groq(api_key=api_key)
-            elif provider == 'deepseek':
-                api_key = get_user_api_key_deepseek_api()
-                if not api_key:
-                    return jsonify({"error": "Deepseek API key not configured"}), 400
-                client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com/v1")
-            else:
-                return jsonify({"error": "Invalid LLM provider"}), 400
+        # No client needed for BERT-only classification
 
         # --- Process rows ---
         results = []
@@ -113,16 +93,20 @@ def classify_dataset(dataset_id):
         elif data_type == "medical":
             stats.update({"correct": 0, "incorrect": 0})
 
-        # For demo/sample, limit to first 50
-        sample_size = 20  # or whatever
+        # Use the provided limit for sampling
+        sample_size = min(limit, len(df))  # Don't exceed dataset size
         if label_column in df.columns:
             # Make sure you have enough samples in each class!
-            df_sampled, _ = train_test_split(
-                df,
-                train_size=sample_size,
-                stratify=df[label_column],
-                random_state=42,
-            )
+            try:
+                df_sampled, _ = train_test_split(
+                    df,
+                    train_size=sample_size,
+                    stratify=df[label_column],
+                    random_state=42,
+                )
+            except ValueError:
+                # Fallback if stratification fails (not enough samples per class)
+                df_sampled = df.sample(n=sample_size, random_state=42)
         else:
             # fallback to random if label column not found
             df_sampled = df.sample(n=sample_size, random_state=42)
@@ -141,28 +125,12 @@ def classify_dataset(dataset_id):
                     return i
             return None
 
-        for _, row in tqdm(samples, total=10, desc="Classifying"):
+        for _, row in tqdm(samples, total=sample_size, desc="BERT Classifying"):
             try:
-                # --- Sentiment ---
+                # --- Sentiment (BERT only) ---
                 if data_type == "sentiment":
                     text = str(row[text_column])
-                    prompt = f"Classify this text's sentiment as only POSITIVE or NEGATIVE: {text}"
-                    def parse_label(content):
-                        uc = content.upper()
-                        return "POSITIVE" if "POS" in uc else "NEGATIVE"
-                    if method == "bert":
-                        label, score = classify_with_chunks(text, classifier, tokenizer)
-                    else:
-                        response = client.chat.completions.create(
-                            model=model_name,
-                            messages=[{
-                                "role": "user",
-                                "content": prompt
-                            }],
-                            max_tokens=10
-                        )
-                        label = parse_label(response.choices[0].message.content.strip())
-                        score = 1.0
+                    label, score = classify_with_chunks(text, classifier, tokenizer)
                     result_data = {
                         "text": text,
                         "label": label,
@@ -181,29 +149,14 @@ def classify_dataset(dataset_id):
                     else:
                         stats["negative"] += 1
 
-                # --- Legal / CaseHold style ---
+                # --- Legal / CaseHold style (BERT - limited support) ---
                 elif data_type == "legal":
                     context = str(row[text_column])
                     choices = [row.get(f'holding_{i}', '') for i in range(5)]
-                    prompt = f"Legal Scenario:\n{context}\n\nSelect the holding that is most supported by the legal scenario above.\n"
-                    for idx, holding in enumerate(choices):
-                        prompt += f"{idx}: {holding}\n"
-                    prompt += "\nReply with the number (0, 1, 2, 3, or 4) only."
-
-                    if method == "bert":
-                        label, score = None, 0.0  # or implement MCQ BERT logic
-                    else:
-                        response = client.chat.completions.create(
-                            model=model_name,
-                            messages=[{
-                                "role": "user",
-                                "content": prompt
-                            }],
-                            max_tokens=10
-                        )
-                        pred = parse_casehold_label(response.choices[0].message.content)
-                        label = pred if pred is not None else -1
-                        score = 1.0
+                    
+                    # BERT doesn't handle multi-choice legal classification well
+                    # This is a placeholder - you might want to implement a proper legal BERT model
+                    label, score = -1, 0.0  # Default to invalid choice
 
                     result_data = {
                         "citing_prompt": context,
@@ -225,40 +178,12 @@ def classify_dataset(dataset_id):
                         stats["incorrect"] += 1
                 elif data_type == "medical":
                     question = str(row.get("question", ""))
-                    context = pretty_pubmed_qa(row.get("context", ""))  # or use 'abstract' if that's your column name
-                    long_answer=str(row.get("long_answer", ""))
-                    prompt = f"""Given the following context, answer the question as 'yes', or 'no', and reply with just one word.
-                
-                        Question:
-                        {question}
-                        
-                        Context:
-                        {context}
-                        
-                        Your answer (yes, no) only:
-                        """
-
-                    if method == "bert":
-                        label, score = None, 0.0  # You can implement a PubMedQA BERT model if you want!
-                    else:
-                        response = client.chat.completions.create(
-                            model=model_name,
-                            messages=[{
-                                "role": "user",
-                                "content": prompt
-                            }],
-                            max_tokens=3
-                        )
-                        content = response.choices[0].message.content.strip().lower()
-                        if "yes" in content:
-                            label = "yes"
-                        elif "no" in content:
-                            label = "no"
-                        elif "maybe" in content:
-                            label = "maybe"
-                        else:
-                            label = "maybe"  # fallback
-                        score = 1.0
+                    context = pretty_pubmed_qa(row.get("context", ""))
+                    long_answer = str(row.get("long_answer", ""))
+                    
+                    # BERT doesn't handle medical QA well without specialized training
+                    # This is a placeholder - you might want to implement a medical BERT model
+                    label, score = "maybe", 0.0  # Default to uncertain
 
                     result_data = {
                         "question": question,
@@ -349,19 +274,20 @@ def classify_dataset(dataset_id):
         classification_data = {
             "dataset_id": ObjectId(dataset_id),
             "user_id": ObjectId(current_user.id),
-            "method": method,
-            "provider": provider if method == 'llm' else None,
-            "model": model_name if method == 'llm' else None,
+            "method": "bert",  # Always BERT for this endpoint
+            "provider": None,  # BERT doesn't use external providers
+            "model": "distilbert-base-uncased-finetuned-sst-2-english",  # The BERT model used
             "data_type": data_type,
             "results": results,
             "created_at": datetime.now(),
-            "stats": stats
+            "stats": stats,
+            "classification_type": "bert_only"  # Mark as BERT-only
         }
 
         classification_id = mongo.db.classifications.insert_one(classification_data).inserted_id
 
         return jsonify({
-            "message": "Classification completed",
+            "message": "BERT classification completed",
             "classification_id": str(classification_id),
             "stats": stats,
             "sample_count": len(results)
@@ -372,7 +298,7 @@ def classify_dataset(dataset_id):
         print(f"Classification error: {str(e)}")
 
         return jsonify({
-            "error": "Classification failed",
+            "error": "BERT classification failed",
             "details": str(e)
         }), 500
 

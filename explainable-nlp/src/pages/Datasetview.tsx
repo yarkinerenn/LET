@@ -158,6 +158,32 @@ const DatasetView = () => {
             setClassifying(null);
         }
     };
+    
+    const handleClassificationBERT = async () => {
+        setClassifying("bert");
+        try {
+            const response = await axios.post(
+                `http://localhost:5000/api/classify/${datasetId}`,
+                { method: "bert", provider: provider, model: model, dataType: dataType, limit: classificationLimit },
+                { withCredentials: true }
+            );
+
+            // Navigate to classification dashboard after successful classification
+            if (["sentiment", "legal"].includes((dataType || "").toLowerCase())) {
+              navigate(`/datasets/${datasetId}/classifications/${response.data.classification_id}`);
+            } else {
+              navigate(`/datasets/${datasetId}/classificationsp/${response.data.classification_id}`);
+              console.log('uuumedical');
+            }
+
+        } catch (err) {
+            console.log(err);
+            setError(`Classification using BERT failed.`);
+        } finally {
+            setClassifying(null);
+        }
+    };
+    
     const handleClassificationandExplanation = async (method: "llm" | "bert") => {
         setClassifying(method);
         try {
@@ -331,7 +357,7 @@ const DatasetView = () => {
                                 {dataType === "sentiment" && (
                                     <Button
                                         variant="success"
-                                        onClick={() => handleClassification("bert")}
+                                        onClick={handleClassificationBERT}
                                         disabled={!dataset || !!classifying}
                                     >
                                         {classifying === "bert" ? (
