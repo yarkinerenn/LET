@@ -1,29 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Container, Row, Col, Card, Table, Alert, Spinner, Button, Badge, Modal, Form, Accordion } from 'react-bootstrap';
+import { Container, Row, Col, Card, Table, Alert, Spinner, Button, Badge } from 'react-bootstrap';
 import axios from 'axios';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell, ResponsiveContainer
 } from 'recharts';
+import LLMSelector from '../components/LLMSelector';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
-// Groq models list
-const groqModels = [
-  { name: "llama3d" },
-  { name: "deepseek-r1-distill-llama-70b" },
-  { name: "gemma2-9b-it" },
-  { name: "llama-3.1-8b-instant" },
-  // ... other Groq models
-];
-
-// OpenRouter models list
-const openrouterModels = [
-  { name: "deepseek/deepseek-r1-0528-qwen3-8b:free" },
-  { name: "mistralai/devstral-small-2505:free" },
-  { name: "gemma-3-12b-it" },
-  // ... other OpenRouter models
-];
 
 interface ClassificationResult {
   text?: string;
@@ -72,10 +57,6 @@ const SentimentDashboard = () => {
   const itemsPerPage = 10;
   const navigate = useNavigate();
 
-  // Model Modal
-  const [showModelModal, setShowModelModal] = useState(false);
-  const [selectedModels, setSelectedModels] = useState<string[]>([]);
-
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -105,22 +86,17 @@ const SentimentDashboard = () => {
     { name: "Negative", value: stats?.negative || 0 }
   ];
 
-  const handleSubmitModels = async () => {
-    try {
-      const explanation_models = selectedModels.map(model => {
-        const [provider, ...rest] = model.split(':');
-        return { provider, model: rest.join(':') };
-      });
-      await axios.post(
-        `http://localhost:5000/api/classification/${classificationId}/add_explanation_models`,
-        { explanation_models },
-        { withCredentials: true }
-      );
-      setShowModelModal(false);
-      alert('Explanation models added successfully!');
-    } catch (error) {
-      alert('Failed to add explanation models. Please try again.');
-    }
+  const handleModelsSubmit = async (selectedModels: string[]) => {
+    const explanation_models = selectedModels.map(model => {
+      const [provider, ...rest] = model.split(':');
+      return { provider, model: rest.join(':') };
+    });
+    await axios.post(
+      `http://localhost:5000/api/classification/${classificationId}/add_explanation_models`,
+      { explanation_models },
+      { withCredentials: true }
+    );
+    alert('Explanation models added successfully!');
   };
 
   return (
@@ -149,9 +125,7 @@ const SentimentDashboard = () => {
             </Col>
 
             <Col md="auto">
-              <Button variant="outline-primary" onClick={() => { setSelectedModels([]); setShowModelModal(true); }}>
-                Choose Different LLMs
-              </Button>
+              <LLMSelector onModelsSubmit={handleModelsSubmit} />
             </Col>
           </Row>
 
@@ -314,76 +288,6 @@ const SentimentDashboard = () => {
           </Row>
         </>
       )}
-
-      {/* Model Modal */}
-      <Modal show={showModelModal} onHide={() => setShowModelModal(false)} size="lg">
-        <Modal.Header closeButton>
-          <Modal.Title>Select Models for Explanation</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <p className="text-muted">Select models from different providers. You can choose multiple models.</p>
-          <Accordion defaultActiveKey="0">
-            <Accordion.Item eventKey="0">
-              <Accordion.Header>Groq ({selectedModels.filter(m => m.startsWith('groq:')).length} selected)</Accordion.Header>
-              <Accordion.Body>
-                <div className="row">
-                  {groqModels.map((model, index) => {
-                    const modelKey = `groq:${model.name}`;
-                    return (
-                      <div className="col-md-6 mb-2" key={modelKey}>
-                        <Form.Check
-                          type="checkbox"
-                          id={`groq-${index}`}
-                          label={model.name}
-                          checked={selectedModels.includes(modelKey)}
-                          onChange={(e) => {
-                            const updated = e.target.checked
-                              ? [...selectedModels, modelKey]
-                              : selectedModels.filter((m) => m !== modelKey);
-                            setSelectedModels(updated);
-                          }}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              </Accordion.Body>
-            </Accordion.Item>
-            <Accordion.Item eventKey="1">
-              <Accordion.Header>OpenRouter ({selectedModels.filter(m => m.startsWith('openrouter:')).length} selected)</Accordion.Header>
-              <Accordion.Body>
-                <div className="row">
-                  {openrouterModels.map((model, index) => {
-                    const modelKey = `openrouter:${model.name}`;
-                    return (
-                      <div className="col-md-6 mb-2" key={modelKey}>
-                        <Form.Check
-                          type="checkbox"
-                          id={`openrouter-${index}`}
-                          label={model.name}
-                          checked={selectedModels.includes(modelKey)}
-                          onChange={(e) => {
-                            const updated = e.target.checked
-                              ? [...selectedModels, modelKey]
-                              : selectedModels.filter((m) => m !== modelKey);
-                            setSelectedModels(updated);
-                          }}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              </Accordion.Body>
-            </Accordion.Item>
-          </Accordion>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowModelModal(false)}>Cancel</Button>
-          <Button variant="primary" onClick={handleSubmitModels} disabled={selectedModels.length === 0}>
-            Submit
-          </Button>
-        </Modal.Footer>
-      </Modal>
     </Container>
   );
 };
