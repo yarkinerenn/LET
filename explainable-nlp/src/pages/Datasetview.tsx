@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Container, Row, Col, Table, Button, Alert, Spinner, Card, Badge, Pagination, Form, Modal } from "react-bootstrap";
 import axios from "axios";
-// Using Bootstrap Icons instead of lucide-react
 
 import { useProvider } from "../modules/provider";
 
@@ -283,229 +282,105 @@ const DatasetView = () => {
     }, [datasetId]);
 
     return (
-        <div className="dataset-view-container" style={{ 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            minHeight: '100vh',
-            padding: '2rem 0'
-        }}>
-            <Container fluid style={{ maxWidth: '1400px' }}>
-                {/* Header Section */}
-                <Row className="mb-4">
-                    <Col>
-                        <div className="d-flex align-items-center justify-content-between">
-                            <div className="d-flex align-items-center">
-                                <Button
-                                    variant="light"
-                                    size="lg"
-                                    onClick={() => navigate(`/datasets`)}
-                                    className="me-3 rounded-pill px-4"
-                                    style={{ 
-                                        background: 'rgba(255,255,255,0.2)', 
-                                        border: 'none',
-                                        color: 'white',
-                                        backdropFilter: 'blur(10px)'
-                                    }}
-                                >
-                                    <i className="bi bi-arrow-left me-2"></i>
-                                    Back to Datasets
-                                </Button>
-                                <div>
-                                    <h1 className="text-white mb-1" style={{ fontSize: '2.5rem', fontWeight: '700' }}>
-                                        {dataset?.filename || 'Dataset View'}
-                                    </h1>
-                                    <p className="text-white-50 mb-0" style={{ fontSize: '1.1rem' }}>
-                                        Analyze and classify your dataset with AI
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="text-end">
-                                <div className="text-white-50 mb-1">Total Entries</div>
-                                <div className="text-white h3 mb-0">{dataset?.data?.length || 0}</div>
-                            </div>
-                        </div>
-                    </Col>
-                </Row>
-
-                <Row className="g-4">
+        <Container fluid>
+            <Row className="py-4">
                 {/* Classification Sidebar */}
-                    <Col lg={4}>
-                        <div className="sticky-top" style={{ top: '2rem' }}>
-                            {/* Explore Dataset Card */}
-                            <Card className="mb-4 border-0 shadow-lg" style={{ 
-                                background: 'rgba(255,255,255,0.95)',
-                                backdropFilter: 'blur(20px)',
-                                borderRadius: '20px'
-                            }}>
-                                <Card.Body className="p-4">
-                                    <div className="d-flex align-items-center mb-3">
-                                        <div className="p-2 rounded-circle me-3" style={{ background: 'linear-gradient(45deg, #ff6b6b, #ffa500)' }}>
-                                            <i className="bi bi-eye-fill text-white" style={{ fontSize: '20px' }}></i>
-                                        </div>
-                                        <h5 className="mb-0 fw-bold">Explore Dataset</h5>
-                                    </div>
-                                    <p className="text-muted mb-3">Review and annotate entries one by one</p>
+
+
+                <Col md={4} className="border-end border-2">
+
+                    <Card className="border-0">
                     <Button
                         variant="warning"
-                                        size="lg"
+                        className="mb-2"
                         onClick={handleExploreDataset}
                         disabled={!dataset || exploreLoading}
-                                        className="w-100 rounded-pill py-3"
-                                        style={{ 
-                                            background: 'linear-gradient(45deg, #ff6b6b, #ffa500)',
-                                            border: 'none',
-                                            fontWeight: '600',
-                                            fontSize: '1.1rem'
-                                        }}
                     >
                         {exploreLoading ? (
                             <>
-                                                <Spinner animation="border" size="sm" className="me-2" />
-                                                Exploring...
+                                <Spinner animation="border" size="sm" /> Exploring...
                             </>
                         ) : (
-                                            <>
-                                                <i className="bi bi-play-fill me-2"></i>
-                                                Start Exploration
-                                            </>
+                            "Explore/Annotate Dataset (One by One)"
                         )}
                     </Button>
-                                </Card.Body>
-                            </Card>
-                            {/* Classification Methods Card */}
-                            <Card className="mb-4 border-0 shadow-lg" style={{ 
-                                background: 'rgba(255,255,255,0.95)',
-                                backdropFilter: 'blur(20px)',
-                                borderRadius: '20px'
-                            }}>
-                                <Card.Body className="p-4">
-                                    <div className="d-flex align-items-center mb-4">
-                                        <div className="p-2 rounded-circle me-3" style={{ background: 'linear-gradient(45deg, #667eea, #764ba2)' }}>
-                                            <i className="bi bi-cpu-fill text-white" style={{ fontSize: '20px' }}></i>
-                                        </div>
-                                        <h5 className="mb-0 fw-bold">AI Classification</h5>
+                        <div className="d-flex justify-content-between m-4">
+                            <Button
+                                variant="outline-secondary"
+                                onClick={() => navigate(`/datasets`)}
+                            >
+                                ← Back to Datasets
+                            </Button>
                         </div>
-                                    
-                                    <div className="mb-4">
-                                        <label className="form-label fw-semibold text-muted mb-2">
-                                            <i className="bi bi-bullseye me-2"></i>
-                                            Entries to Classify
-                                        </label>
+                        <Card.Body>
+
+                            <Card.Title className="mb-4">Classification Methods</Card.Title>
+                            <div className="mb-3 d-flex align-items-center gap-3">
+                              <span className="fw-semibold">Entries to Classify:</span>
                               <Form.Control
                                 type="number"
                                 min="1"
                                 max={dataset?.data?.length || 1}
                                 value={classificationLimit ?? ""}
                                 onChange={e => setClassificationLimit(e.target.value ? Number(e.target.value) : null)}
-                                            placeholder="5"
-                                            className="rounded-pill"
-                                            style={{ 
-                                                border: '2px solid #e9ecef',
-                                                padding: '0.75rem 1rem'
-                                            }}
+                                placeholder='5'
+                                style={{ width: "100px" }}
                               />
                             </div>
-
                             <div className="d-grid gap-3">
                                 <Button
                                     variant="primary"
-                                            size="lg"
                                     onClick={() => handleClassification("llm")}
                                     disabled={!dataset || !!classifying}
-                                            className="rounded-pill py-3"
-                                            style={{ 
-                                                background: 'linear-gradient(45deg, #667eea, #764ba2)',
-                                                border: 'none',
-                                                fontWeight: '600'
-                                            }}
                                 >
                                     {classifying === "llm" ? (
                                         <>
-                                                    <Spinner animation="border" size="sm" className="me-2" />
-                                                    Classifying...
+                                            <Spinner animation="border" size="sm" /> Classifying...
                                         </>
                                     ) : (
-                                                <>
-                                                    <i className="bi bi-lightning-fill me-2"></i>
-                                                    Classify with LLM
-                                                </>
+                                        "Classify with LLM"
                                     )}
                                 </Button>
-                                        
                                 <Button
-                                            variant="info"
-                                            size="lg"
+                                    variant="primary"
                                     onClick={() => handleClassificationandExplanation("llm")}
                                     disabled={!dataset || !!classifying}
-                                            className="rounded-pill py-3"
-                                            style={{ 
-                                                background: 'linear-gradient(45deg, #4facfe, #00f2fe)',
-                                                border: 'none',
-                                                fontWeight: '600'
-                                            }}
                                 >
                                     {classifying === "llm" ? (
                                         <>
-                                                    <Spinner animation="border" size="sm" className="me-2" />
-                                                    Classifying...
+                                            <Spinner animation="border" size="sm" /> Classifying...
                                         </>
                                     ) : (
-                                                <>
-                                                    <i className="bi bi-file-text-fill me-2"></i>
-                                                    Classify & Explain
-                                                </>
+                                        "Classify and explain with LLM"
                                     )}
                                 </Button>
-                                        
                                 {dataType === "sentiment" && (
                                     <Button
                                         variant="success"
-                                                size="lg"
                                         onClick={handleClassificationBERT}
                                         disabled={!dataset || !!classifying}
-                                                className="rounded-pill py-3"
-                                                style={{ 
-                                                    background: 'linear-gradient(45deg, #56ab2f, #a8e6cf)',
-                                                    border: 'none',
-                                                    fontWeight: '600'
-                                                }}
                                     >
                                         {classifying === "bert" ? (
                                             <>
-                                                        <Spinner animation="border" size="sm" className="me-2" />
-                                                        Classifying...
+                                                <Spinner animation="border" size="sm" /> Classifying...
                                             </>
                                         ) : (
-                                                    <>
-                                                        <i className="bi bi-database-fill me-2"></i>
-                                                        Classify with BERT
-                                                    </>
+                                            "Classify with BERT"
                                         )}
                                     </Button>
                                 )}
                             </div>
                         </Card.Body>
                     </Card>
-                            {/* Previous Classifications Card */}
-                            <Card className="border-0 shadow-lg" style={{ 
-                                background: 'rgba(255,255,255,0.95)',
-                                backdropFilter: 'blur(20px)',
-                                borderRadius: '20px'
-                            }}>
-                                <Card.Body className="p-4">
-                                    <div className="d-flex align-items-center mb-4">
-                                        <div className="p-2 rounded-circle me-3" style={{ background: 'linear-gradient(45deg, #ff9a9e, #fecfef)' }}>
-                                            <i className="bi bi-bar-chart-fill text-white" style={{ fontSize: '20px' }}></i>
-                                        </div>
-                                        <h5 className="mb-0 fw-bold">Previous Classifications</h5>
-                                    </div>
-                                    
+                    <Card className="border-0">
+                        <Card.Body>
+                            <Card.Title className="mb-3">Previous Classifications</Card.Title>
                             {loadingClassifications ? (
-                                        <div className="text-center py-4">
+                                <div className="text-center py-3">
                                     <Spinner animation="border" size="sm" />
-                                            <p className="text-muted mt-2 mb-0">Loading classifications...</p>
                                 </div>
                             ) : classifications.length > 0 ? (
-                                        <div className="classifications-list" style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                                <div className="classifications-list" style={{ maxHeight: '400px', overflowY: 'auto', padding: '0 4px' }}>
                                     {classifications
                                       .filter(c => c.method !== "explore")
                                       .map((classification) => (
@@ -513,6 +388,7 @@ const DatasetView = () => {
                                           key={classification._id}
                                           className="mb-3 border-0"
                                           onClick={() => {
+                                            // Make the check case-insensitive and handle undefined
                                             if (dataType === "sentiment") {
                                               navigate(`/datasets/${datasetId}/classifications/${classification._id}`);
                                             }
@@ -528,62 +404,50 @@ const DatasetView = () => {
                                             else if(dataType === 'hotel') {
                                                  navigate(`/datasets/${datasetId}/classifications_hotel/${classification._id}`);
                                             }
+
                                             else {
                                               navigate(`/datasets/${datasetId}/classificationsp/${classification._id}`);
                                             }
                                           }}
                                           style={{
                                             cursor: 'pointer',
-                                                    transition: 'all 0.3s ease',
-                                                    borderRadius: '16px',
-                                                    background: 'rgba(255,255,255,0.8)',
-                                                    border: '1px solid rgba(0,0,0,0.05)',
-                                                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-                                                  }}
-                                                  onMouseEnter={e => {
-                                                    e.currentTarget.style.transform = 'translateY(-4px)';
-                                                    e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.15)';
-                                                  }}
-                                                  onMouseLeave={e => {
-                                                    e.currentTarget.style.transform = 'translateY(0)';
-                                                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
-                                                  }}
-                                                >
-                                                    <Card.Body className="p-3">
+                                            transition: 'all 0.2s ease',
+                                            borderRadius: '12px',
+                                            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                                            borderLeft: `4px solid ${classification.method === "llm" ? '#4361ee' : '#4cc9f0'}`
+                                          }}
+                                          onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+                                          onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                                        >
+                                            <Card.Body className="p-4">
                                                 <div className="d-flex justify-content-between align-items-start">
                                                     <div style={{ flex: 1 }}>
-                                                                <div className="d-flex align-items-center gap-2 mb-2">
+                                                        <div className="d-flex align-items-center gap-2 mb-3">
                                                             <Badge
-                                                                        className="rounded-pill px-3 py-2"
+                                                                bg={classification.method === "llm" ? "primary" : "info"}
+                                                                pill
                                                                 style={{
-                                                                            background: classification.method === "llm" 
-                                                                                ? 'linear-gradient(45deg, #667eea, #764ba2)' 
-                                                                                : 'linear-gradient(45deg, #4facfe, #00f2fe)',
-                                                                            border: 'none',
-                                                                            fontWeight: '600',
-                                                                            fontSize: '0.8rem'
-                                                                        }}
-                                                                    >
-                                                                        {classification.method === "llm" ? "🤖 LLM" : "🧠 BERT"}
+                                                                    fontWeight: 500,
+                                                                    background: classification.method === "llm" ? '#4361ee' : '#4cc9f0'
+                                                                }}
+                                                            >
+                                                                {classification.method.toUpperCase()}
                                                             </Badge>
                                                             {getAccuracyBadge(classification.stats.accuracy)}
                                                         </div>
 
                                                         {classification.method === "llm" && (
-                                                                    <div className="mb-2">
-                                                                        <div className="d-flex align-items-center text-muted" style={{ fontSize: '0.85rem' }}>
-                                                                            <i className="bi bi-gear-fill me-1" style={{ fontSize: '14px' }}></i>
-                                                                            <span className="fw-semibold">
+                                                            <div className="mb-3">
+                                                            <span className="text-muted" style={{ fontSize: '0.85rem' }}>
+                                                              Model:
+                                                            </span>
+                                                                <span className="ms-2 fw-semibold">
                                                               {classification.provider} / {classification.model}
                                                             </span>
-                                                                        </div>
                                                             </div>
                                                         )}
 
-                                                                <div className="d-flex align-items-center text-muted" style={{ fontSize: '0.8rem' }}>
-                                                                    <i className="bi bi-clock-fill me-1" style={{ fontSize: '12px' }}></i>
-                                                                    <span>{formatDate(classification.created_at)}</span>
-                                                                </div>
+                                                        
                                                     </div>
 
                                                     <Button
@@ -593,15 +457,15 @@ const DatasetView = () => {
                                                             e.stopPropagation();
                                                             handleDeleteClassification(classification._id, e);
                                                         }}
-                                                                className="rounded-pill px-3"
                                                         style={{
                                                             borderColor: '#ff6b6b',
                                                             color: '#ff6b6b',
-                                                                    fontWeight: '500',
-                                                                    fontSize: '0.8rem'
+                                                            padding: '4px 12px',
+                                                            borderRadius: '8px',
+                                                            fontWeight: 500
                                                         }}
                                                     >
-                                                                <i className="bi bi-trash-fill" style={{ fontSize: '14px' }}></i>
+                                                        Delete
                                                     </Button>
                                                 </div>
                                             </Card.Body>
@@ -609,55 +473,32 @@ const DatasetView = () => {
                                     ))}
                                 </div>
                             ) : (
-                                        <div className="text-center py-4">
-                                            <div className="p-3 rounded-circle d-inline-block mb-3" style={{ background: 'rgba(0,0,0,0.05)' }}>
-                                                <i className="bi bi-bar-chart text-muted" style={{ fontSize: '24px' }}></i>
-                                            </div>
-                                            <p className="text-muted mb-0">No previous classifications</p>
-                                            <small className="text-muted">Start by classifying your dataset above</small>
-                                        </div>
+                                <p className="text-muted text-center">No previous classifications</p>
                             )}
                         </Card.Body>
                     </Card>
-                        </div>
                 </Col>
 
                 {/* Main Content */}
-                    <Col lg={8}>
+                <Col md={8}>
                     {loading ? (
-                            <div className="text-center py-5">
-                                <div className="p-4 rounded-circle d-inline-block mb-3" style={{ background: 'rgba(255,255,255,0.1)' }}>
-                                    <Spinner animation="border" style={{ color: 'white' }} />
-                                </div>
-                                <p className="text-white-50">Loading dataset...</p>
+                        <div className="text-center">
+                            <Spinner animation="border" />
                         </div>
                     ) : error ? (
-                            <Alert variant="danger" className="border-0 shadow-lg" style={{ borderRadius: '16px' }}>
+                        <Alert variant="danger">{error}</Alert>
+                    ) : (
+                        <>
+                            <div className="d-flex justify-content-between align-items-center mb-4">
+                                <h2 className="mb-0">{dataset?.filename}</h2>
                                 <div className="d-flex align-items-center">
-                                    <i className="bi bi-x-circle-fill me-2"></i>
-                                    {error}
-                                </div>
-                            </Alert>
-                        ) : (
-                            <Card className="border-0 shadow-lg" style={{ 
-                                background: 'rgba(255,255,255,0.95)',
-                                backdropFilter: 'blur(20px)',
-                                borderRadius: '20px'
-                            }}>
-                                <Card.Body className="p-4">
-                                    <div className="d-flex justify-content-between align-items-center mb-4">
-                                        <div>
-                                            <h4 className="mb-1 fw-bold">Dataset Preview</h4>
-                                            <p className="text-muted mb-0">Browse and explore your data entries</p>
-                                        </div>
-                                        <div className="d-flex align-items-center">
-                                            <span className="text-muted me-3">Items per page:</span>
+                                    <span className="me-3">Items per page:</span>
                                     <Form.Select 
                                         size="sm" 
-                                                style={{ width: '120px' }}
+                                        style={{ width: '100px' }}
                                         value={itemsPerPage}
                                         onChange={handleItemsPerPageChange}
-                                                className="rounded-pill"
+                                        className="me-2"
                                     >
                                         <option value={5}>5</option>
                                         <option value={10}>10</option>
@@ -669,24 +510,13 @@ const DatasetView = () => {
 
                             {dataset?.data && dataset.data.length > 0 ? (
                                 <>
-                                            <div style={{ 
-                                                maxHeight: '600px', 
-                                                overflowY: 'auto',
-                                                borderRadius: '12px',
-                                                border: '1px solid rgba(0,0,0,0.05)'
-                                            }}>
+                                    <Card className="shadow-sm mb-4">
+                                        <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
                                             <Table hover responsive className="mb-0">
-                                                    <thead style={{ 
-                                                        background: 'linear-gradient(45deg, #f8f9fa, #e9ecef)',
-                                                        position: 'sticky',
-                                                        top: 0,
-                                                        zIndex: 10
-                                                    }}>
+                                                <thead className="bg-light">
                                                 <tr>
                                                     {Object.keys(dataset.data[0]).map((key) => (
-                                                            <th key={key} className="px-4 py-3 fw-semibold text-dark border-0">
-                                                                {key}
-                                                            </th>
+                                                        <th key={key} className="px-4 py-3">{key}</th>
                                                     ))}
                                                 </tr>
                                                 </thead>
@@ -695,21 +525,12 @@ const DatasetView = () => {
                                                     <tr
                                                         key={index}
                                                         onClick={() => handleEntryClick(row)}
-                                                            style={{ 
-                                                                cursor: 'pointer',
-                                                                transition: 'all 0.2s ease'
-                                                            }}
+                                                        style={{ cursor: 'pointer' }}
                                                         className="hover-highlight"
-                                                            onMouseEnter={e => {
-                                                                e.currentTarget.style.background = 'rgba(102, 126, 234, 0.05)';
-                                                            }}
-                                                            onMouseLeave={e => {
-                                                                e.currentTarget.style.background = '';
-                                                            }}
                                                     >
                                                         {Object.values(row).map((value, i) => (
-                                                                <td key={i} className="px-4 py-3 text-truncate border-0" style={{ maxWidth: '300px' }}>
-                                                                    <span className="text-dark">{String(value)}</span>
+                                                            <td key={i} className="px-4 py-3 text-truncate" style={{ maxWidth: '300px' }}>
+                                                                {String(value)}
                                                             </td>
                                                         ))}
                                                     </tr>
@@ -717,199 +538,62 @@ const DatasetView = () => {
                                                 </tbody>
                                             </Table>
                                         </div>
+                                    </Card>
 
-                                            <div className="d-flex justify-content-between align-items-center mt-4">
-                                                <div className="text-muted">
-                                                    <i className="bi bi-database me-2"></i>
-                                                    Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, dataset.data.length)} of {dataset.data.length} entries
-                                                </div>
+                                    <div className="d-flex justify-content-between align-items-center">
+                                        <div className="text-muted">
+                                            Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, dataset.data.length)} of {dataset.data.length} entries
+                                        </div>
                                         <Pagination className="mb-0">
-                                                    <Pagination.First 
-                                                        onClick={() => setCurrentPage(1)} 
-                                                        disabled={currentPage === 1}
-                                                        className="rounded-pill"
-                                                    />
-                                                    <Pagination.Prev 
-                                                        onClick={() => setCurrentPage(curr => Math.max(curr - 1, 1))} 
-                                                        disabled={currentPage === 1}
-                                                        className="rounded-pill"
-                                                    />
+                                            <Pagination.First onClick={() => setCurrentPage(1)} disabled={currentPage === 1} />
+                                            <Pagination.Prev onClick={() => setCurrentPage(curr => Math.max(curr - 1, 1))} disabled={currentPage === 1} />
                                             {paginationItems}
-                                                    <Pagination.Next 
-                                                        onClick={() => setCurrentPage(curr => Math.min(curr + 1, totalPages))} 
-                                                        disabled={currentPage === totalPages}
-                                                        className="rounded-pill"
-                                                    />
-                                                    <Pagination.Last 
-                                                        onClick={() => setCurrentPage(totalPages)} 
-                                                        disabled={currentPage === totalPages}
-                                                        className="rounded-pill"
-                                                    />
+                                            <Pagination.Next onClick={() => setCurrentPage(curr => Math.min(curr + 1, totalPages))} disabled={currentPage === totalPages} />
+                                            <Pagination.Last onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} />
                                         </Pagination>
                                     </div>
                                 </>
                             ) : (
-                                        <div className="text-center py-5">
-                                            <div className="p-4 rounded-circle d-inline-block mb-3" style={{ background: 'rgba(0,0,0,0.05)' }}>
-                                                <i className="bi bi-database text-muted" style={{ fontSize: '32px' }}></i>
-                                            </div>
-                                            <h5 className="text-muted">No data available</h5>
-                                            <p className="text-muted">This dataset appears to be empty</p>
-                                        </div>
-                                    )}
-                                </Card.Body>
-                            </Card>
+                                <p className="text-center">No data available.</p>
+                            )}
+                        </>
                     )}
                 </Col>
             </Row>
-            </Container>
 
             {/* Modal for viewing full entry details */}
-            <Modal show={showModal} onHide={() => setShowModal(false)} size="lg" centered>
-                <Modal.Header closeButton className="border-0" style={{ 
-                    background: 'linear-gradient(45deg, #667eea, #764ba2)',
-                    color: 'white',
-                    borderRadius: '16px 16px 0 0'
-                }}>
-                    <Modal.Title className="d-flex align-items-center">
-                        <i className="bi bi-file-text-fill me-2"></i>
-                        Entry Details
-                    </Modal.Title>
+            <Modal show={showModal} onHide={() => setShowModal(false)} size="lg">
+                <Modal.Header closeButton>
+                    <Modal.Title>Entry Details</Modal.Title>
                 </Modal.Header>
-                <Modal.Body className="p-4">
+                <Modal.Body>
                     {selectedEntry && (
-                        <div>
+                        <div className="p-4">
                             {Object.entries(selectedEntry).map(([key, value]) => (
                                 <div key={key} className="mb-4">
-                                    <h6 className="text-muted mb-3 fw-semibold d-flex align-items-center">
-                                        <i className="bi bi-database me-2"></i>
-                                        {key}
-                                    </h6>
-                                    <div 
-                                        style={{ 
-                                            whiteSpace: 'pre-wrap',
-                                            background: 'linear-gradient(45deg, #f8f9fa, #e9ecef)',
-                                            border: '1px solid rgba(0,0,0,0.05)',
-                                            borderRadius: '12px'
-                                        }} 
-                                        className="p-4"
-                                    >
-                                        <span className="text-dark">{String(value)}</span>
+                                    <h6 className="text-muted mb-2">{key}</h6>
+                                    <div style={{ whiteSpace: 'pre-wrap' }} className="p-3 bg-light rounded">
+                                        {String(value)}
                                     </div>
                                 </div>
                             ))}
                         </div>
                     )}
                 </Modal.Body>
-                <Modal.Footer className="border-0">
-                    <Button 
-                        variant="secondary" 
-                        onClick={() => setShowModal(false)}
-                        className="rounded-pill px-4"
-                    >
+                <Modal.Footer>
+                    <Button variant="secondary" onClick={() => setShowModal(false)}>
                         Close
                     </Button>
                 </Modal.Footer>
             </Modal>
-        </div>
+        </Container>
     );
 };
 
 // Add some custom styles
 const styles = `
 .hover-highlight:hover {
-    background-color: rgba(102, 126, 234, 0.1) !important;
-    transform: translateY(-1px);
-}
-
-.dataset-view-container {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
-
-/* Custom scrollbar */
-.classifications-list::-webkit-scrollbar {
-    width: 6px;
-}
-
-.classifications-list::-webkit-scrollbar-track {
-    background: rgba(0,0,0,0.05);
-    border-radius: 10px;
-}
-
-.classifications-list::-webkit-scrollbar-thumb {
-    background: rgba(102, 126, 234, 0.3);
-    border-radius: 10px;
-}
-
-.classifications-list::-webkit-scrollbar-thumb:hover {
-    background: rgba(102, 126, 234, 0.5);
-}
-
-/* Button hover effects */
-.btn {
-    transition: all 0.3s ease;
-}
-
-.btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
-}
-
-/* Card hover effects */
-.card {
-    transition: all 0.3s ease;
-}
-
-/* Pagination styling */
-.pagination .page-link {
-    border-radius: 8px !important;
-    margin: 0 2px;
-    border: none;
-    color: #667eea;
-}
-
-.pagination .page-link:hover {
-    background-color: #667eea;
-    color: white;
-    transform: translateY(-1px);
-}
-
-.pagination .page-item.active .page-link {
-    background-color: #667eea;
-    border-color: #667eea;
-}
-
-/* Form control styling */
-.form-control:focus {
-    border-color: #667eea;
-    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
-}
-
-/* Badge styling */
-.badge {
-    font-weight: 600;
-    letter-spacing: 0.5px;
-}
-
-/* Table styling */
-.table th {
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-    font-size: 0.85rem;
-}
-
-/* Modal styling */
-.modal-content {
-    border-radius: 16px;
-    border: none;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.2);
-}
-
-/* Loading spinner */
-.spinner-border {
-    width: 1.5rem;
-    height: 1.5rem;
+    background-color: rgba(0,0,0,0.05);
 }
 `;
 
