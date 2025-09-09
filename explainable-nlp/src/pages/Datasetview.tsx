@@ -35,6 +35,8 @@ const DatasetView = () => {
     const { provider, model } = useProvider();
     const [dataType, setDataType] = useState<'sentiment' | 'legal'|'medical'|'ecqa'|'snarks'|'hotel'>('sentiment');
     const [exploreLoading, setExploreLoading] = useState(false);
+    const [totalCount, setTotalCount] = useState(0);
+    const [paginationLoading, setPaginationLoading] = useState(false);
     const handleExploreDataset = async () => {
         setExploreLoading(true);
         setError(null);
@@ -70,30 +72,102 @@ const DatasetView = () => {
         return new Date(dateString).toLocaleString();
     };
 
-    // Calculate pagination values
-    const indexOfLastItem = currentPage * itemsPerPage;
-    const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-    const currentItems = dataset?.data ? dataset.data.slice(indexOfFirstItem, indexOfLastItem) : [];
-    const totalPages = dataset?.data ? Math.ceil(dataset.data.length / itemsPerPage) : 0;
+    // Calculate pagination values for server-side pagination
+    const indexOfLastItem = Math.min(currentPage * itemsPerPage, totalCount);
+    const indexOfFirstItem = (currentPage - 1) * itemsPerPage + 1;
+    const currentItems = dataset?.data || [];
+    const totalPages = Math.ceil(totalCount / itemsPerPage);
 
-    // Generate pagination items
+    // Generate pagination items with ellipsis for large page counts
     const paginationItems = [];
-    for (let number = 1; number <= totalPages; number++) {
-        paginationItems.push(
-            <Pagination.Item
-                key={number}
-                active={number === currentPage}
-                onClick={() => setCurrentPage(number)}
-            >
-                {number}
-            </Pagination.Item>
-        );
+    const maxVisiblePages = 5; // Show max 5 page numbers
+    
+    if (totalPages <= maxVisiblePages) {
+        // Show all pages if total is small
+        for (let number = 1; number <= totalPages; number++) {
+            paginationItems.push(
+                <Pagination.Item
+                    key={number}
+                    active={number === currentPage}
+                    onClick={() => handlePageChange(number)}
+                    disabled={paginationLoading}
+                >
+                    {number}
+                </Pagination.Item>
+            );
+        }
+    } else {
+        // Show pages with ellipsis for large page counts
+        let startPage = Math.max(1, currentPage - 2);
+        let endPage = Math.min(totalPages, currentPage + 2);
+        
+        // Adjust if we're near the beginning or end
+        if (currentPage <= 3) {
+            endPage = Math.min(5, totalPages);
+        } else if (currentPage >= totalPages - 2) {
+            startPage = Math.max(1, totalPages - 4);
+        }
+        
+        // First page
+        if (startPage > 1) {
+            paginationItems.push(
+                <Pagination.Item
+                    key={1}
+                    active={1 === currentPage}
+                    onClick={() => handlePageChange(1)}
+                    disabled={paginationLoading}
+                >
+                    1
+                </Pagination.Item>
+            );
+            if (startPage > 2) {
+                paginationItems.push(<Pagination.Ellipsis key="start-ellipsis" />);
+            }
+        }
+        
+        // Middle pages
+        for (let number = startPage; number <= endPage; number++) {
+            paginationItems.push(
+                <Pagination.Item
+                    key={number}
+                    active={number === currentPage}
+                    onClick={() => handlePageChange(number)}
+                    disabled={paginationLoading}
+                >
+                    {number}
+                </Pagination.Item>
+            );
+        }
+        
+        // Last page
+        if (endPage < totalPages) {
+            if (endPage < totalPages - 1) {
+                paginationItems.push(<Pagination.Ellipsis key="end-ellipsis" />);
+            }
+            paginationItems.push(
+                <Pagination.Item
+                    key={totalPages}
+                    active={totalPages === currentPage}
+                    onClick={() => handlePageChange(totalPages)}
+                    disabled={paginationLoading}
+                >
+                    {totalPages}
+                </Pagination.Item>
+            );
+        }
     }
 
     // Handle items per page change
     const handleItemsPerPageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         setItemsPerPage(Number(e.target.value));
         setCurrentPage(1); // Reset to first page when changing items per page
+        fetchDatasetData(1, Number(e.target.value)); // Fetch new data with new page size
+    };
+
+    // Handle page change
+    const handlePageChange = (page: number) => {
+        setCurrentPage(page);
+        fetchDatasetData(page, itemsPerPage);
     };
 
     // Handle entry click
@@ -260,13 +334,33 @@ const DatasetView = () => {
         }
     };
 
+    // Fetch dataset data with pagination
+    const fetchDatasetData = async (page: number = 1, limit: number = 20) => {
+        setPaginationLoading(true);
+        try {
+            const response = await axios.get(
+                `http://localhost:5000/api/dataset/${datasetId}?page=${page}&limit=${limit}`,
+                { withCredentials: true }
+            );
+            setDataset(response.data);
+            setTotalCount(response.data.total_count || response.data.data?.length || 0);
+        } catch (err) {
+            setError("Failed to load dataset data.");
+        } finally {
+            setPaginationLoading(false);
+        }
+    };
+
     useEffect(() => {
         const fetchDataset = async () => {
             try {
+                setLoading(true);
                 const response = await axios.get(`http://localhost:5000/api/dataset/${datasetId}`, {
                     withCredentials: true,
                 });
                 setDataset(response.data);
+                setTotalCount(response.data.total_count || response.data.data?.length || 0);
+                
                 // Only set dataType if user hasn't already changed it (i.e., dataType is still initial).
                 if (response.data?.filename && !userChangedDataType) {
                   const lowerName = response.data.filename.toLowerCase();
@@ -536,44 +630,49 @@ const DatasetView = () => {
                                 <>
                                     <Card className="shadow-sm mb-4">
                                         <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
-                                            <Table hover responsive className="mb-0">
-                                                <thead className="bg-light">
-                                                <tr>
-                                                    {Object.keys(dataset.data[0]).map((key) => (
-                                                        <th key={key} className="px-4 py-3">{key}</th>
-                                                    ))}
-                                                </tr>
-                                                </thead>
-                                                <tbody>
-                                                {currentItems.map((row, index) => (
-                                                    <tr
-                                                        key={index}
-                                                        onClick={() => handleEntryClick(row)}
-                                                        style={{ cursor: 'pointer' }}
-                                                        className="hover-highlight"
-                                                    >
-                                                        {Object.values(row).map((value, i) => (
-                                                            <td key={i} className="px-4 py-3 text-truncate" style={{ maxWidth: '300px' }}>
-                                                                {String(value)}
-                                                            </td>
+                                            {paginationLoading ? (
+                                                <div className="text-center py-4">
+                                                    <Spinner animation="border" />
+                                                    <div className="mt-2">Loading data...</div>
+                                                </div>
+                                            ) : (
+                                                <Table hover responsive className="mb-0">
+                                                    <thead className="bg-light">
+                                                    <tr>
+                                                        {currentItems.length > 0 && Object.keys(currentItems[0]).map((key) => (
+                                                            <th key={key} className="px-4 py-3">{key}</th>
                                                         ))}
                                                     </tr>
-                                                ))}
-                                                </tbody>
-                                            </Table>
+                                                    </thead>
+                                                    <tbody>
+                                                    {currentItems.map((row, index) => (
+                                                        <tr
+                                                            key={index}
+                                                            onClick={() => handleEntryClick(row)}
+                                                            style={{ cursor: 'pointer' }}
+                                                            className="hover-highlight"
+                                                        >
+                                                            {Object.values(row).map((value, i) => (
+                                                                <td key={i} className="px-4 py-3 text-truncate" style={{ maxWidth: '300px' }}>
+                                                                    {String(value)}
+                                                                </td>
+                                                            ))}
+                                                        </tr>
+                                                    ))}
+                                                    </tbody>
+                                                </Table>
+                                            )}
                                         </div>
                                     </Card>
 
                                     <div className="d-flex justify-content-between align-items-center">
-                                        <div className="text-muted">
-                                            Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, dataset.data.length)} of {dataset.data.length} entries
-                                        </div>
+                                        
                                         <Pagination className="mb-0">
-                                            <Pagination.First onClick={() => setCurrentPage(1)} disabled={currentPage === 1} />
-                                            <Pagination.Prev onClick={() => setCurrentPage(curr => Math.max(curr - 1, 1))} disabled={currentPage === 1} />
+                                            <Pagination.First onClick={() => handlePageChange(1)} disabled={currentPage === 1 || paginationLoading} />
+                                            <Pagination.Prev onClick={() => handlePageChange(Math.max(currentPage - 1, 1))} disabled={currentPage === 1 || paginationLoading} />
                                             {paginationItems}
-                                            <Pagination.Next onClick={() => setCurrentPage(curr => Math.min(curr + 1, totalPages))} disabled={currentPage === totalPages} />
-                                            <Pagination.Last onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} />
+                                            <Pagination.Next onClick={() => handlePageChange(Math.min(currentPage + 1, totalPages))} disabled={currentPage === totalPages || paginationLoading} />
+                                            <Pagination.Last onClick={() => handlePageChange(totalPages)} disabled={currentPage === totalPages || paginationLoading} />
                                         </Pagination>
                                     </div>
                                 </>

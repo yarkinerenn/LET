@@ -101,6 +101,24 @@ const ExplanationPage = () => {
     const [isSubmittingRatings, setIsSubmittingRatings] = useState(false);
     const isLegal = classification?.data_type === 'legal' || !!classification?.holdings;
 
+    // Function to get the correct back navigation path based on data type
+    const getBackNavigationPath = () => {
+        const dataType = classification?.data_type;
+        if (dataType === "sentiment") {
+            return `/datasets/${datasetId}/classifications/${classificationId}`;
+        } else if (dataType === "ecqa") {
+            return `/datasets/${datasetId}/classifications_ecqa/${classificationId}`;
+        } else if (dataType === "snarks") {
+            return `/datasets/${datasetId}/classifications_snarks/${classificationId}`;
+        } else if (dataType === "hotel") {
+            return `/datasets/${datasetId}/classifications_hotel/${classificationId}`;
+        } else if (dataType === "legal") {
+            return `/datasets/${datasetId}/classifications_legal/${classificationId}`;
+        } else {
+            return `/datasets/${datasetId}/classificationsp/${classificationId}`;
+        }
+    };
+
     useEffect(() => {
         const fetchData = async () => {
             try {
@@ -418,7 +436,7 @@ const ExplanationPage = () => {
     <div className="d-flex justify-content-between align-items-center mb-4">
       <Button
         variant="outline-secondary"
-        onClick={() => navigate(`/datasets/${datasetId}/classifications/${classificationId}`)}
+        onClick={() => navigate(getBackNavigationPath())}
       >
         ← Back to Classification
       </Button>

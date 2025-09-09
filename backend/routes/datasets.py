@@ -14,7 +14,7 @@ from extensions import mongo,login_manager
 datasets_bp = Blueprint("datasets", __name__)
 @datasets_bp.route("/api/dataset/<dataset_id>", methods=["GET"])
 def get_dataset(dataset_id):
-    """Get the uploaded dataset"""
+    """Get the uploaded dataset with optional pagination"""
 
     dataset = mongo.db.datasets.find_one({"_id": ObjectId(dataset_id)})
 
@@ -24,8 +24,26 @@ def get_dataset(dataset_id):
     filepath = dataset["filepath"]
     try:
         df = pd.read_csv(filepath)
-        data_preview = df.head(20).to_dict(orient="records")  # Return first 20 rows
-        return jsonify({"filename": dataset["filename"], "data": data_preview})
+        
+        # Get pagination parameters from query string
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 20))
+        
+        # Calculate pagination
+        total_count = len(df)
+        start_idx = (page - 1) * limit
+        end_idx = start_idx + limit
+        
+        # Get the requested page of data
+        data_page = df.iloc[start_idx:end_idx].to_dict(orient="records")
+        
+        return jsonify({
+            "filename": dataset["filename"], 
+            "data": data_page,
+            "total_count": total_count,
+            "page": page,
+            "limit": limit
+        })
     except Exception as e:
         print(e)
         return jsonify({"error": str(e)}), 500
