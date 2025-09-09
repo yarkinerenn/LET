@@ -143,11 +143,23 @@ const DatasetView = () => {
             );
 
             // Navigate to classification dashboard after successful classification
-            if (["sentiment", "legal"].includes((dataType || "").toLowerCase())) {
-              navigate(`/datasets/${datasetId}/classifications/${response.data.classification_id}`);
-            } else {
+            if (dataType === "sentiment") {
+             navigate(`/datasets/${datasetId}/classifications/${response.data.classification_id}`);
+            }
+            else if(dataType === "ecqa") {
+                 navigate(`/datasets/${datasetId}/classifications_ecqa/${response.data.classification_id}`);
+            }
+            else if(dataType === "snarks") {
+                 navigate(`/datasets/${datasetId}/classifications_snarks/${response.data.classification_id}`);
+            }
+            else if( dataType === "hotel" ) {
+                 navigate(`/datasets/${datasetId}/classifications_hotel/${response.data.classification_id}`);
+            }
+            else if(dataType === "legal") {
+                 navigate(`/datasets/${datasetId}/classifications_legal/${response.data.classification_id}`);
+            }
+            else {
               navigate(`/datasets/${datasetId}/classificationsp/${response.data.classification_id}`);
-              console.log('uuumedical');
             }
 
 
@@ -169,11 +181,23 @@ const DatasetView = () => {
             );
 
             // Navigate to classification dashboard after successful classification
-            if (["sentiment", "legal"].includes((dataType || "").toLowerCase())) {
-              navigate(`/datasets/${datasetId}/classifications/${response.data.classification_id}`);
-            } else {
+            if (dataType === "sentiment") {
+             navigate(`/datasets/${datasetId}/classifications/${response.data.classification_id}`);
+            }
+            else if(dataType === "ecqa") {
+                 navigate(`/datasets/${datasetId}/classifications_ecqa/${response.data.classification_id}`);
+            }
+            else if(dataType === "snarks") {
+                 navigate(`/datasets/${datasetId}/classifications_snarks/${response.data.classification_id}`);
+            }
+            else if( dataType === "hotel" ) {
+                 navigate(`/datasets/${datasetId}/classifications_hotel/${response.data.classification_id}`);
+            }
+            else if(dataType === "legal") {
+                 navigate(`/datasets/${datasetId}/classifications_legal/${response.data.classification_id}`);
+            }
+            else {
               navigate(`/datasets/${datasetId}/classificationsp/${response.data.classification_id}`);
-              console.log('uuumedical');
             }
 
         } catch (err) {

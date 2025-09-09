@@ -132,7 +132,10 @@ def get_top_phrases(shap_values_obj, instance_idx=0, class_idx=1, top_n=5):
     for text, val in negative[:top_n]:
         result.append(f"({val:+.2f}) {text.strip()}")
 
-    return "\n".join(result)
+    # Also return array of words for SHAP enhanced analysis
+    all_words = [text.strip() for text, val in paired[:top_n*2]]  # Get top words from both positive and negative
+    
+    return "\n".join(result), all_words
 
 def generate_shap_explanation(input_text, label):
     """Generate an explanation using SHAP values"""
@@ -152,14 +155,14 @@ def generate_shap_explanation(input_text, label):
         if predicted_class == 1:  # If predicted POSITIVE, swap the class_index
             class_index = 0  # For POSITIVE predictions, we need to use the negative class index
 
-        output_str = get_top_phrases(shap_values2, top_n=10)
+        output_str, top_words = get_top_phrases(shap_values2, top_n=10)
         plot = shap.plots.text(shap_values2[:, :, class_index], display=False)
         print(output_str)
 
-        return plot, output_str
+        return plot, output_str, top_words
     except Exception as e:
         print(f"Error in SHAP explanation: {str(e)}")
-        return None, f"Could not generate SHAP explanation: {str(e)}"
+        return None, f"Could not generate SHAP explanation: {str(e)}", []
 def classify_with_chunks(text, classifier, tokenizer, max_length=512, stride=256):
     """use it if the context windows of the BERT is not big enoguh for a dataset entry"""
     inputs = tokenizer(
@@ -216,6 +219,46 @@ def generate_llm_explanationofdataset(text, label,truelabel, score,provider,mode
                 Sentiment: {label} ({score}% confidence)
                 
                 Focus on key words and overall tone.
+                Keep explanation under 3 sentences.
+            """
+        elif datatype == 'ecqa':
+            myprompt=f"""
+                Explain this commonsense question answering result in simple terms:
+                
+                Question: {text}
+                Predicted Answer: {label} ({score}% confidence)
+                
+                Focus on the reasoning behind the answer choice.
+                Keep explanation under 3 sentences.
+            """
+        elif datatype == 'snarks':
+            myprompt=f"""
+                Explain this sarcasm detection result in simple terms:
+                
+                Question: {text}
+                Predicted Answer: {label} ({score}% confidence)
+                
+                Focus on the sarcastic elements and reasoning.
+                Keep explanation under 3 sentences.
+            """
+        elif datatype == 'hotel':
+            myprompt=f"""
+                Explain this hotel review authenticity detection result in simple terms:
+                
+                Review: {text}
+                Prediction: {label} ({score}% confidence)
+                
+                Focus on the indicators of authenticity or deception.
+                Keep explanation under 3 sentences.
+            """
+        elif datatype == 'medical':
+            myprompt=f"""
+                Explain this medical question answering result in simple terms:
+                
+                Question: {text}
+                Predicted Answer: {label} ({score}% confidence)
+                
+                Focus on the medical reasoning and evidence.
                 Keep explanation under 3 sentences.
             """
         else:

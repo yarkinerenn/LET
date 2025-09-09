@@ -322,6 +322,7 @@ const ExplanationPage = () => {
                 predicted_explanation: explanationToEvaluate,
                 predicted_label: classification?.prediction,
                 target_model: model.model,
+                provider: model.provider,
             };
 
             const response = await axios.post("http://localhost:5000/api/faithfulness", payload, { withCredentials: true });
@@ -534,7 +535,7 @@ const ExplanationPage = () => {
       </Card>
     )}
 
-    {/* Faithfulness Metrics - only show if NO metrics are defined */}
+    {/* Faithfulness Metrics - only show if metrics are defined and not all zero */}
     {(() => {
       const faithfulnessMetrics = classification?.metrics?.faithfulness_metrics;
       const hasMetrics = faithfulnessMetrics?.faithfulness !== undefined || 
@@ -546,7 +547,17 @@ const ExplanationPage = () => {
                         classification?.counterfactual !== undefined ||
                         classification?.contextual_faithfulness !== undefined;
       
-      if (hasMetrics) return null; // Hide if metrics are defined
+      if (!hasMetrics) return null; // Hide if no metrics are defined
+      
+      // Check if all metrics are zero
+      const allMetricsZero = (
+        (faithfulnessMetrics?.faithfulness || classification?.faithfulness_score || 0) === 0 &&
+        (faithfulnessMetrics?.qag_score || classification?.qag_score || 0) === 0 &&
+        (faithfulnessMetrics?.counterfactual || classification?.counterfactual || 0) === 0 &&
+        (faithfulnessMetrics?.contextual_faithfulness || classification?.contextual_faithfulness || 0) === 0
+      );
+      
+      if (allMetricsZero) return null; // Hide if all metrics are zero
       
       return (
         <Card className="mb-4">

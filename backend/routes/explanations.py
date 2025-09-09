@@ -125,7 +125,7 @@ def explain_prediction():
                 return jsonify({"error": "Missing text"}), 400
 
             if explainer_type == 'shap':
-                explanation_data, top_words = generate_shap_explanation(text, predictedlabel)
+                explanation_data, top_words_str, top_words = generate_shap_explanation(text, predictedlabel)
                 save_explanation_to_db(classificationId, current_user.id, resultId, 'shap_plot', explanation_data, model)
                 return jsonify({'explanation': explanation_data, 'explainer_type': explainer_type, 'top_words': top_words})
             else:
@@ -145,7 +145,7 @@ def explain_prediction():
                 return jsonify({"error": "Prediction not found"}), 404
 
             if explainer_type == 'shap':
-                explanation_data, top_words = generate_shap_explanation(text, prediction['label'])
+                explanation_data, top_words_str, top_words = generate_shap_explanation(text, prediction['label'])
                 return jsonify({'explanation': explanation_data, 'explainer_type': explainer_type, 'top_words': top_words})
             else:
                 explanation_text = generate_llm_explanation(text, prediction['label'], prediction['score'], provider, model)
@@ -242,17 +242,17 @@ Keep explanation under 3 sentences.
                 client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=openai_api_key)
 
                 prompt = f"""
-Explain this sentiment analysis result in simple terms with most affecting words provided by SHAP:
+                    Explain this sentiment analysis result in simple terms with most affecting words provided by SHAP:
 
-Text: {text}
-Sentiment: {label} ({score}% confidence)
+                    Text: {text}
+                    Sentiment: {label} ({score}% confidence)
 
-shap:
-{shapwords}
+                    shap:
+                    {shapwords}
 
-Focus on key words and overall tone.
-Keep explanation under 3 sentences.
-"""
+                    Focus on key words and overall tone.
+                    Keep explanation under 3 sentences.
+                    """
                 response = client.chat.completions.create(
                     model=model,
                     messages=[{"role": "user", "content": prompt}]
@@ -276,17 +276,17 @@ Keep explanation under 3 sentences.
                 client = OpenAI(api_key=openai_api_key)
 
                 prompt = f"""
-Explain this sentiment analysis result in simple terms with most affecting words provided by SHAP:
+                    Explain this sentiment analysis result in simple terms with most affecting words provided by SHAP:
 
-Text: {text}
-Sentiment: {label} ({score}% confidence)
+                    Text: {text}
+                    Sentiment: {label} ({score}% confidence)
 
-shap:
-{shapwords}
+                    shap:
+                    {shapwords}
 
-Focus on key words and overall tone.
-Keep explanation under 3 sentences.
-"""
+                    Focus on key words and overall tone.
+                    Keep explanation under 3 sentences.
+                    """
                 response = client.chat.completions.create(
                     model="gpt-3.5-turbo",
                     messages=[{"role": "user", "content": prompt}]

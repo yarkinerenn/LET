@@ -16,6 +16,8 @@ from .auth import (
     get_user_api_key_openai,
     get_user_api_key_openrouter,
     get_user_api_key_groq,
+    get_user_api_key_deepseek_api,
+    get_user_api_key_gemini,
 )
 
 # if you already have this util, import it; else this safe fallback keeps your code running
@@ -36,6 +38,10 @@ def _resolve_api_key(provider: str) -> str | None:
         return get_user_api_key_openai()
     if provider == "groq":
         return get_user_api_key_groq()
+    if provider == "deepseek":
+        return get_user_api_key_deepseek_api()
+    if provider == "gemini":
+        return get_user_api_key_gemini()
     return None
 
 
@@ -61,13 +67,17 @@ def trustworthiness_endpoint():
         provider = data.get("provider")
         api = _resolve_api_key(provider) or "api"
         target_model = data.get("target_model")
+        data_type = data.get("data_type", "medical")  # Default to medical
+        labels = data.get("labels", [])  # Labels for the dataset
 
-        # NER pipeline used by your lext implementation
-        ner_pipe = pipeline(
-            "token-classification",
-            model="Clinical-AI-Apollo/Medical-NER",
-            aggregation_strategy="simple"
-        )
+        # NER pipeline used by your lext implementation (only for medical)
+        ner_pipe = None
+        if data_type == "medical":
+            ner_pipe = pipeline(
+                "token-classification",
+                model="Clinical-AI-Apollo/Medical-NER",
+                aggregation_strategy="simple"
+            )
 
         # Row reference to collect intermediate metrics
         row_reference = {
@@ -79,18 +89,23 @@ def trustworthiness_endpoint():
             "ground_context": context,
         }
 
-        # Compute trustworthiness (LExT)
+        # Get Groq API key
+        groq_key = get_user_api_key_groq()
+
+        # Compute trustworthiness (LExT) - Updated signature to match classify_and_explain.py
         score = lext(
             context,
             question,
             ground_explanation,
             ground_label,
             target_model,
-            get_user_api_key_groq(),  # you passed `groq` in your original signature
+            groq_key,
             provider,
             api,
             ner_pipe,
-            row_reference
+            data_type,
+            row_reference,
+            labels
         )
 
         # Optionally expose sub-metrics if your frontend needs them
@@ -141,10 +156,12 @@ def faithfulness_endpoint():
         if context:
             context = extract_context_explanation(context)
 
-        # Provider/api (these were undefined in your original function — fixed here)
+        # Provider/api
         provider = data.get("provider")
         api = _resolve_api_key(provider) or "api"
         target_model = data.get("target_model", "llama3:8b")
+        data_type = data.get("data_type", "sentiment")  # Default to sentiment
+        labels = data.get("labels", [])  # Labels for the dataset
 
         # Row reference for diagnostics
         row_reference = {
@@ -156,18 +173,23 @@ def faithfulness_endpoint():
             "ground_context": context,
         }
 
-        # Compute faithfulness score (keep your original arg order)
+        # Get Groq API key
+        groq_key = get_user_api_key_groq()
+
+        # Compute faithfulness score - Updated signature to match classify_and_explain.py
         score = faithfulness(
             explanation,
             label,
             question,
             ground_label,
             context,
-            get_user_api_key_groq(),  # your original passed `groq`
+            groq_key,
             target_model,
             provider,
             api,
-            row_reference,
+            data_type,
+            labels,
+            row_reference
         )
 
         return jsonify({
