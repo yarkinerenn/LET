@@ -305,20 +305,20 @@ def generate_prompt(data_type, row, text_column, provider, cot_enabled=False):
         
         if cot_enabled:
             return f"""You are solving a commonsense multiple-choice question. 
-Think through the problem step by step, considering why each option may or may not be correct. 
-Then state your final answer.
+                Think through the problem step by step, considering why each option may or may not be correct. 
+                Then state your final answer.
 
-Question: {question}
+                Question: {question}
 
-Choices:
- A) {choices[0]}
- B) {choices[1]}
- C) {choices[2]}
- D) {choices[3]}
- E) {choices[4]}
+                Choices:
+                {choices[0]}
+                {choices[1]}
+                {choices[2]}
+                {choices[3]}
+                {choices[4]}
 
-Think step by step, then answer with only: A, B, C, D, or E
-"""
+                Think step by step, Answer with your choice exactly as written:
+                """
         else:
             return f"""Select the best answer from the choices.
 
@@ -433,7 +433,28 @@ def parse_llm_response_only(content, data_type):
         else:
             return content.strip().lower(), 1.0
     
-    else:  # ecqa and others
+    elif data_type == "ecqa":
+        # Parse ECQA response - handle both CoT and non-CoT formats
+        # CoT format: Explanation: ... Answer: ...
+        # Non-CoT format: Answer: ... (or just the answer)
+        
+        # Try to extract answer from CoT format first
+        m = re.search(r"Answer:\s*(.+)", content, re.IGNORECASE | re.DOTALL)
+        if m:
+            answer = m.group(1).strip()
+            # Clean up the answer to get just the choice
+            if answer.upper() in ['A', 'B', 'C', 'D', 'E']:
+                return answer.upper(), 1.0
+            else:
+                return answer, 1.0
+        else:
+            # Fallback: look for A, B, C, D, E in the content
+            for choice in ['A', 'B', 'C', 'D', 'E']:
+                if choice in content.upper():
+                    return choice, 1.0
+            return content.strip(), 1.0
+    
+    else:  # other data types
         return content.strip(), 1.0
 
 

@@ -360,23 +360,23 @@ def generate_prompt(data_type, row, text_column, provider, cot_enabled=False):
         
         if cot_enabled:
             return f"""You are solving a commonsense multiple-choice question. 
-First, think through the problem step by step, considering why each option may or may not be correct. 
-Then state the final answer clearly.
+                First, think through the problem step by step, considering why each option may or may not be correct. 
+                Then state the final answer clearly.
 
-Question: {question}
+                Question: {question}
 
-Choices:
- A) {choices[0]}
- B) {choices[1]}
- C) {choices[2]}
- D) {choices[3]}
- E) {choices[4]}
+                Choices:
+                {choices[0]}
+                {choices[1]}
+                {choices[2]}
+                {choices[3]}
+                {choices[4]}
 
-Format your response as:
+                Format your response as:
 
-Reasoning: <step by step reasoning, a few sentences>
-Answer: <ONE of A/B/C/D/E>
-"""
+                Explanation: <step by step reasoning, a few sentences>
+                Answer: <Your Choice>
+                """
         else:
             return f"""Given the following question and five answer options, select the best answer and explain your choice in 2-3 sentences. YOU MUST ONLY CHOOSE ONE OF THE CHOICES
 
@@ -496,7 +496,29 @@ def parse_llm_response(content, data_type):
             label = lines[0].replace("Answer:", "").strip().lower()
             explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
     
-    else:  # ecqa, snarks, hotel - general format
+    elif data_type == "ecqa":
+        # Parse ECQA response - handle both CoT and non-CoT formats
+        # CoT format: Explanation: ... Answer: ...
+        # Non-CoT format: Answer: ... Explanation: ...
+        
+        # Try CoT format first (Explanation before Answer)
+        m = re.search(r"Explanation:\s*(.+)[\s\n]+Answer:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
+        if m:
+            explanation = m.group(1).strip()
+            label = m.group(2).strip()
+        else:
+            # Try non-CoT format (Answer before Explanation)
+            m = re.search(r"Answer:\s*(.+)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
+            if m:
+                label = m.group(1).strip()
+                explanation = m.group(2).strip()
+            else:
+                # Fallback parsing
+                lines = content.split('\n')
+                label = lines[0].replace("Answer:", "").strip()
+                explanation = "\n".join(lines[1:]).replace("Explanation:", "").strip()
+    
+    else:  # snarks, hotel - general format
         # Parse general response format: Answer: ... Explanation: ...
         m = re.search(r"Answer:\s*(.+)[\s\n]+Explanation:\s*(.*)", content, re.IGNORECASE | re.DOTALL)
         if m:
