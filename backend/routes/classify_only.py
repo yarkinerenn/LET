@@ -53,6 +53,7 @@ def process_classification_only_request(dataset_id, data, current_user):
 
     # Get data type and column mappings
     data_type = data.get('dataType', 'sentiment')
+    cot_enabled = data.get('cot', False)
     text_column, label_column = get_column_mappings(data_type, data)
 
     # Get user preferences
@@ -77,7 +78,7 @@ def process_classification_only_request(dataset_id, data, current_user):
     # Process each sample (classification only)
     results, stats = process_samples_only(
         df_sampled, method, data_type, text_column, label_column,
-        client, provider, model_name
+        client, provider, model_name, cot_enabled
     )
 
     # Calculate metrics
@@ -198,7 +199,7 @@ def sample_dataset(df, data_type, label_column, sample_size):
     return df.sample(n=sample_size, random_state=42)
 
 
-def process_samples_only(df_sampled, method, data_type, text_column, label_column, client, provider, model_name):
+def process_samples_only(df_sampled, method, data_type, text_column, label_column, client, provider, model_name, cot_enabled=False):
     """Process all samples in the dataset (classification only)"""
     results = []
     stats = initialize_stats(data_type)
@@ -207,7 +208,7 @@ def process_samples_only(df_sampled, method, data_type, text_column, label_colum
         try:
             result = process_single_sample_only(
                 row, df_idx, method, data_type, text_column, label_column,
-                client, provider, model_name
+                client, provider, model_name, cot_enabled
             )
 
             if result:
@@ -240,10 +241,10 @@ def initialize_stats(data_type):
     return stats
 
 
-def process_single_sample_only(row, df_idx, method, data_type, text_column, label_column, client, provider, model_name):
+def process_single_sample_only(row, df_idx, method, data_type, text_column, label_column, client, provider, model_name, cot_enabled=False):
     """Process a single sample row (classification only)"""
     # Generate appropriate prompt
-    prompt = generate_prompt(data_type, row, text_column, provider)
+    prompt = generate_prompt(data_type, row, text_column, provider, cot_enabled)
 
     # Get LLM response if using LLM method
     if method == 'llm':
@@ -261,7 +262,7 @@ def process_single_sample_only(row, df_idx, method, data_type, text_column, labe
     return result_data
 
 
-def generate_prompt(data_type, row, text_column, provider):
+def generate_prompt(data_type, row, text_column, provider, cot_enabled=False):
     """Generate appropriate prompt based on data type (simplified for classification only)"""
     
     if data_type == "sentiment":
@@ -301,7 +302,25 @@ def generate_prompt(data_type, row, text_column, provider):
     elif data_type == "ecqa":
         question = str(row[text_column])
         choices = [row.get('q_op1', ''), row.get('q_op2', ''), row.get('q_op3', ''), row.get('q_op4', ''), row.get('q_op5', '')]
-        return f"""Select the best answer from the choices.
+        
+        if cot_enabled:
+            return f"""You are solving a commonsense multiple-choice question. 
+Think through the problem step by step, considering why each option may or may not be correct. 
+Then state your final answer.
+
+Question: {question}
+
+Choices:
+ A) {choices[0]}
+ B) {choices[1]}
+ C) {choices[2]}
+ D) {choices[3]}
+ E) {choices[4]}
+
+Think step by step, then answer with only: A, B, C, D, or E
+"""
+        else:
+            return f"""Select the best answer from the choices.
 
             Question: {question}
 

@@ -37,6 +37,7 @@ const DatasetView = () => {
     const [exploreLoading, setExploreLoading] = useState(false);
     const [totalCount, setTotalCount] = useState(0);
     const [paginationLoading, setPaginationLoading] = useState(false);
+    const [cotEnabled, setCotEnabled] = useState(false);
     const handleExploreDataset = async () => {
         setExploreLoading(true);
         setError(null);
@@ -212,7 +213,7 @@ const DatasetView = () => {
         try {
             const response = await axios.post(
                 `http://localhost:5000/api/classify_only/${datasetId}`,
-                { method:method,provider: provider, model: model ,dataType: dataType, limit: classificationLimit },
+                { method:method,provider: provider, model: model ,dataType: dataType, limit: classificationLimit, cot: cotEnabled },
                 { withCredentials: true }
             );
 
@@ -250,7 +251,7 @@ const DatasetView = () => {
         try {
             const response = await axios.post(
                 `http://localhost:5000/api/classify/${datasetId}`,
-                { method: "bert", provider: provider, model: model, dataType: dataType, limit: classificationLimit },
+                { method: "bert", provider: provider, model: model, dataType: dataType, limit: classificationLimit, cot: cotEnabled },
                 { withCredentials: true }
             );
 
@@ -287,7 +288,7 @@ const DatasetView = () => {
         try {
             const response = await axios.post(
                 `http://localhost:5000/api/classify_and_explain/${datasetId}`,
-                { method:method,provider: provider, model: model ,dataType: dataType, limit: classificationLimit},
+                { method:method,provider: provider, model: model ,dataType: dataType, limit: classificationLimit, cot: cotEnabled},
                 { withCredentials: true }
             );
 
@@ -445,6 +446,20 @@ const DatasetView = () => {
                                 style={{ width: "100px" }}
                               />
                             </div>
+                            {dataType === "ecqa" && (
+                                <div className="mb-3">
+                                    <Form.Check 
+                                        type="switch"
+                                        id="cot-switch"
+                                        label="Chain of Thought Prompting"
+                                        checked={cotEnabled}
+                                        onChange={(e) => setCotEnabled(e.target.checked)}
+                                    />
+                                    <small className="text-muted">
+                                        Enable step-by-step reasoning for better explanations
+                                    </small>
+                                </div>
+                            )}
                             <div className="d-grid gap-3">
                                 <Button
                                     variant="primary"

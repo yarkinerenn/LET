@@ -61,6 +61,7 @@ def process_classification_request(dataset_id, data, current_user):
 
     # Get data type and column mappings
     data_type = data.get('dataType', 'sentiment')
+    cot_enabled = data.get('cot', False)
     text_column, label_column = get_column_mappings(data_type, data)
 
     # Get user preferences
@@ -85,7 +86,7 @@ def process_classification_request(dataset_id, data, current_user):
     # Process each sample
     results, explanations_to_save, stats = process_samples(
         df_sampled, method, data_type, text_column, label_column,
-        client, provider, model_name
+        client, provider, model_name, cot_enabled
     )
 
     # Calculate metrics
@@ -222,7 +223,7 @@ def sample_dataset(df, data_type, label_column, sample_size):
     return df.sample(n=sample_size, random_state=42)
 
 
-def process_samples(df_sampled, method, data_type, text_column, label_column, client, provider, model_name):
+def process_samples(df_sampled, method, data_type, text_column, label_column, client, provider, model_name, cot_enabled=False):
     """Process all samples in the dataset"""
     results = []
     explanations_to_save = []
@@ -232,7 +233,7 @@ def process_samples(df_sampled, method, data_type, text_column, label_column, cl
         try:
             result, explanation = process_single_sample(
                 row, df_idx, method, data_type, text_column, label_column,
-                client, provider, model_name
+                client, provider, model_name, cot_enabled
             )
 
             if result:
@@ -270,10 +271,10 @@ def initialize_stats(data_type):
     return stats
 
 
-def process_single_sample(row, df_idx, method, data_type, text_column, label_column, client, provider, model_name):
+def process_single_sample(row, df_idx, method, data_type, text_column, label_column, client, provider, model_name, cot_enabled=False):
     """Process a single sample row"""
     # Generate appropriate prompt
-    prompt = generate_prompt(data_type, row, text_column, provider)
+    prompt = generate_prompt(data_type, row, text_column, provider, cot_enabled)
 
     # Get LLM response if using LLM method
     if method == 'llm':
@@ -306,7 +307,7 @@ def process_single_sample(row, df_idx, method, data_type, text_column, label_col
     return result_data, explanation_data
 
 
-def generate_prompt(data_type, row, text_column, provider):
+def generate_prompt(data_type, row, text_column, provider, cot_enabled=False):
     """Generate appropriate prompt based on data type"""
     
     if data_type == "sentiment":
@@ -356,7 +357,28 @@ def generate_prompt(data_type, row, text_column, provider):
     elif data_type == "ecqa":
         question = str(row[text_column])
         choices = [row.get('q_op1', ''), row.get('q_op2', ''), row.get('q_op3', ''), row.get('q_op4', ''), row.get('q_op5', '')]
-        return f"""Given the following question and five answer options, select the best answer and explain your choice in 2-3 sentences. YOU MUST ONLY CHOOSE ONE OF THE CHOICES
+        
+        if cot_enabled:
+            return f"""You are solving a commonsense multiple-choice question. 
+First, think through the problem step by step, considering why each option may or may not be correct. 
+Then state the final answer clearly.
+
+Question: {question}
+
+Choices:
+ A) {choices[0]}
+ B) {choices[1]}
+ C) {choices[2]}
+ D) {choices[3]}
+ E) {choices[4]}
+
+Format your response as:
+
+Reasoning: <step by step reasoning, a few sentences>
+Answer: <ONE of A/B/C/D/E>
+"""
+        else:
+            return f"""Given the following question and five answer options, select the best answer and explain your choice in 2-3 sentences. YOU MUST ONLY CHOOSE ONE OF THE CHOICES
 
             Question: {question}
 
