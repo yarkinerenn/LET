@@ -11,6 +11,7 @@ from extensions  import mongo
 # external clients you already use
 from openai import OpenAI
 from groq import Groq
+from langchain_community.llms import Ollama
 
 # pull key getters exactly as you’ve been using them
 from .auth import (
@@ -261,6 +262,24 @@ Keep explanation under 3 sentences.
                 save_explanation_to_db(classificationId, current_user.id, resultId, 'shapwithllm', explanation, model)
                 return explanation
 
+            elif provider == 'ollama':
+                llm = Ollama(model=model, temperature=0)
+                prompt = f"""
+Explain this sentiment analysis result in simple terms with most affecting words provided by SHAP:
+
+Text: {text}
+Sentiment: {label} ({score}% confidence)
+
+shap:
+{shapwords}
+
+Focus on key words and overall tone.
+Keep explanation under 3 sentences.
+"""
+                explanation = llm.invoke(prompt)
+                save_explanation_to_db(classificationId, current_user.id, resultId, 'shapwithllm', explanation, model)
+                return explanation
+
         else:
             # no prediction_id: use provided text/label/score
             if not text:
@@ -348,6 +367,24 @@ Keep explanation under 3 sentences.
                     messages=[{"role": "user", "content": prompt}]
                 )
                 explanation = response.choices[0].message.content
+                save_explanation_to_db(classificationId, current_user.id, resultId, 'shapwithllm', explanation, model)
+                return explanation
+
+            elif provider == 'ollama':
+                llm = Ollama(model=model, temperature=0)
+                prompt = f"""
+Explain this sentiment analysis result in simple terms with most affecting words provided by SHAP:
+
+Text: {text}
+Sentiment: {label} ({score}% confidence)
+
+shap:
+{shapwords}
+
+Focus on key words and overall tone.
+Keep explanation under 3 sentences.
+"""
+                explanation = llm.invoke(prompt)
                 save_explanation_to_db(classificationId, current_user.id, resultId, 'shapwithllm', explanation, model)
                 return explanation
 

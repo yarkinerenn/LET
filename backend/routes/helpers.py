@@ -8,6 +8,7 @@ from extensions import mongo
 import shap
 from transformers import pipeline,AutoModelForSequenceClassification,AutoTokenizer
 from groq import Groq
+from langchain_community.llms import Ollama
 from .auth import (
     get_user_api_key_openai,
     get_user_api_key_openrouter,
@@ -307,6 +308,10 @@ def generate_llm_explanationofdataset(text, label,truelabel, score,provider,mode
 
             explanation = response.choices[0].message.content
             return explanation
+        elif provider == 'ollama':
+            llm = Ollama(model=model, temperature=0)
+            explanation = llm.invoke(myprompt)
+            return explanation
         else:
             api= get_user_api_key_groq()
 
@@ -398,6 +403,11 @@ def generate_llm_explanation(text, label, score, provider, model, data_type="sen
                 messages=[{"role": "user", "content": prompt}]
             )
             explanation = response.choices[0].message.content
+            return explanation
+
+        elif provider == 'ollama':
+            llm = Ollama(model=model, temperature=0)
+            explanation = llm.invoke(prompt)
             return explanation
 
     except Exception as e:
