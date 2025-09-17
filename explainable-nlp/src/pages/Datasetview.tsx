@@ -38,7 +38,7 @@ const DatasetView = () => {
     const [totalCount, setTotalCount] = useState(0);
     const [paginationLoading, setPaginationLoading] = useState(false);
     const [cotEnabled, setCotEnabled] = useState(false);
-    const handleExploreDataset = async () => {
+    const handleExploreDataset = async (entryIndex?: number) => {
         setExploreLoading(true);
         setError(null);
         try {
@@ -47,15 +47,19 @@ const DatasetView = () => {
                 {},
                 { withCredentials: true }
             );
+            const targetIndex = entryIndex !== undefined ? entryIndex : 0;
             if (["medical"].includes((response.data.data_type || dataType).toLowerCase())) {
-                navigate(`/datasets/${datasetId}/classifications_pub/${response.data.classification_id}/results/0`);
+                navigate(`/datasets/${datasetId}/classifications_pub/${response.data.classification_id}/results/${targetIndex}`);
             } else if (["legal"].includes((response.data.data_type || dataType).toLowerCase())) {
-                navigate(`/datasets/${datasetId}/classifications/${response.data.classification_id}/results/0`);
-            }
-            else if (["legal"].includes((response.data.data_type || dataType).toLowerCase())) {
-                navigate(`/datasets/${datasetId}/classifications_legal/${response.data.classification_id}/results/0`);
+                navigate(`/datasets/${datasetId}/classifications_legal/${response.data.classification_id}/results/${targetIndex}`);
+            } else if (["ecqa"].includes((response.data.data_type || dataType).toLowerCase())) {
+                navigate(`/datasets/${datasetId}/classifications_ecqa/${response.data.classification_id}/results/${targetIndex}`);
+            } else if (["snarks"].includes((response.data.data_type || dataType).toLowerCase())) {
+                navigate(`/datasets/${datasetId}/classifications_snarks/${response.data.classification_id}/results/${targetIndex}`);
+            } else if (["hotel"].includes((response.data.data_type || dataType).toLowerCase())) {
+                navigate(`/datasets/${datasetId}/classifications_hotel/${response.data.classification_id}/results/${targetIndex}`);
             } else {
-                navigate(`/datasets/${datasetId}/classifications/${response.data.classification_id}`);
+                navigate(`/datasets/${datasetId}/classifications/${response.data.classification_id}/results/${targetIndex}`);
             }
         } catch (err) {
             setError("Failed to start exploration mode.");
@@ -63,10 +67,18 @@ const DatasetView = () => {
             setExploreLoading(false);
         }
     };
+
+    const handleGoToEntry = async () => {
+        if (selectedEntryIndex !== null) {
+            await handleExploreDataset(selectedEntryIndex);
+            setShowModal(false); // Close the modal after navigation
+        }
+    };
     // Pagination states
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(20);
     const [selectedEntry, setSelectedEntry] = useState<any | null>(null);
+    const [selectedEntryIndex, setSelectedEntryIndex] = useState<number | null>(null);
     const [showModal, setShowModal] = useState(false);
     const [userChangedDataType, setUserChangedDataType] = useState(false);
     const formatDate = (dateString: string) => {
@@ -172,8 +184,9 @@ const DatasetView = () => {
     };
 
     // Handle entry click
-    const handleEntryClick = (entry: any) => {
+    const handleEntryClick = (entry: any, index: number) => {
         setSelectedEntry(entry);
+        setSelectedEntryIndex(index);
         setShowModal(true);
     };
 
@@ -409,21 +422,9 @@ const DatasetView = () => {
                 <Col md={4} className="border-end border-2">
 
                     <Card className="border-0">
-                    <Button
-                        variant="warning"
-                        className="mb-2"
-                        onClick={handleExploreDataset}
-                        disabled={!dataset || exploreLoading}
-                    >
-                        {exploreLoading ? (
-                            <>
-                                <Spinner animation="border" size="sm" /> Exploring...
-                            </>
-                        ) : (
-                            "Explore/Annotate Dataset (One by One)"
-                        )}
-                    </Button>
-                        <div className="d-flex justify-content-between m-4">
+                        
+                        <Card.Body>
+                        <div className="d-flex justify-content-between pb-3">
                             <Button
                                 variant="outline-secondary"
                                 onClick={() => navigate(`/datasets`)}
@@ -431,7 +432,6 @@ const DatasetView = () => {
                                 ← Back to Datasets
                             </Button>
                         </div>
-                        <Card.Body>
 
                             <Card.Title className="mb-4">Classification Methods</Card.Title>
                             <div className="mb-3 d-flex align-items-center gap-3">
@@ -663,7 +663,7 @@ const DatasetView = () => {
                                                     {currentItems.map((row, index) => (
                                                         <tr
                                                             key={index}
-                                                            onClick={() => handleEntryClick(row)}
+                                                            onClick={() => handleEntryClick(row, (currentPage - 1) * itemsPerPage + index)}
                                                             style={{ cursor: 'pointer' }}
                                                             className="hover-highlight"
                                                         >
@@ -702,7 +702,23 @@ const DatasetView = () => {
             {/* Modal for viewing full entry details */}
             <Modal show={showModal} onHide={() => setShowModal(false)} size="lg">
                 <Modal.Header closeButton>
-                    <Modal.Title>Entry Details</Modal.Title>
+                    <div className="d-flex justify-content-between align-items-center w-100">
+                        <Modal.Title>Entry Details</Modal.Title>
+                        <Button
+                            variant="warning"
+                            onClick={handleGoToEntry}
+                            disabled={!dataset || exploreLoading || selectedEntryIndex === null}
+                            className="ms-3"
+                        >
+                            {exploreLoading ? (
+                                <>
+                                    <Spinner animation="border" size="sm" className="me-2" /> Going to Entry...
+                                </>
+                            ) : (
+                                `Go to Entry ${selectedEntryIndex !== null ? selectedEntryIndex + 1 : ''}`
+                            )}
+                        </Button>
+                    </div>
                 </Modal.Header>
                 <Modal.Body>
                     {selectedEntry && (
