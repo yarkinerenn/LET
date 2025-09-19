@@ -438,10 +438,18 @@ def get_llm_response(client, provider, model_name, prompt, data_type):
 
 def get_standard_llm_response(client, model_name, prompt, data_type):
     """Get response from standard LLM APIs (OpenAI, Groq, etc.)"""
-    response = client.chat.completions.create(
-        model=model_name,
-        messages=[{"role": "user", "content": prompt}]
-    )
+    # Check if client is Groq to add temperature parameter
+    if isinstance(client, Groq):
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0
+        )
+    else:
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[{"role": "user", "content": prompt}]
+        )
     content = response.choices[0].message.content.strip()
     print(content, 'this is what llm prompt')
 

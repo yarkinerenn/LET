@@ -15,6 +15,7 @@ def call_model(prompt, target_model, provider,api_key, **kwargs):
         chat_completion = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
             model=target_model,
+            temperature=0,
             **kwargs
         )
         return chat_completion.choices[0].message.content
@@ -68,7 +69,7 @@ def call_llama(prompt, groq_key, model="llama-3.3-70b-versatile"):
                 "content": f"{prompt}\n\n"
             }
         ],
-        model=model,
+        model=model
     )
     result = chat_completion.choices[0].message.content
     return result
