@@ -193,7 +193,25 @@ def initialize_llm_client(method, provider):
 
 
 def sample_dataset(df, data_type, label_column, sample_size):
-    """Sample the dataset based on data type requirements"""
+    """Sample the dataset based on data type requirements
+    
+    Args:
+        df: DataFrame to sample from
+        data_type: Type of dataset (ecqa, snarks, legal, hotel, etc.)
+        label_column: Name of the label column
+        sample_size: Number of samples to take
+        offset: Starting position for sampling (default: 0)
+    """
+    offset=500
+    # Apply offset first - slice the dataframe from offset position
+    if offset > 0:
+        df = df.iloc[offset:].reset_index(drop=True)
+    
+    # Ensure we don't exceed available data after offset
+    available_samples = len(df)
+    if sample_size > available_samples:
+        sample_size = available_samples
+    
     if data_type in ["ecqa", "snarks","legal"]:
         # For ECQA and SNARKS, don't stratify, just sample N entries
         return df.sample(n=sample_size, random_state=42)

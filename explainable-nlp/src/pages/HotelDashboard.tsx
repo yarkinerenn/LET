@@ -251,10 +251,12 @@ const HotelDashboard = () => {
                         const isMismatch = gold !== undefined && pred !== gold;
                         const questionText = result.text || result.original_data?.question || result.original_data?.citing_prompt || '';
                         const shown = expandedRow === index ? questionText : questionText.slice(0, 220) + (questionText.length > 220 ? '...' : '');
+                        // Calculate the actual index in the full dataset
+                        const actualIndex = (currentPage - 1) * itemsPerPage + index;
                         return (
                           <tr
                             key={index}
-                            onClick={() => navigate(`/datasets/${datasetId}/classifications_hotel/${classificationId}/results/${index}`)}
+                            onClick={() => navigate(`/datasets/${datasetId}/classifications_hotel/${classificationId}/results/${actualIndex}`)}
                             className={isMismatch ? 'table-danger' : ''}
                             style={{ cursor: 'pointer' }}
                           >

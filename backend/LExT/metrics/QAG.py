@@ -98,7 +98,7 @@ def evaluate_questions_sentiment(questions, explanation, target_model,provider,a
     return qag_score, no_i_dont_know_questions
 
 def generate_questions_legal(explanation, groq):
-    prompt = (f"Generate at least 5 legal case scenarios or questions that can be analyzed using the following explanation. "
+    prompt = (f"Generate at least 5 legal case scenarios that can be analyzed using the following explanation. "
               f"Focus on legal holdings, case precedents, and legal reasoning that would help determine the correct legal interpretation. "
               f"Split all the questions with a newline character. Don't add anything else to your response:\n\n"
               f"Explanation: {explanation}")

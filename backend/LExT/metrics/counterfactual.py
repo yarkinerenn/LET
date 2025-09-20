@@ -29,7 +29,7 @@ def rephrase_explanation_hotels(question, explanation, groq, label):
     original = (label or "").strip().lower()
     opposite_label = "deceptive" if original.startswith("truth") else "truthful"
     prompt = (
-        f"Question: {question}\n"
+        f"Hotel Review: {question}\n"
         f"Original label: {label}\n"
         f"Original explanation: {explanation}\n"
         f"Rewrite the explanation so that it now *supports* the opposite label: {opposite_label}. "
