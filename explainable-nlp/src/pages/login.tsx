@@ -65,7 +65,7 @@ export function Login() {
                                 />
                             </Form.Group>
 
-                            <Button variant="primary" className="w-100 mb-3" type="submit">
+                            <Button variant="dark" className="w-100 mb-3" type="submit">
                                 Sign In
                             </Button>
 
