@@ -202,7 +202,7 @@ def sample_dataset(df, data_type, label_column, sample_size):
         sample_size: Number of samples to take
         offset: Starting position for sampling (default: 0)
     """
-    offset=500
+    offset=1000
     # Apply offset first - slice the dataframe from offset position
     if offset > 0:
         df = df.iloc[offset:].reset_index(drop=True)

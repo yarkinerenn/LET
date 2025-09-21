@@ -229,385 +229,370 @@ const Settings = () => {
 
     return (
         <Container className="py-5">
-            <Row className="justify-content-center">
-                <Col md={6} lg={4}>
-                    <div className="auth-card">
-                        <h2 className="text-center mb-4">Settings</h2>
-                        {error && <Alert variant="danger">{error}</Alert>}
-                        {success && <Alert variant="success">{success}</Alert>}
+            <h2 className="text-center mb-5">Settings</h2>
+            
+            {/* Global alerts */}
+            {error && <Alert variant="danger" className="mb-4">{error}</Alert>}
+            {success && <Alert variant="success" className="mb-4">{success}</Alert>}
+
+            <Row className="g-4">
+                {/* Left Column - API Keys */}
+                <Col lg={4}>
+                    <div className="h-100 p-4 rounded bg-white border shadow-sm">
+                        <h5 className="mb-4 text-primary">
+                            <i className="fas fa-key me-2"></i>
+                            API Keys
+                        </h5>
+                        <p className="text-muted mb-4">Configure your API keys for different providers</p>
 
                         <Form onSubmit={handleSubmit}>
                             <Form.Group className="mb-3">
-                                <Form.Label>OpenAI API Key</Form.Label>
+                                <Form.Label className="fw-semibold">OpenAI API Key</Form.Label>
                                 <Form.Control
                                     type="text"
-                                    placeholder="Enter your OpenAI API key (optional)"
+                                    placeholder="Enter your OpenAI API key"
                                     value={openaiApi}
                                     onChange={(e) => setOpenaiApi(e.target.value)}
+                                    className="border-0 bg-light"
                                 />
                             </Form.Group>
 
                             <Form.Group className="mb-3">
-                                <Form.Label>Grok API Key</Form.Label>
+                                <Form.Label className="fw-semibold">Grok API Key</Form.Label>
                                 <Form.Control
                                     type="text"
-                                    placeholder="Enter your Grok API key (optional)"
+                                    placeholder="Enter your Grok API key"
                                     value={grokApi}
                                     onChange={(e) => setGrokApi(e.target.value)}
+                                    className="border-0 bg-light"
                                 />
                             </Form.Group>
 
                             <Form.Group className="mb-3">
-                                <Form.Label>DeepSeek API Key</Form.Label>
+                                <Form.Label className="fw-semibold">DeepSeek API Key</Form.Label>
                                 <Form.Control
                                     type="text"
-                                    placeholder="Enter your Deepseek API key (optional)"
+                                    placeholder="Enter your Deepseek API key"
                                     value={deepseekApi}
                                     onChange={(e) => setdeepseekApi(e.target.value)}
+                                    className="border-0 bg-light"
                                 />
                             </Form.Group>
 
                             <Form.Group className="mb-3">
-                                <Form.Label>Openrouter API Key</Form.Label>
+                                <Form.Label className="fw-semibold">Openrouter API Key</Form.Label>
                                 <Form.Control
                                     type="text"
-                                    placeholder="Enter your Openrouter API key (optional)"
+                                    placeholder="Enter your Openrouter API key"
                                     value={openrouterApi}
                                     onChange={(e) => setopenrouterApi(e.target.value)}
+                                    className="border-0 bg-light"
                                 />
                             </Form.Group>
 
-                            <Form.Group className="mb-3">
-                                <Form.Label>Gemini API Key</Form.Label>
+                            <Form.Group className="mb-4">
+                                <Form.Label className="fw-semibold">Gemini API Key</Form.Label>
                                 <Form.Control
                                     type="text"
-                                    placeholder="Enter your Gemini API key (optional)"
+                                    placeholder="Enter your Gemini API key"
                                     value={geminiApi}
                                     onChange={(e) => setGeminiApi(e.target.value)}
+                                    className="border-0 bg-light"
                                 />
                             </Form.Group>
 
-                            <Button variant="dark" className="w-100 mb-3" type="submit">
+                            <Button 
+                                variant="primary" 
+                                className="w-100 py-2" 
+                                type="submit"
+                                size="lg"
+                            >
+                                <i className="fas fa-save me-2"></i>
                                 Update API Keys
                             </Button>
                         </Form>
                     </div>
                 </Col>
+
+                {/* Right Column - Provider Settings */}
+                <Col lg={8}>
+                    <Row className="g-4">
+                        {/* Classification Settings */}
+                        <Col xs={12}>
+                            <div className="h-100 p-4 rounded bg-white border shadow-sm">
+                                <h5 className="mb-4 text-success">
+                                    <i className="fas fa-brain me-2"></i>
+                                    Classification Settings
+                                </h5>
+                                <p className="text-muted mb-4">Select the AI provider for classification tasks</p>
+
+                                <div className="mb-4">
+                                    <h6 className="mb-3">Provider Selection</h6>
+                                    <ButtonGroup className="d-flex flex-wrap">
+                                        <ToggleButton
+                                            id="provider-openai"
+                                            type="radio"
+                                            variant={provider === 'openai' ? 'primary' : 'outline-primary'}
+                                            name="provider"
+                                            value="openai"
+                                            checked={provider === 'openai'}
+                                            onChange={(e) => setProvider(e.currentTarget.value)}
+                                            className="me-2 mb-2"
+                                        >
+                                            OpenAI
+                                        </ToggleButton>
+                                        <ToggleButton
+                                            id="provider-groq"
+                                            type="radio"
+                                            variant={provider === 'groq' ? 'primary' : 'outline-primary'}
+                                            name="provider"
+                                            value="groq"
+                                            checked={provider === 'groq'}
+                                            onChange={(e) => setProvider(e.currentTarget.value)}
+                                            className="me-2 mb-2"
+                                        >
+                                            Groq
+                                        </ToggleButton>
+                                        <ToggleButton
+                                            id="provider-deepseek"
+                                            type="radio"
+                                            variant={provider === 'deepseek' ? 'primary' : 'outline-primary'}
+                                            name="provider"
+                                            value="deepseek"
+                                            checked={provider === 'deepseek'}
+                                            onChange={(e) => setProvider(e.currentTarget.value)}
+                                            className="me-2 mb-2"
+                                        >
+                                            Deepseek
+                                        </ToggleButton>
+                                        <ToggleButton
+                                            id="provider-openrouter"
+                                            type="radio"
+                                            variant={provider === 'openrouter' ? 'primary' : 'outline-primary'}
+                                            name="provider"
+                                            value="openrouter"
+                                            checked={provider === 'openrouter'}
+                                            onChange={(e) => setProvider(e.currentTarget.value)}
+                                            className="me-2 mb-2"
+                                        >
+                                            Openrouter
+                                        </ToggleButton>
+                                        <ToggleButton
+                                            id="provider-gemini"
+                                            type="radio"
+                                            variant={provider === 'gemini' ? 'primary' : 'outline-primary'}
+                                            name="provider"
+                                            value="gemini"
+                                            checked={provider === 'gemini'}
+                                            onChange={(e) => setProvider(e.currentTarget.value)}
+                                            className="me-2 mb-2"
+                                        >
+                                            Gemini
+                                        </ToggleButton>
+                                        <ToggleButton
+                                            id="provider-ollama"
+                                            type="radio"
+                                            variant={provider === 'ollama' ? 'primary' : 'outline-primary'}
+                                            name="provider"
+                                            value="ollama"
+                                            checked={provider === 'ollama'}
+                                            onChange={(e) => setProvider(e.currentTarget.value)}
+                                            className="mb-2"
+                                        >
+                                            Ollama
+                                        </ToggleButton>
+                                    </ButtonGroup>
+                                </div>
+
+                                {/* Model Selection */}
+                                {(provider === 'gemini' || provider === 'groq' || provider === 'openai' || provider === 'openrouter' || provider === 'ollama') && (
+                                    <div className="mb-4">
+                                        <h6 className="mb-3">Model Selection</h6>
+                                        <Form.Select 
+                                            value={model} 
+                                            onChange={(e) => setModel(e.target.value)}
+                                            className="border-0 bg-light"
+                                        >
+                                            <option value="">-- Select a Model --</option>
+                                            {provider === 'gemini' && geminiModels.map((m) => (
+                                                <option key={m.name} value={m.name}>
+                                                    {m.name}
+                                                </option>
+                                            ))}
+                                            {provider === 'groq' && groqModels.map((m) => (
+                                                <option key={m.name} value={m.name}>
+                                                    {m.name}
+                                                </option>
+                                            ))}
+                                            {provider === 'openai' && openAIModels.map((m) => (
+                                                <option key={m.name} value={m.name}>
+                                                    {m.name}
+                                                </option>
+                                            ))}
+                                            {provider === 'openrouter' && openrouterModels.map((m) => (
+                                                <option key={m.name} value={m.name}>
+                                                    {m.name}
+                                                </option>
+                                            ))}
+                                            {provider === 'ollama' && ollamaModels.map((m) => (
+                                                <option key={m.name} value={m.name}>
+                                                    {m.name}
+                                                </option>
+                                            ))}
+                                        </Form.Select>
+                                    </div>
+                                )}
+
+                                <Button
+                                    variant="success"
+                                    className="px-4 py-2"
+                                    onClick={handleClassificationSettingsUpdate}
+                                >
+                                    <i className="fas fa-save me-2"></i>
+                                    Save Classification Preferences
+                                </Button>
+                            </div>
+                        </Col>
+
+                        {/* Explanation Settings */}
+                        <Col xs={12}>
+                            <div className="h-100 p-4 rounded bg-white border shadow-sm">
+                                <h5 className="mb-4 text-info">
+                                    <i className="fas fa-lightbulb me-2"></i>
+                                    Explanation Settings
+                                </h5>
+                                <p className="text-muted mb-4">Select the AI provider for explanation generation</p>
+
+                                <div className="mb-4">
+                                    <h6 className="mb-3">Provider Selection</h6>
+                                    <ButtonGroup className="d-flex flex-wrap">
+                                        <ToggleButton
+                                            id="providerex-openai"
+                                            type="radio"
+                                            variant={providerex === 'openai' ? 'primary' : 'outline-primary'}
+                                            name="providerex"
+                                            value="openai"
+                                            checked={providerex === 'openai'}
+                                            onChange={(e) => setProviderex(e.currentTarget.value)}
+                                            className="me-2 mb-2"
+                                        >
+                                            OpenAI
+                                        </ToggleButton>
+                                        <ToggleButton
+                                            id="providerex-groq"
+                                            type="radio"
+                                            variant={providerex === 'groq' ? 'primary' : 'outline-primary'}
+                                            name="providerex"
+                                            value="groq"
+                                            checked={providerex === 'groq'}
+                                            onChange={(e) => setProviderex(e.currentTarget.value)}
+                                            className="me-2 mb-2"
+                                        >
+                                            Groq
+                                        </ToggleButton>
+                                        <ToggleButton
+                                            id="providerex-deepseek"
+                                            type="radio"
+                                            variant={providerex === 'deepseek' ? 'primary' : 'outline-primary'}
+                                            name="providerex"
+                                            value="deepseek"
+                                            checked={providerex === 'deepseek'}
+                                            onChange={(e) => setProviderex(e.currentTarget.value)}
+                                            className="me-2 mb-2"
+                                        >
+                                            Deepseek
+                                        </ToggleButton>
+                                        <ToggleButton
+                                            id="providerex-openrouter"
+                                            type="radio"
+                                            variant={providerex === 'openrouter' ? 'primary' : 'outline-primary'}
+                                            name="providerex"
+                                            value="openrouter"
+                                            checked={providerex === 'openrouter'}
+                                            onChange={(e) => setProviderex(e.currentTarget.value)}
+                                            className="me-2 mb-2"
+                                        >
+                                            Openrouter
+                                        </ToggleButton>
+                                        <ToggleButton
+                                            id="providerex-gemini"
+                                            type="radio"
+                                            variant={providerex === 'gemini' ? 'primary' : 'outline-primary'}
+                                            name="providerex"
+                                            value="gemini"
+                                            checked={providerex === 'gemini'}
+                                            onChange={(e) => setProviderex(e.currentTarget.value)}
+                                            className="me-2 mb-2"
+                                        >
+                                            Gemini
+                                        </ToggleButton>
+                                        <ToggleButton
+                                            id="providerex-ollama"
+                                            type="radio"
+                                            variant={providerex === 'ollama' ? 'primary' : 'outline-primary'}
+                                            name="providerex"
+                                            value="ollama"
+                                            checked={providerex === 'ollama'}
+                                            onChange={(e) => setProviderex(e.currentTarget.value)}
+                                            className="mb-2"
+                                        >
+                                            Ollama
+                                        </ToggleButton>
+                                    </ButtonGroup>
+                                </div>
+
+                                {/* Model Selection */}
+                                {(providerex === 'gemini' || providerex === 'groq' || providerex === 'openai' || providerex === 'openrouter' || providerex === 'ollama') && (
+                                    <div className="mb-4">
+                                        <h6 className="mb-3">Model Selection</h6>
+                                        <Form.Select 
+                                            value={modelex} 
+                                            onChange={(e) => setModelex(e.target.value)}
+                                            className="border-0 bg-light"
+                                        >
+                                            <option value="">-- Select a Model --</option>
+                                            {providerex === 'gemini' && geminiModels.map((m) => (
+                                                <option key={m.name} value={m.name}>
+                                                    {m.name}
+                                                </option>
+                                            ))}
+                                            {providerex === 'groq' && groqModels.map((m) => (
+                                                <option key={m.name} value={m.name}>
+                                                    {m.name}
+                                                </option>
+                                            ))}
+                                            {providerex === 'openai' && openAIModels.map((m) => (
+                                                <option key={m.name} value={m.name}>
+                                                    {m.name}
+                                                </option>
+                                            ))}
+                                            {providerex === 'openrouter' && openrouterModels.map((m) => (
+                                                <option key={m.name} value={m.name}>
+                                                    {m.name}
+                                                </option>
+                                            ))}
+                                            {providerex === 'ollama' && ollamaModels.map((m) => (
+                                                <option key={m.name} value={m.name}>
+                                                    {m.name}
+                                                </option>
+                                            ))}
+                                        </Form.Select>
+                                    </div>
+                                )}
+
+                                <Button
+                                    variant="info"
+                                    className="px-4 py-2"
+                                    onClick={handleExplanationSettingsUpdate}
+                                >
+                                    <i className="fas fa-save me-2"></i>
+                                    Save Explanation Preferences
+                                </Button>
+                            </div>
+                        </Col>
+                    </Row>
+                </Col>
             </Row>
-            <div className="mt-4 p-4 rounded bg-light">
-                <h5 className="mb-3">Classification Settings</h5>
-                <p className="text-muted mb-3">Select the AI provider for classification</p>
-
-                <ButtonGroup className="d-flex justify-content-start">
-                    <ToggleButton
-                        id="provider-openai"
-                        type="radio"
-                        variant={provider === 'openai' ? 'dark' : 'outline-primary'}
-                        name="provider"
-                        value="openai"
-                        checked={provider === 'openai'}
-                        onChange={(e) => setProvider(e.currentTarget.value)}
-                        className="me-3 mb-2"
-                    >
-                        OpenAI
-                    </ToggleButton>
-                    <ToggleButton
-                        id="provider-groq"
-                        type="radio"
-                        variant={provider === 'groq' ? 'dark' : 'outline-primary'}
-                        name="provider"
-                        value="groq"
-                        checked={provider === 'groq'}
-                        onChange={(e) => setProvider(e.currentTarget.value)}
-                        className="mb-2 me-3"
-                    >
-                        Groq
-                    </ToggleButton>
-                    <ToggleButton
-                        id="provider-deepseek"
-                        type="radio"
-                        variant={provider === 'deepseek' ? 'dark' : 'outline-primary'}
-                        name="provider"
-                        value="deepseek"
-                        checked={provider === 'deepseek'}
-                        onChange={(e) => setProvider(e.currentTarget.value)}
-                        className="mb-2 me-3"
-                    >
-                        Deepseek
-                    </ToggleButton>
-                    <ToggleButton
-                        id="provider-openrouter"
-                        type="radio"
-                        variant={provider === 'openrouter' ? 'dark' : 'outline-primary'}
-                        name="provider"
-                        value="openrouter"
-                        checked={provider === 'openrouter'}
-                        onChange={(e) => setProvider(e.currentTarget.value)}
-                        className="mb-2 me-3"
-                    >
-                        Open router
-                    </ToggleButton>
-                    <ToggleButton
-                        id="provider-gemini"
-                        type="radio"
-                        variant={provider === 'gemini' ? 'dark' : 'outline-primary'}
-                        name="provider"
-                        value="gemini"
-                        checked={provider === 'gemini'}
-                        onChange={(e) => setProvider(e.currentTarget.value)}
-                        className="mb-2 me-3"
-                    >
-                        Gemini
-                    </ToggleButton>
-                    <ToggleButton
-                        id="provider-ollama"
-                        type="radio"
-                        variant={provider === 'ollama' ? 'dark' : 'outline-primary'}
-                        name="provider"
-                        value="ollama"
-                        checked={provider === 'ollama'}
-                        onChange={(e) => setProvider(e.currentTarget.value)}
-                        className="mb-2"
-                    >
-                        Ollama
-                    </ToggleButton>
-                </ButtonGroup>
-
-                {provider === 'gemini' && (
-                    <div className="mb-3">
-                        <span className="me-3">Select Model:</span>
-                        <Form.Select
-                            value={model}
-                            onChange={(e) => setModel(e.target.value)}
-                        >
-                            <option value="">-- Select a Model --</option>
-                            {geminiModels.map((m) => (
-                                <option key={m.name} value={m.name}>
-                                    {m.name}
-                                </option>
-                            ))}
-                        </Form.Select>
-                    </div>
-                )}
-
-                {provider === 'groq' && (
-                    <div className="mb-3">
-                        <span className="me-3">Select Model:</span>
-                        <Form.Select value={model} onChange={(e) => setModel(e.target.value)}>
-                            <option value="">-- Select a Model --</option>
-                            {groqModels.map((m) => (
-                                <option key={m.name} value={m.name}>
-                                    {m.name}
-                                </option>
-                            ))}
-                        </Form.Select>
-                    </div>
-                )}
-                {provider === 'openai' && (
-                    <div className="mb-3">
-                        <span className="me-3">Select Model:</span>
-                        <Form.Select value={model} onChange={(e) => setModel(e.target.value)}>
-                            <option value="">-- Select a Model --</option>
-                            {openAIModels.map((m) => (
-                                <option key={m.name} value={m.name}>
-                                    {m.name}
-                                </option>
-                            ))}
-                        </Form.Select>
-                    </div>
-                )}
-                {provider === 'openrouter' && (
-                    <div className="mb-3">
-                        <span className="me-3">Select Model:</span>
-                        <Form.Select value={model} onChange={(e) => setModel(e.target.value)}>
-                            <option value="">-- Select a Model --</option>
-                            {openrouterModels.map((m) => (
-                                <option key={m.name} value={m.name}>
-                                    {m.name}
-                                </option>
-                            ))}
-                        </Form.Select>
-                    </div>
-                )}
-                {provider === 'ollama' && (
-                    <div className="mb-3">
-                        <span className="me-3">Select Model:</span>
-                        <Form.Select value={model} onChange={(e) => setModel(e.target.value)}>
-                            <option value="">-- Select a Model --</option>
-                            {ollamaModels.map((m) => (
-                                <option key={m.name} value={m.name}>
-                                    {m.name}
-                                </option>
-                            ))}
-                        </Form.Select>
-                    </div>
-                )}
-
-                <Button
-                    variant="dark"
-                    className="mt-3"
-                    onClick={handleClassificationSettingsUpdate}
-                >
-                    Save Classification Preferences
-                </Button>
-            </div>
-            <div className="mt-4 p-4 rounded bg-light">
-                <h5 className="mb-3">Explanation Settings</h5>
-                <p className="text-muted mb-3">Select the AI provider for explanation</p>
-
-                <ButtonGroup className="d-flex justify-content-start">
-                    <ToggleButton
-                        id="providerex-openai"
-                        type="radio"
-                        variant={providerex === 'openai' ? 'dark' : 'outline-primary'}
-                        name="providerex"
-                        value="openai"
-                        checked={providerex === 'openai'}
-                        onChange={(e) => setProviderex(e.currentTarget.value)}
-                        className="me-3 mb-2"
-                    >
-                        OpenAI
-                    </ToggleButton>
-                    <ToggleButton
-                        id="providerex-groq"
-                        type="radio"
-                        variant={providerex === 'groq' ? 'dark' : 'outline-primary'}
-                        name="providerex"
-                        value="groq"
-                        checked={providerex === 'groq'}
-                        onChange={(e) => setProviderex(e.currentTarget.value)}
-                        className="mb-2 me-3"
-                    >
-                        Groq
-                    </ToggleButton>
-                    <ToggleButton
-                        id="providerex-deepseek"
-                        type="radio"
-                        variant={providerex === 'deepseek' ? 'dark' : 'outline-primary'}
-                        name="providerex"
-                        value="deepseek"
-                        checked={providerex === 'deepseek'}
-                        onChange={(e) => setProviderex(e.currentTarget.value)}
-                        className="mb-2 me-3"
-                    >
-                        Deepseek
-                    </ToggleButton>
-                    <ToggleButton
-                        id="providerex-openrouter"
-                        type="radio"
-                        variant={providerex === 'openrouter' ? 'dark' : 'outline-primary'}
-                        name="providerex"
-                        value="openrouter"
-                        checked={providerex === 'openrouter'}
-                        onChange={(e) => setProviderex(e.currentTarget.value)}
-                        className="mb-2 me-3"
-                    >
-                        Openrouter
-                    </ToggleButton>
-                    <ToggleButton
-                        id="providerex-gemini"
-                        type="radio"
-                        variant={providerex === 'gemini' ? 'dark' : 'outline-primary'}
-                        name="providerex"
-                        value="gemini"
-                        checked={providerex === 'gemini'}
-                        onChange={(e) => setProviderex(e.currentTarget.value)}
-                        className="mb-2 me-3"
-                    >
-                        Gemini
-                    </ToggleButton>
-                    <ToggleButton
-                        id="providerex-ollama"
-                        type="radio"
-                        variant={providerex === 'ollama' ? 'dark' : 'outline-primary'}
-                        name="providerex"
-                        value="ollama"
-                        checked={providerex === 'ollama'}
-                        onChange={(e) => setProviderex(e.currentTarget.value)}
-                        className="mb-2"
-                    >
-                        Ollama
-                    </ToggleButton>
-                </ButtonGroup>
-
-                {providerex === 'gemini' && (
-                    <div className="mb-3">
-                        <span className="me-3">Select Model:</span>
-                        <Form.Select
-                            value={modelex}
-                            onChange={(e) => setModelex(e.target.value)}
-                        >
-                            <option value="">-- Select a Model --</option>
-                            {geminiModels.map((m) => (
-                                <option key={m.name} value={m.name}>
-                                    {m.name}
-                                </option>
-                            ))}
-                        </Form.Select>
-                    </div>
-                )}
-
-                {providerex === 'groq' && (
-                    <div className="mb-3">
-                        <span className="me-3">Select Model:</span>
-                        <Form.Select value={modelex} onChange={(e) => setModelex(e.target.value)}>
-                            <option value="">-- Select a Model --</option>
-                            {groqModels.map((m) => (
-                                <option key={m.name} value={m.name}>
-                                    {m.name}
-                                </option>
-                            ))}
-                        </Form.Select>
-                    </div>
-                )}
-                {providerex === 'openai' && (
-                    <div className="mb-3">
-                        <span className="me-3">Select Model:</span>
-                        <Form.Select value={modelex} onChange={(e) => setModelex(e.target.value)}>
-                            <option value="">-- Select a Model --</option>
-                            {openAIModels.map((m) => (
-                                <option key={m.name} value={m.name}>
-                                    {m.name}
-                                </option>
-                            ))}
-                        </Form.Select>
-                    </div>
-                )}
-                {providerex === 'openrouter' && (
-                    <div className="mb-3">
-                        <span className="me-3">Select Model:</span>
-                        <Form.Select value={modelex} onChange={(e) => setModelex(e.target.value)}>
-                            <option value="">-- Select a Model --</option>
-                            {openrouterModels.map((m) => (
-                                <option key={m.name} value={m.name}>
-                                    {m.name}
-                                </option>
-                            ))}
-                        </Form.Select>
-                    </div>
-                )}
-                {providerex === 'ollama' && (
-                    <div className="mb-3">
-                        <span className="me-3">Select Model:</span>
-                        <Form.Select value={modelex} onChange={(e) => setModelex(e.target.value)}>
-                            <option value="">-- Select a Model --</option>
-                            {ollamaModels.map((m) => (
-                                <option key={m.name} value={m.name}>
-                                    {m.name}
-                                </option>
-                            ))}
-                        </Form.Select>
-                    </div>
-                )}
-
-                <Button
-                    variant="dark"
-                    className="mt-3"
-                    onClick={handleExplanationSettingsUpdate}
-                >
-                    Save Explanation Preferences
-                </Button>
-            </div>
         </Container>
     );
 };

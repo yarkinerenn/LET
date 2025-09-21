@@ -1,68 +1,128 @@
+"""
+Contextual Faithfulness Metrics Module
+
+This module implements contextual faithfulness metrics for evaluating the quality
+of explanations by testing whether the model's predictions remain consistent
+when important words are redacted from the context.
+
+The contextual faithfulness metric works by:
+1. Identifying important words that led to the prediction
+2. Redacting these words from the context
+3. Testing if the model can still make the same prediction
+4. Computing a faithfulness score based on the results
+
+Author: [Your Name]
+Date: [Current Date]
+"""
+
 import re
 from ..src.basic_functions import call_llama, call_model, get_prediction
 
+
 def redact_words(context, important_words):
+    """
+    Redact important words from the context by replacing them with [REDACTED].
+    
+    Args:
+        context (str): The original context text
+        important_words (str): Comma-separated string of important words to redact
+        
+    Returns:
+        str: Context with important words replaced by [REDACTED]
+    """
     words = [w.strip() for w in important_words.split(",")]
     pattern = re.compile(r'\b(' + '|'.join(map(re.escape, words)) + r')\b', re.IGNORECASE)
     return pattern.sub("[REDACTED]", context)
 
-def contextual_faithfulness(context, predicted_explanation, ground_question, predicted_label, target_model, groq,provider,api, row_reference={}):
+def contextual_faithfulness(context, predicted_explanation, ground_question, predicted_label, target_model, groq, provider, api, row_reference={}):
     """
-    Contextual Faithfulness: This metric evaluates the faithfulness of the model's prediction by redacting important words from the context and checking if the model can still make a prediction."
+    Evaluate contextual faithfulness by redacting important words and testing prediction consistency.
+    
+    This metric evaluates the faithfulness of the model's prediction by:
+    1. Identifying important words that led to the prediction
+    2. Redacting these words from the context
+    3. Testing if the model can still make the same prediction
+    4. Computing a faithfulness score based on the results
+    
+    Args:
+        context (str): The original context text
+        predicted_explanation (str): The model's explanation for the prediction
+        ground_question (str): The question being answered
+        predicted_label (str): The predicted label
+        target_model: The target model for evaluation
+        groq: The Groq API client
+        provider: API provider
+        api: API client
+        row_reference (dict): Dictionary to store evaluation results
+        
+    Returns:
+        float: Contextual faithfulness score between 0 and 1
     """
-    # First level: redacting all important words at once.
-
+    # First level: redacting all important words at once
     if context:
-        prompt = (f"Context: {context}, \nQuestion: {ground_question} \n"
-                  f"For the above question and context, you predicted {predicted_label}."
-                  f"Give me 5 most important words from the context that led to this answer without which you would not be able to predict this label. "
-                  f"Give me only these words separated by commas, don't add anything else to your answer.")
-        important_words = call_model(prompt, target_model,provider,api)
+        prompt = (
+            f"Context: {context}\nQuestion: {ground_question}\n"
+            f"For the above question and context, you predicted {predicted_label}. "
+            f"Give me 5 most important words from the context that led to this answer without which you would not be able to predict this label. "
+            f"Give me only these words separated by commas, don't add anything else to your answer."
+        )
+        important_words = call_model(prompt, target_model, provider, api)
         if not important_words:
             return 0
         else: 
             redacted_context = redact_words(context, important_words)
-    
     else:
-        prompt = (f"Question: {ground_question}\n"
-                  f"Explanation: {predicted_explanation}\n"
-                  f"For the above question and explanation, you predicted choice ({predicted_label}). "
-                  f"Give me the 5 most important words from the explanation that led to this answer choice. "
-                  f"These should be words that without them, you would not be able to make the same prediction. "
-                  f"Give me only these words separated by commas, don't add anything else to your answer.")
+        prompt = (
+            f"Question: {ground_question}\n"
+            f"Explanation: {predicted_explanation}\n"
+            f"For the above question and explanation, you predicted choice ({predicted_label}). "
+            f"Give me the 5 most important words from the explanation that led to this answer choice. "
+            f"These should be words that without them, you would not be able to make the same prediction. "
+            f"Give me only these words separated by commas, don't add anything else to your answer."
+        )
         important_words = call_model(prompt, target_model, provider, api)
         if not important_words:
             return 0
         else:
             redacted_context = redact_words(ground_question, important_words)
 
-    
-
     # Run prediction on redacted context
-    _, redacted_pred = get_prediction(redacted_context, ground_question, target_model, groq,provider,api)
-    label_prompt = (f"I prompted model with a question and it gave me the following answer:\n"
-                    f"Question: {ground_question}\n Prediction:{redacted_pred}\n"
-                    f" Using this, label it as one of these: yes, no, unknown, or random. Give me a yes if it explicitly mentions/suggests yes,"
-                    f"no if it explicitly mentions or suggests no. Unknown if it suggests that it doesn't have enough information to answer and random if it just says something unrelated and random\n "
-                    f"Just give me the label.Don't add anything else to your answer.")
+    _, redacted_pred = get_prediction(redacted_context, ground_question, target_model, groq, provider, api)
+    label_prompt = (
+        f"I prompted model with a question and it gave me the following answer:\n"
+        f"Question: {ground_question}\nPrediction: {redacted_pred}\n"
+        f"Using this, label it as one of these: yes, no, unknown, or random. "
+        f"Give me a yes if it explicitly mentions/suggests yes, "
+        f"no if it explicitly mentions or suggests no. "
+        f"Unknown if it suggests that it doesn't have enough information to answer "
+        f"and random if it just says something unrelated and random\n"
+        f"Just give me the label. Don't add anything else to your answer."
+    )
     label_result = call_llama(label_prompt, groq).strip().lower()
 
     if "unknown" in label_result:
         # Second level: redact one word at a time
         words_list = [w.strip() for w in important_words.split(",") if w.strip()]
         unknown_count = 0
+        
         for word in words_list:
             redacted_one = redact_words(context, word)
-            _, redacted_one_pred = get_prediction(redacted_one, ground_question,target_model,groq,provider,api)
-            label_one_prompt = (f"I prompted model with a question and it gave me the following answer:\n"
-                    f"Question: {ground_question}\n Prediction:{redacted_one_pred}\n"
-                    f" Using this, label it as one of these: yes, no, unknown, or random. Give me a yes if it explicitly mentions/suggests yes,"
-                    f"no if it explicitly mentions or suggests no. Unknown if it suggests that it doesn't have enough information to answer and random if it just says something unrelated and random\n "
-                    f"Just give me the label.Don't add anything else to your answer.")
+            _, redacted_one_pred = get_prediction(redacted_one, ground_question, target_model, groq, provider, api)
+            label_one_prompt = (
+                f"I prompted model with a question and it gave me the following answer:\n"
+                f"Question: {ground_question}\nPrediction: {redacted_one_pred}\n"
+                f"Using this, label it as one of these: yes, no, unknown, or random. "
+                f"Give me a yes if it explicitly mentions/suggests yes, "
+                f"no if it explicitly mentions or suggests no. "
+                f"Unknown if it suggests that it doesn't have enough information to answer "
+                f"and random if it just says something unrelated and random\n"
+                f"Just give me the label. Don't add anything else to your answer."
+            )
             label_one = call_llama(label_one_prompt, groq).strip().lower()
 
             if "unknown" in label_one:
                 unknown_count += 1
+                
         final_score = unknown_count / len(words_list) if words_list else 0
     else:
         final_score = 0
@@ -72,20 +132,39 @@ def contextual_faithfulness(context, predicted_explanation, ground_question, pre
 
     return final_score
 
-def contextual_faithfulness_snarks(context, predicted_explanation, ground_question, predicted_label, target_model, groq,provider,api, row_reference={}):
+def contextual_faithfulness_snarks(context, predicted_explanation, ground_question, predicted_label, target_model, groq, provider, api, row_reference={}):
     """
-    Contextual Faithfulness: This metric evaluates the faithfulness of the model's prediction by redacting important words from the context and checking if the model can still make a prediction."
+    Evaluate contextual faithfulness for sarcasm detection tasks.
+    
+    This specialized version of contextual faithfulness is designed for sarcasm detection,
+    focusing on identifying sarcasm indicators, irony markers, and linguistic patterns
+    that are essential for making sarcasm predictions.
+    
+    Args:
+        context (str): The original context text
+        predicted_explanation (str): The model's explanation for the prediction
+        ground_question (str): The sarcasm detection question
+        predicted_label (str): The predicted sarcasm label (A or B)
+        target_model: The target model for evaluation
+        groq: The Groq API client
+        provider: API provider
+        api: API client
+        row_reference (dict): Dictionary to store evaluation results
+        
+    Returns:
+        float: Contextual faithfulness score between 0 and 1
     """
-    # First level: redacting all important words at once.
-
-    prompt = (f"Sarcasm Question: {ground_question}\n"
-              f"Explanation: {predicted_explanation}\n"
-              f"Predicted Answer: ({predicted_label})\n\n"
-              f"For the above sarcasm detection task and explanation, you predicted the answer '({predicted_label})'. "
-              f"Give me the 5 most important words, phrases, or linguistic markers from the explanation that led to this answer. "
-              f"These should be terms that without them, you would not be able to make the same prediction. "
-              f"Focus on sarcasm indicators, irony markers, tone descriptors, contradiction terms, or critical reasoning elements. "
-              f"Give me only these terms separated by commas, don't add anything else to your answer.")
+    # First level: redacting all important words at once
+    prompt = (
+        f"Sarcasm Question: {ground_question}\n"
+        f"Explanation: {predicted_explanation}\n"
+        f"Predicted Answer: ({predicted_label})\n\n"
+        f"For the above sarcasm detection task and explanation, you predicted the answer '({predicted_label})'. "
+        f"Give me the 5 most important words, phrases, or linguistic markers from the explanation that led to this answer. "
+        f"These should be terms that without them, you would not be able to make the same prediction. "
+        f"Focus on sarcasm indicators, irony markers, tone descriptors, contradiction terms, or critical reasoning elements. "
+        f"Give me only these terms separated by commas, don't add anything else to your answer."
+    )
     important_words = call_model(prompt, target_model, provider, api)
     if not important_words:
         return 0
@@ -93,20 +172,25 @@ def contextual_faithfulness_snarks(context, predicted_explanation, ground_questi
         redacted_explanation = redact_words(predicted_explanation, important_words)
 
     # Run prediction on redacted context
-    test_prompt = (f"Sarcasm Question: {ground_question}\n"
-                   f"Explanation: {redacted_explanation}\n\n"
-                   f"You must decide which statement (a or b) is sarcastic using ONLY the explanation"
-                   f"If the explanation doesn't provide enough information to make a confident determination, "
-                   f"respond with 'insufficient'. "
-                   f"Give me either 'a', 'b', or 'insufficient'. Don't add anything else to your answer.")
+    test_prompt = (
+        f"Sarcasm Question: {ground_question}\n"
+        f"Explanation: {redacted_explanation}\n\n"
+        f"You must decide which statement (a or b) is sarcastic using ONLY the explanation. "
+        f"If the explanation doesn't provide enough information to make a confident determination, "
+        f"respond with 'insufficient'. "
+        f"Give me either 'a', 'b', or 'insufficient'. Don't add anything else to your answer."
+    )
     redacted_pred = call_model(test_prompt, target_model, provider, api)
-    result_prompt = (f"Sarcasm Question: {ground_question}\n"
-                     f"I asked a model to identify which statement is sarcastic (a or b) or say 'insufficient' "
-                     f"and it responded: {redacted_pred}\n"
-                     f"Classify this response as either 'answer' (if it said a or b) "
-                     f"or 'insufficient' (if it indicated lack of information). "
-                     f"Just give me the classification. Don't add anything else to your answer.")
+    result_prompt = (
+        f"Sarcasm Question: {ground_question}\n"
+        f"I asked a model to identify which statement is sarcastic (a or b) or say 'insufficient' "
+        f"and it responded: {redacted_pred}\n"
+        f"Classify this response as either 'answer' (if it said a or b) "
+        f"or 'insufficient' (if it indicated lack of information). "
+        f"Just give me the classification. Don't add anything else to your answer."
+    )
     result_classification = call_model(result_prompt, target_model, provider, api).strip().lower()
+    
     if "insufficient" in result_classification:
         # Second level: ADD-BACK one word at a time
         words_list = [w.strip() for w in important_words.split(",") if w.strip()]
@@ -150,63 +234,92 @@ def contextual_faithfulness_snarks(context, predicted_explanation, ground_questi
 
     return final_score
 
-def contextual_faithfulness_ecqa(context, predicted_explanation, ground_question, predicted_label, target_model, groq,provider,api, row_reference={}):
+def contextual_faithfulness_ecqa(context, predicted_explanation, ground_question, predicted_label, target_model, groq, provider, api, row_reference={}):
     """
-    Contextual Faithfulness: This metric evaluates the faithfulness of the model's prediction by redacting important words from the context and checking if the model can still make a prediction."
+    Evaluate contextual faithfulness for ECQA (Explainable Commonsense Question Answering) tasks.
+    
+    This specialized version of contextual faithfulness is designed for ECQA tasks,
+    focusing on commonsense reasoning and explanation quality.
+    
+    Args:
+        context (str): The original context text
+        predicted_explanation (str): The model's explanation for the prediction
+        ground_question (str): The ECQA question
+        predicted_label (str): The predicted answer choice
+        target_model: The target model for evaluation
+        groq: The Groq API client
+        provider: API provider
+        api: API client
+        row_reference (dict): Dictionary to store evaluation results
+        
+    Returns:
+        float: Contextual faithfulness score between 0 and 1
     """
-
-    # First level: redacting all important words at once.
-
+    # First level: redacting all important words at once
     if context:
-        prompt = (f"Context: {context}, \nQuestion: {ground_question} \n"
-                  f"For the above question and context, you predicted {predicted_label}."
-                  f"Give me 5 most important words from the context that led to this answer without which you would not be able to predict this label. "
-                  f"Give me only these words separated by commas, don't add anything else to your answer.")
-        important_words = call_model(prompt, target_model,provider,api)
+        prompt = (
+            f"Context: {context}\nQuestion: {ground_question}\n"
+            f"For the above question and context, you predicted {predicted_label}. "
+            f"Give me 5 most important words from the context that led to this answer without which you would not be able to predict this label. "
+            f"Give me only these words separated by commas, don't add anything else to your answer."
+        )
+        important_words = call_model(prompt, target_model, provider, api)
         if not important_words:
             return 0
         else:
             redacted_context = redact_words(context, important_words)
-
     else:
-        prompt = (f"Question: {ground_question}\n"
-                  f"Explanation: {predicted_explanation}\n"
-                  f"For the above question and explanation, you predicted choice ({predicted_label}). "
-                  f"Give me the 5 most important words from the explanation that led to this answer choice. "
-                  f"These should be words that without them, you would not be able to make the same prediction. "
-                  f"Give me only these words separated by commas, don't add anything else to your answer.")
+        prompt = (
+            f"Question: {ground_question}\n"
+            f"Explanation: {predicted_explanation}\n"
+            f"For the above question and explanation, you predicted choice ({predicted_label}). "
+            f"Give me the 5 most important words from the explanation that led to this answer choice. "
+            f"These should be words that without them, you would not be able to make the same prediction. "
+            f"Give me only these words separated by commas, don't add anything else to your answer."
+        )
         important_words = call_model(prompt, target_model, provider, api)
         if not important_words:
             return 0
         else:
             redacted_context = redact_words(ground_question, important_words)
-            
 
     # Run prediction on redacted context
-    _, redacted_pred = get_prediction(redacted_context, ground_question, target_model, groq,provider,api)
-    label_prompt = (f"I prompted model with a question and it gave me the following answer:\n"
-                    f"Question: {ground_question}\n Prediction:{redacted_pred}\n"
-                    f" Using this, label it as one of these: yes, no, unknown, or random. Give me a yes if it explicitly mentions/suggests yes,"
-                    f"no if it explicitly mentions or suggests no. Unknown if it suggests that it doesn't have enough information to answer and random if it just says something unrelated and random\n "
-                    f"Just give me the label.Don't add anything else to your answer.")
+    _, redacted_pred = get_prediction(redacted_context, ground_question, target_model, groq, provider, api)
+    label_prompt = (
+        f"I prompted model with a question and it gave me the following answer:\n"
+        f"Question: {ground_question}\nPrediction: {redacted_pred}\n"
+        f"Using this, label it as one of these: yes, no, unknown, or random. "
+        f"Give me a yes if it explicitly mentions/suggests yes, "
+        f"no if it explicitly mentions or suggests no. "
+        f"Unknown if it suggests that it doesn't have enough information to answer "
+        f"and random if it just says something unrelated and random\n"
+        f"Just give me the label. Don't add anything else to your answer."
+    )
     label_result = call_llama(label_prompt, groq).strip().lower()
 
     if "unknown" in label_result:
         # Second level: redact one word at a time
         words_list = [w.strip() for w in important_words.split(",") if w.strip()]
         unknown_count = 0
+        
         for word in words_list:
             redacted_one = redact_words(context, word)
-            _, redacted_one_pred = get_prediction(redacted_one, ground_question,target_model,groq,provider,api)
-            label_one_prompt = (f"I prompted model with a question and it gave me the following answer:\n"
-                    f"Question: {ground_question}\n Prediction:{redacted_one_pred}\n"
-                    f" Using this, label it as one of these: yes, no, unknown, or random. Give me a yes if it explicitly mentions/suggests yes,"
-                    f"no if it explicitly mentions or suggests no. Unknown if it suggests that it doesn't have enough information to answer and random if it just says something unrelated and random\n "
-                    f"Just give me the label.Don't add anything else to your answer.")
+            _, redacted_one_pred = get_prediction(redacted_one, ground_question, target_model, groq, provider, api)
+            label_one_prompt = (
+                f"I prompted model with a question and it gave me the following answer:\n"
+                f"Question: {ground_question}\nPrediction: {redacted_one_pred}\n"
+                f"Using this, label it as one of these: yes, no, unknown, or random. "
+                f"Give me a yes if it explicitly mentions/suggests yes, "
+                f"no if it explicitly mentions or suggests no. "
+                f"Unknown if it suggests that it doesn't have enough information to answer "
+                f"and random if it just says something unrelated and random\n"
+                f"Just give me the label. Don't add anything else to your answer."
+            )
             label_one = call_llama(label_one_prompt, groq).strip().lower()
 
             if "unknown" in label_one:
                 unknown_count += 1
+                
         final_score = unknown_count / len(words_list) if words_list else 0
     else:
         final_score = 0
@@ -215,12 +328,29 @@ def contextual_faithfulness_ecqa(context, predicted_explanation, ground_question
     row_reference['contextual_faithfulness'] = final_score
 
     return final_score
-def contextual_faithfulness_hotel(context, predicted_explanation, ground_question, predicted_label, target_model, groq,provider,api, row_reference={}):
+def contextual_faithfulness_hotel(context, predicted_explanation, ground_question, predicted_label, target_model, groq, provider, api, row_reference={}):
     """
-    Contextual Faithfulness: This metric evaluates the faithfulness of the model's prediction by redacting important words from the context and checking if the model can still make a prediction."
+    Evaluate contextual faithfulness for hotel review deception detection tasks.
+    
+    This specialized version of contextual faithfulness is designed for hotel review
+    deception detection, focusing on identifying linguistic markers and patterns
+    that indicate deceptive or truthful reviews.
+    
+    Args:
+        context (str): The original context text
+        predicted_explanation (str): The model's explanation for the prediction
+        ground_question (str): The hotel review text
+        predicted_label (str): The predicted label (deceptive/truthful)
+        target_model: The target model for evaluation
+        groq: The Groq API client
+        provider: API provider
+        api: API client
+        row_reference (dict): Dictionary to store evaluation results
+        
+    Returns:
+        float: Contextual faithfulness score between 0 and 1
     """
-    # First level: redacting all important words at once.
-
+    # First level: redacting all important words at once
     prompt = (
         f"Hotel Review: {ground_question}\n"
         f"You predicted '{predicted_label}' for the deceptive hotel review detection task. "
@@ -236,19 +366,24 @@ def contextual_faithfulness_hotel(context, predicted_explanation, ground_questio
         redacted_question = redact_words(ground_question, important_words)
     
     # Run prediction on redacted context
-    test_prompt = (f"Hotel review: {redacted_question}\n"
-                   f"You must decide if the hotel review is deceptive or truthful."
-                   f"If you can not make a decision with redacted words, "
-                   f"respond with 'insufficient'. "
-                   f"Give me either 'deceptive', 'truthful', or 'insufficient'. Don't add anything else to your answer.")
+    test_prompt = (
+        f"Hotel review: {redacted_question}\n"
+        f"You must decide if the hotel review is deceptive or truthful. "
+        f"If you can not make a decision with redacted words, "
+        f"respond with 'insufficient'. "
+        f"Give me either 'deceptive', 'truthful', or 'insufficient'. Don't add anything else to your answer."
+    )
     redacted_pred = call_model(test_prompt, target_model, provider, api)
-    result_prompt = (f"Hotel review: {redacted_question}\n"
-                     f"I asked a model to identify is the hotel review ('deceptive' or 'truthful') or say 'insufficient' "
-                     f"and it responded: {redacted_pred}\n"
-                     f"Classify this response as either 'answer' (if it said 'deceptive' or 'truthful') "
-                     f"or 'insufficient' (if it indicated lack of information). "
-                     f"Just give me the classification. Don't add anything else to your answer.")
+    result_prompt = (
+        f"Hotel review: {redacted_question}\n"
+        f"I asked a model to identify if the hotel review is ('deceptive' or 'truthful') or say 'insufficient' "
+        f"and it responded: {redacted_pred}\n"
+        f"Classify this response as either 'answer' (if it said 'deceptive' or 'truthful') "
+        f"or 'insufficient' (if it indicated lack of information). "
+        f"Just give me the classification. Don't add anything else to your answer."
+    )
     result_classification = call_model(result_prompt, target_model, provider, api).strip().lower()
+    
     if "insufficient" in result_classification:
         # Second level: ADD-BACK one word at a time
         words_list = [w.strip() for w in important_words.split(",") if w.strip()]
@@ -262,7 +397,7 @@ def contextual_faithfulness_hotel(context, predicted_explanation, ground_questio
             restored_one = redact_all_except(ground_question, words_list, word)
             test_one_prompt = (
                 f"Hotel review: {restored_one}\n"
-                f"You must decide if the hotel review is deceptive or truthful  "
+                f"You must decide if the hotel review is deceptive or truthful. "
                 f"If the explanation doesn't provide enough information to make a confident determination, "
                 f"respond with 'insufficient'. "
                 f"Give me either 'deceptive', 'truthful', or 'insufficient'. Don't add anything else to your answer."
@@ -271,15 +406,13 @@ def contextual_faithfulness_hotel(context, predicted_explanation, ground_questio
 
             result_one_prompt = (
                 f"Hotel review: {restored_one}\n"
-                f"I asked a model to identify is the hotel review ('deceptive' or 'truthful') or say 'insufficient' "
+                f"I asked a model to identify if the hotel review is ('deceptive' or 'truthful') or say 'insufficient' "
                 f"and it responded: {redacted_one_pred}\n"
                 f"Classify this response as either 'answer' (if it said 'deceptive' or 'truthful') "
                 f"or 'insufficient' (if it indicated lack of information). "
                 f"Just give me the classification. Don't add anything else to your answer."
             )
             result_one = call_model(result_one_prompt, target_model, provider, api).strip().lower()
-
-
 
             if "answer" in result_one:
                 answer_count += 1
@@ -295,10 +428,27 @@ def contextual_faithfulness_hotel(context, predicted_explanation, ground_questio
 
 def contextual_faithfulness_sentiment(context, predicted_explanation, ground_question, predicted_label, target_model, groq, provider, api, row_reference={}):
     """
-    Contextual Faithfulness for Sentiment Analysis: This metric evaluates the faithfulness of the model's prediction by redacting important words from the movie review and checking if the model can still make a sentiment prediction.
+    Evaluate contextual faithfulness for sentiment analysis tasks.
+    
+    This specialized version of contextual faithfulness is designed for sentiment analysis,
+    focusing on identifying sentiment indicators and emotional markers that are essential
+    for making sentiment predictions.
+    
+    Args:
+        context (str): The original context text
+        predicted_explanation (str): The model's explanation for the prediction
+        ground_question (str): The movie review text
+        predicted_label (str): The predicted sentiment (positive/negative)
+        target_model: The target model for evaluation
+        groq: The Groq API client
+        provider: API provider
+        api: API client
+        row_reference (dict): Dictionary to store evaluation results
+        
+    Returns:
+        float: Contextual faithfulness score between 0 and 1
     """
-    # First level: redacting all important words at once.
-
+    # First level: redacting all important words at once
     prompt = (
         f"Movie Review: {ground_question}\n"
         f"You predicted '{predicted_label}' for the sentiment analysis task. "
@@ -313,19 +463,24 @@ def contextual_faithfulness_sentiment(context, predicted_explanation, ground_que
         redacted_question = redact_words(ground_question, important_words)
        
     # Run prediction on redacted context
-    test_prompt = (f"Movie review: {redacted_question}\n"
-                   f"You must decide if the movie review sentiment is positive or negative."
-                   f"If you can not make a decision with redacted words, "
-                   f"respond with 'insufficient'. "
-                   f"Give me either 'positive', 'negative', or 'insufficient'. Don't add anything else to your answer.")
+    test_prompt = (
+        f"Movie review: {redacted_question}\n"
+        f"You must decide if the movie review sentiment is positive or negative. "
+        f"If you can not make a decision with redacted words, "
+        f"respond with 'insufficient'. "
+        f"Give me either 'positive', 'negative', or 'insufficient'. Don't add anything else to your answer."
+    )
     redacted_pred = call_model(test_prompt, target_model, provider, api)
-    result_prompt = (f"Movie review: {redacted_question}\n"
-                     f"I asked a model to identify the sentiment ('positive' or 'negative') or say 'insufficient' "
-                     f"and it responded: {redacted_pred}\n"
-                     f"Classify this response as either 'answer' (if it said 'positive' or 'negative') "
-                     f"or 'insufficient' (if it indicated lack of information). "
-                     f"Just give me the classification. Don't add anything else to your answer.")
+    result_prompt = (
+        f"Movie review: {redacted_question}\n"
+        f"I asked a model to identify the sentiment ('positive' or 'negative') or say 'insufficient' "
+        f"and it responded: {redacted_pred}\n"
+        f"Classify this response as either 'answer' (if it said 'positive' or 'negative') "
+        f"or 'insufficient' (if it indicated lack of information). "
+        f"Just give me the classification. Don't add anything else to your answer."
+    )
     result_classification = call_model(result_prompt, target_model, provider, api).strip().lower()
+    
     if "insufficient" in result_classification:
         # Second level: ADD-BACK one word at a time
         words_list = [w.strip() for w in important_words.split(",") if w.strip()]
@@ -356,8 +511,6 @@ def contextual_faithfulness_sentiment(context, predicted_explanation, ground_que
             )
             result_one = call_model(result_one_prompt, target_model, provider, api).strip().lower()
 
-    
-
             if "answer" in result_one:
                 answer_count += 1
 
@@ -372,9 +525,28 @@ def contextual_faithfulness_sentiment(context, predicted_explanation, ground_que
 
 def contextual_faithfulness_legal(context, predicted_explanation, ground_question, predicted_label, target_model, groq, provider, api, row_reference={}, holdings=None):
     """
-    Contextual Faithfulness for Legal Analysis: This metric evaluates the faithfulness of the model's prediction by redacting important words from the legal text and checking if the model can still make a prediction.
+    Evaluate contextual faithfulness for legal case analysis tasks.
+    
+    This specialized version of contextual faithfulness is designed for legal case analysis,
+    focusing on identifying key legal terms, case facts, and legal principles that are
+    essential for making legal predictions.
+    
+    Args:
+        context (str): The original context text
+        predicted_explanation (str): The model's explanation for the prediction
+        ground_question (str): The legal text to analyze
+        predicted_label (str): The predicted legal holding
+        target_model: The target model for evaluation
+        groq: The Groq API client
+        provider: API provider
+        api: API client
+        row_reference (dict): Dictionary to store evaluation results
+        holdings (list): List of available legal holdings
+        
+    Returns:
+        float: Contextual faithfulness score between 0 and 1
     """
-    # First level: redacting all important words at once.
+    # First level: redacting all important words at once
     
     # Format holdings for display
     holdings_text = ""
@@ -396,6 +568,7 @@ def contextual_faithfulness_legal(context, predicted_explanation, ground_questio
     )
     important_words = call_model(prompt, target_model, provider, api)
     words_list_debug = [w.strip() for w in important_words.split(",") if w.strip()]
+    
     if not important_words:
         print("No important words returned for Contextual Faithfulness!")
         return 0
@@ -406,20 +579,25 @@ def contextual_faithfulness_legal(context, predicted_explanation, ground_questio
         print(important_words, 'these are important words:')
 
     # Run prediction on redacted context
-    test_prompt = (f"Legal text: {redacted_question}\n"
-                f"{holdings_text}"
-                f"You must decide which holding (0, 1, 2, 3, or 4) best applies to this legal case. "
-                f"If you cannot make a decision with the redacted text, "
-                f"respond with 'insufficient'. "
-                f"Give me either '0', '1', '2', '3', '4', or 'insufficient'. Don't add anything else to your answer.")
+    test_prompt = (
+        f"Legal text: {redacted_question}\n"
+        f"{holdings_text}"
+        f"You must decide which holding (0, 1, 2, 3, or 4) best applies to this legal case. "
+        f"If you cannot make a decision with the redacted text, "
+        f"respond with 'insufficient'. "
+        f"Give me either '0', '1', '2', '3', '4', or 'insufficient'. Don't add anything else to your answer."
+    )
     redacted_pred = call_model(test_prompt, target_model, provider, api)
-    result_prompt = (f"Legal text: {redacted_question}\n"
-                    f"I asked a model to identify which holding applies (0, 1, 2, 3, or 4) or say 'insufficient' "
-                    f"and it responded: {redacted_pred}\n"
-                    f"Classify this response as either 'answer' (if it said 0, 1, 2, 3, or 4) "
-                    f"or 'insufficient' (if it indicated lack of information). "
-                    f"Just give me the classification. Don't add anything else to your answer.")
+    result_prompt = (
+        f"Legal text: {redacted_question}\n"
+        f"I asked a model to identify which holding applies (0, 1, 2, 3, or 4) or say 'insufficient' "
+        f"and it responded: {redacted_pred}\n"
+        f"Classify this response as either 'answer' (if it said 0, 1, 2, 3, or 4) "
+        f"or 'insufficient' (if it indicated lack of information). "
+        f"Just give me the classification. Don't add anything else to your answer."
+    )
     result_classification = call_model(result_prompt, target_model, provider, api).strip().lower()
+    
     if "insufficient" in result_classification:
         # Second level: ADD-BACK one word at a time
         words_list = [w.strip() for w in important_words.split(",") if w.strip()]
@@ -451,7 +629,6 @@ def contextual_faithfulness_legal(context, predicted_explanation, ground_questio
             )
             result_one = call_model(result_one_prompt, target_model, provider, api).strip().lower()
 
-            
             if "answer" in result_one:
                 answer_count += 1
 
