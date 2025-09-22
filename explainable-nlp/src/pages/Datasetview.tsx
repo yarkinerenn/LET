@@ -623,7 +623,7 @@ const DatasetView = () => {
                     ) : (
                         <>
                             <div className="d-flex justify-content-between align-items-center mb-4">
-                                <h2 className="mb-0">{dataset?.filename}</h2>
+                                <h2 className="mb-0">{dataset?.filename?.replace('.csv', '').split('/').pop()}</h2>
                                 <div className="d-flex align-items-center">
                                     <span className="me-3">Items per page:</span>
                                     <Form.Select 
@@ -680,8 +680,7 @@ const DatasetView = () => {
                                         </div>
                                     </Card>
 
-                                    <div className="d-flex justify-content-between align-items-center">
-                                        
+                                    <div className="d-flex justify-content-center align-items-center">
                                         <Pagination className="mb-0">
                                             <Pagination.First onClick={() => handlePageChange(1)} disabled={currentPage === 1 || paginationLoading} />
                                             <Pagination.Prev onClick={() => handlePageChange(Math.max(currentPage - 1, 1))} disabled={currentPage === 1 || paginationLoading} />

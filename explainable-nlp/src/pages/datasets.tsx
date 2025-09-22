@@ -216,7 +216,6 @@ const Datasets = () => {
                                     <th>#</th>
                                     <th>Filename</th>
                                     <th>Source</th>
-                                    <th>Uploaded At</th>
                                     <th>Actions</th>
                                 </tr>
                                 </thead>
@@ -235,7 +234,6 @@ const Datasets = () => {
                                             </Button>
                                         </td>
                                         <td>{dataset.source}</td>
-                                        <td>{new Date(dataset.uploaded_at).toLocaleString()}</td>
                                         <td>
                                             <Button
                                                 variant="outline-danger"
