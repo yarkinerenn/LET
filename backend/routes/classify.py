@@ -342,6 +342,21 @@ def analyze_text():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 # ---------- /api/analyzewithllm ----------
+def parse_sentiment_from_response(response_text, provider_name):
+    """Parse sentiment from LLM response text"""
+    response_lower = response_text.lower()
+    if 'positive' in response_lower:
+        return "positive"
+    elif 'negative' in response_lower:
+        return "negative"
+    else:
+        print(f"DEBUG: Could not parse sentiment from {provider_name} response: '{response_text}'")
+        return None
+
+def generate_sentiment_prompt(text):
+    """Generate sentiment analysis prompt"""
+    return f"Classify the sentiment of the following text as either positive or negative:\n{text}"
+
 @classify_bp.route('/api/analyzewithllm', methods=['POST'])
 @login_required
 def analyze_text_with_llm():
@@ -351,108 +366,90 @@ def analyze_text_with_llm():
         # Get the text from the request
         data = request.json
         text = data.get('text', '')
+        print(f"DEBUG: Received text: '{text}' (length: {len(text)})")
+        
+        # Validate text length
+        if len(text) < 3:
+            return jsonify({"error": "Text must be at least 3 characters"}), 400
+        
         # Get user's preferred classification provider and model
         user_doc = mongo.db.users.find_one({"_id": ObjectId(current_user.id)})
         provider = user_doc.get('preferred_provider', 'openai')
         model = user_doc.get('preferred_model', 'gpt-3.5-turbo')
+        print(f"DEBUG: Using provider: '{provider}', model: '{model}'")
 
 
-        if provider=='openai':
+        # Generate prompt
+        prompt = generate_sentiment_prompt(text)
+        
+        # Get sentiment based on provider
+        if provider == 'openai':
             openai_api_key = get_user_api_key_openai()
             client = OpenAI(api_key=openai_api_key)
-
-
-            if len(text) < 3:
-                    return jsonify({"error": "Text must be at least 3 characters"}), 400
-
-            # Send the text to OpenAI for sentiment analysis
-            prompt = f"Classify the sentiment of the following text as either positive or negative:\n{text}"
-
-            # Call OpenAI GPT-3/4 model to analyze the sentiment
             response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[{"role": "user", "content": prompt}]
             )
-
-            # Extract the sentiment result (positive or negative)
-            sentiment =  response.choices[0].message.content
-
-            # Ensure the sentiment is either positive or negative
-            if sentiment not in ["positive", "negative"]:
-                return jsonify({"error": "Invalid sentiment response from LLM."}), 400
-        elif provider=='groq':
-            api= get_user_api_key_groq()
-
-            client = Groq(
-                api_key=api,
-            )
-
-            chat_completion = client.chat.completions.create(
-                messages=[
-                    {
-                        "role": "user",
-                        "content":f"Classify the sentiment of the following text as either positive or negative only one word:\n{text}",
-                    }
-                ],
+            raw_response = response.choices[0].message.content
+            print(f"DEBUG: OpenAI raw response: '{raw_response}'")
+            
+        elif provider == 'groq':
+            api = get_user_api_key_groq()
+            client = Groq(api_key=api)
+            response = client.chat.completions.create(
+                messages=[{"role": "user", "content": f"{prompt} only one word:"}],
                 model=model,
+                temperature=0
             )
-
-            sentiment= chat_completion.choices[0].message.content
-
-            if 'positive' in sentiment.lower():
-                sentiment = "POSITIVE"
-            else:
-                sentiment = "NEGATIVE"
-
-            if sentiment not in ["POSITIVE", "NEGATIVE"]:
-                return jsonify({"error": "Invalid sentiment response from LLM."}), 400
-        elif provider=='deepseek':
+            raw_response = response.choices[0].message.content
+            print(f"DEBUG: Groq raw response: '{raw_response}'")
+            
+        elif provider == 'deepseek':
             deepseek_api_key = get_user_api_key_deepseek_api()
             client = OpenAI(api_key=deepseek_api_key)
-
-
-            if len(text) < 3:
-                return jsonify({"error": "Text must be at least 3 characters"}), 400
-
-            # Send the text to OpenAI for sentiment analysis
-            prompt = f"Classify the sentiment of the following text as either positive or negative:\n{text}"
-
-            # Call OpenAI GPT-3/4 model to analyze the sentiment
             response = client.chat.completions.create(
                 model="deepseek-chat",
                 messages=[{"role": "user", "content": prompt}],
                 stream=False
             )
-
-            # Extract the sentiment result (positive or negative)
-            sentiment =  response.choices[0].message.content
-
-            # Ensure the sentiment is either positive or negative
-            if sentiment not in ["positive", "negative"]:
-                return jsonify({"error": "Invalid sentiment response from LLM."}), 400
-        elif provider=='openrouter':
+            raw_response = response.choices[0].message.content
+            print(f"DEBUG: DeepSeek raw response: '{raw_response}'")
+            
+        elif provider == 'openrouter':
             openai_api_key = get_user_api_key_openrouter()
             client = OpenAI(api_key=openai_api_key)
-
-
-            if len(text) < 3:
-                return jsonify({"error": "Text must be at least 3 characters"}), 400
-
-            # Send the text to OpenAI for sentiment analysis
-            prompt = f"Classify the sentiment of the following text as either positive or negative:\n{text}"
-
-            # Call OpenAI GPT-3/4 model to analyze the sentiment
             response = client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": prompt}]
             )
-
-            # Extract the sentiment result (positive or negative)
-            sentiment =  response.choices[0].message.content
-
-            # Ensure the sentiment is either positive or negative
-            if sentiment not in ["positive", "negative"]:
-                return jsonify({"error": "Invalid sentiment response from LLM."}), 400
+            raw_response = response.choices[0].message.content
+            print(f"DEBUG: OpenRouter raw response: '{raw_response}'")
+            
+        elif provider == 'ollama':
+            llm = Ollama(model=model, temperature=0)
+            raw_response = llm.invoke(prompt)
+            print(f"DEBUG: Ollama raw response: '{raw_response}'")
+            
+        elif provider == 'gemini':
+            gemini_api_key = get_user_api_key_gemini()
+            client = OpenAI(api_key=gemini_api_key, base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            raw_response = response.choices[0].message.content
+            print(f"DEBUG: Gemini raw response: '{raw_response}'")
+            
+        else:
+            print(f"DEBUG: Unsupported provider: '{provider}'")
+            return jsonify({"error": f"Unsupported provider: {provider}"}), 400
+        
+        # Parse sentiment from response
+        sentiment = parse_sentiment_from_response(raw_response, provider)
+        if sentiment is None:
+            return jsonify({"error": "Invalid sentiment response from LLM."}), 400
+        
+        print(f"DEBUG: {provider.title()} parsed sentiment: '{sentiment}'")
 
 
         user_id = current_user.id
