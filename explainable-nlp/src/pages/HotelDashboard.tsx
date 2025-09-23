@@ -25,8 +25,8 @@ interface ClassificationStats {
   precision?: number;
   recall?: number;
   f1_score?: number;
-   "(A)"?: number;
-  "(B)"?: number;
+  deceptive?: number;
+  truthful?: number;
 }
 
 interface ClassificationData {
@@ -88,8 +88,8 @@ const HotelDashboard = () => {
   );
 
   const pieData = [
-    { name: "Deceptive", value: stats?.["(A)"] || 0 },
-    { name: "Truthful", value: stats?.["(B)"] || 0 }
+    { name: "Deceptive", value: stats?.deceptive || 0 },
+    { name: "Truthful", value: stats?.truthful || 0 }
   ];
 
   const handleModelsSubmit = async (selectedModels: string[]) => {
@@ -154,7 +154,7 @@ const HotelDashboard = () => {
               <Card className="mb-3">
                 <Card.Body>
                   <Card.Title>Deceptive</Card.Title>
-                  <Card.Text className="display-6 text-danger">{stats?.["(A)"] ?? 0}</Card.Text>
+                  <Card.Text className="display-6 text-danger">{stats?.deceptive ?? 0}</Card.Text>
                 </Card.Body>
               </Card>
             </Col>
@@ -162,7 +162,7 @@ const HotelDashboard = () => {
               <Card className="mb-3">
                 <Card.Body>
                   <Card.Title>Truthful</Card.Title>
-                  <Card.Text className="display-6 text-success">{stats?.["(B)"] ?? 0}</Card.Text>
+                  <Card.Text className="display-6 text-success">{stats?.truthful ?? 0}</Card.Text>
                 </Card.Body>
               </Card>
             </Col>
@@ -221,7 +221,7 @@ const HotelDashboard = () => {
                       <XAxis dataKey="name" />
                       <YAxis domain={[0, 1]} />
                       <Tooltip />
-                      <Bar dataKey="value" />
+                      <Bar dataKey="value" fill="#007bff" />
                     </BarChart>
                   </ResponsiveContainer>
                 </Card.Body>
