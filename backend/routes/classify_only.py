@@ -278,7 +278,9 @@ def generate_prompt(data_type, row, text_column, provider, cot_enabled=False):
         context = str(row[text_column])
         choices = [row.get(f'holding_{i}', '') for i in range(5)]
         holdings_str = "\n".join([f"{i}: {c}" for i, c in enumerate(choices)])
-        return f"""Select the most appropriate holding for this legal statement.
+        return f"""
+        Assume you are a Legal Advisor 
+        Select the most appropriate holding for this legal statement.
 
         Statement: {context}
         Holdings:
@@ -291,7 +293,9 @@ def generate_prompt(data_type, row, text_column, provider, cot_enabled=False):
         question = str(row.get("question", ""))
         context = pretty_pubmed_qa(row.get("context", ""))
          
-        return f"""Answer the medical question with Yes, No, or Maybe based on the context.
+        return f"""
+        Assume you are a Medical advisor
+        Answer the medical question with Yes, No, or Maybe based on the context.
 
         Question: {question}
         Context: {context}
@@ -320,7 +324,9 @@ def generate_prompt(data_type, row, text_column, provider, cot_enabled=False):
                 Think step by step, Answer with your choice exactly as written:
                 """
         else:
-            return f"""Select the best answer from the choices.
+            return f"""
+            You are solving a commonsense multiple-choice question. 
+            Select the best answer from the choices.
 
             Question: {question}
 
