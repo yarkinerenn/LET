@@ -235,25 +235,139 @@ def build_full_with_deltas_and_labels():
 
     return df_trials
 
+import math
+
+def compute_rair_rsr_global_and_per_user(df_trials: pd.DataFrame, n_trials: int = 16) -> tuple[pd.DataFrame, dict]:
+    """
+    Adds 4 columns:
+      - RAIR_global (constant for all rows)
+      - RSR_global  (constant for all rows)
+      - RAIR_user   (per participant / row)
+      - RSR_user    (per participant / row)
+    Uses:
+      Pre  = Qn_Review
+      Post = Qn_ReviewExp
+      GT   = Qn_GT
+      AI   = Qn_AI
+    """
+    def _norm_DT(series: pd.Series) -> pd.Series:
+        return (series.astype(str)
+                     .str.strip()
+                     .str.lower()
+                     .map({"d":"D","deceptive":"D","t":"T","truthful":"T"})
+                     .fillna(""))
+
+    # ---------- GLOBAL ----------
+    g_corrected = g_notcorr = g_elig_rair = 0
+    g_stayed = g_switched = g_elig_rsr = 0
+
+    for q in range(1, n_trials + 1):
+        need = [f"Q{q}_Review", f"Q{q}_ReviewExp", f"Q{q}_GT", f"Q{q}_AI"]
+        if not all(c in df_trials.columns for c in need):
+            continue
+
+        pre  = _norm_DT(df_trials[f"Q{q}_Review"])
+        post = _norm_DT(df_trials[f"Q{q}_ReviewExp"])
+        gt   = df_trials[f"Q{q}_GT"].astype(str).str.strip().str.upper()
+        ai   = df_trials[f"Q{q}_AI"].astype(str).str.strip().str.upper()
+
+        valid = pre.isin(["D","T"]) & post.isin(["D","T"]) & gt.isin(["D","T"]) & ai.isin(["D","T"]) 
+
+        # RAIR elig: AI correct & human initially wrong
+        mask_rair = valid & (ai == gt) & (pre != gt)
+        g_elig_rair   += int(mask_rair.sum())
+        g_corrected   += int((mask_rair & (post == gt)).sum())
+        g_notcorr     += int((mask_rair & (post != gt)).sum())
+
+        # RSR elig: human initially correct & AI wrong
+        mask_rsr = valid & (pre == gt) & (ai != gt)
+        g_elig_rsr    += int(mask_rsr.sum())
+        g_stayed      += int((mask_rsr & (post == gt)).sum())
+        g_switched    += int((mask_rsr & (post != gt)).sum())
+
+    rair_global = (g_corrected / (g_corrected + g_notcorr)) if (g_corrected + g_notcorr) > 0 else math.nan
+    rsr_global  = (g_stayed / (g_stayed + g_switched))     if (g_stayed + g_switched) > 0 else math.nan
+
+    # ---------- PER-USER (row-wise) ----------
+    rair_user = []
+    rsr_user  = []
+
+    for _, row in df_trials.iterrows():
+        u_corrected = u_notcorr = 0
+        u_stayed = u_switched = 0
+
+        for q in range(1, n_trials + 1):
+            need = [f"Q{q}_Review", f"Q{q}_ReviewExp", f"Q{q}_GT", f"Q{q}_AI"]
+            if not all(c in df_trials.columns for c in need):
+                continue
+
+            pre  = str(row.get(f"Q{q}_Review", "")).strip()
+            post = str(row.get(f"Q{q}_ReviewExp", "")).strip()
+            gt   = str(row.get(f"Q{q}_GT", "")).strip().upper()
+            ai   = str(row.get(f"Q{q}_AI", "")).strip().upper()
+
+            # normalize single values
+            pre  = {"d":"D","deceptive":"D","t":"T","truthful":"T"}.get(pre.lower(), "")
+            post = {"d":"D","deceptive":"D","t":"T","truthful":"T"}.get(post.lower(), "")
+
+            if pre not in {"D","T"} or post not in {"D","T"} or gt not in {"D","T"} or ai not in {"D","T"}:
+                continue
+
+            # RAIR per-user
+            if ai == gt and pre != gt:
+                if post == gt: u_corrected += 1
+                else:          u_notcorr  += 1
+
+            # RSR per-user
+            if pre == gt and ai != gt:
+                if post == gt: u_stayed   += 1
+                else:          u_switched += 1
+
+        u_rair = (u_corrected / (u_corrected + u_notcorr)) if (u_corrected + u_notcorr) > 0 else math.nan
+        u_rsr  = (u_stayed / (u_stayed + u_switched))     if (u_stayed + u_switched) > 0 else math.nan
+        rair_user.append(u_rair)
+        rsr_user.append(u_rsr)
+
+    out = df_trials.copy()
+    out["RAIR_global"] = rair_global
+    out["RSR_global"]  = rsr_global
+    out["RAIR_user"]   = rair_user
+    out["RSR_user"]    = rsr_user
+
+    # quick print
+    print("=== GLOBAL ===")
+    print(f"RAIR_global: {('NaN' if math.isnan(rair_global) else f'{rair_global:.4f}')}  "
+          f"(eligible={g_elig_rair}, corrected={g_corrected}, not_corrected={g_notcorr})")
+    print(f"RSR_global : {('NaN' if math.isnan(rsr_global)  else f'{rsr_global:.4f}')}  "
+          f"(eligible={g_elig_rsr}, stayed={g_stayed}, switched={g_switched})")
+
+    print("\n=== PER-USER (first 10) ===")
+    print(out[["RAIR_user","RSR_user"]].head(10).to_string(index=False))
+
+    summary = {
+        "rair_global": rair_global,
+        "rsr_global": rsr_global,
+        "global_counts": {
+            "rair": {"eligible": g_elig_rair, "corrected": g_corrected, "not_corrected": g_notcorr},
+            "rsr":  {"eligible": g_elig_rsr,  "stayed": g_stayed, "switched": g_switched},
+        }
+    }
+    return out, summary
+
 # Run
 if __name__ == "__main__":
     df_trials = build_full_with_deltas_and_labels()
 
-    # RAIR returns 3 values
-    df_with_rair, rair_value, rair_counts = compute_rair_global(df_trials, n_trials=16)
+    # Compute global + per-user metrics in one go (and append columns)
+    df_with_metrics, metrics_summary = compute_rair_rsr_global_and_per_user(df_trials, n_trials=16)
 
-    # Feed the RAIR-augmented DF into RSR so you keep both columns
-    df_with_rair_rsr, rsr_value, rsr_counts = compute_rsr_global(df_with_rair, n_trials=16)
+    print("\n=== DataFrame head with global & per-user metrics ===")
+    print(df_with_metrics.head().to_string())
 
-    print("\n=== DataFrame head with RAIR & RSR columns ===")
-    print(df_with_rair_rsr.head().to_string())
+    print("\n=== Metrics Summary ===")
+    print(metrics_summary)
 
-    print("\n=== Metric values ===")
-    print(f"RAIR: {rair_value!r}")
-    print(f"RSR : {rsr_value!r}")
-
-    print("\n=== RAIR counts ===")
-    print(rair_counts)
-
-    print("\n=== RSR counts ===")
-    print(rsr_counts)
+    # Export DataFrame with metrics to Excel
+    output_excel_path = "experiment_results_with_metrics.xlsx"
+    df_with_metrics.to_excel(output_excel_path, index=False)
+    print(f"DataFrame with metrics exported to '{output_excel_path}'.")
