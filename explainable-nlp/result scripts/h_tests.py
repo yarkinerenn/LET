@@ -161,19 +161,44 @@ def test_H12(long_df):
 
 def run_all_hypotheses(df_trials, n_trials=16):
     long_df = make_long(df_trials, n_trials=n_trials)
+    results=()
 
-    results = {
-        "H1":  test_H1(long_df),
-        "H2":  test_H2(long_df),
-        "H3":  test_H3(long_df),
-        "H4":  test_H4(long_df),
-        "H5":  test_H5(long_df),
-        "H6":  test_H6(long_df),
-        "H7":  test_H7(long_df),
-        "H8":  test_H8(long_df),
-        "H9":  test_H9(long_df),
-        "H10": test_H10(long_df),
-        "H11": test_H11(long_df),
-        "H12": test_H12(long_df),
-    }
+    # results = {
+    #     "H1":  test_H1(long_df),
+    #     "H2":  test_H2(long_df),
+    #     "H3":  test_H3(long_df),
+    #     "H4":  test_H4(long_df),
+    #     "H5":  test_H5(long_df),
+    #     "H6":  test_H6(long_df),
+    #     "H7":  test_H7(long_df),
+    #     "H8":  test_H8(long_df),
+    #     "H9":  test_H9(long_df),
+    #     "H10": test_H10(long_df),
+    #     "H11": test_H11(long_df),
+    #     "H12": test_H12(long_df),
+    # }
     return results, long_df
+
+def main():
+    df_trials = pd.read_excel("experiment_results_with_metrics.xlsx")
+
+    results, long_df = run_all_hypotheses(df_trials, n_trials=16)
+
+    # print("=== Hypothesis Test Results Summary ===")
+    # for key, res in results.items():
+    #     print(f"{key}:")
+    #     if isinstance(res, dict) and "error" in res:
+    #         print(f"  Error: {res['error']}")
+    #     else:
+    #         params = res.get("params", {})
+    #         print(f"  Params: {params}")
+    #         print(f"  Number of observations: {res.get('n', 'N/A')}")
+    print("\n=== Long DataFrame ===")
+    print(long_df)
+    print("\nDataFrame Info:")
+    print(long_df.info())
+    print("\nDataFrame Description:")
+    print(long_df.describe())
+
+if __name__ == "__main__":
+    main()
