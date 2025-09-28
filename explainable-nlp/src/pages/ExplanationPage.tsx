@@ -632,7 +632,7 @@ const ExplanationPage = () => {
       {/* SHAP Analysis only for non-LLM */}
       {classification?.method !== "llm" && (
         <Col lg={4}>
-          <Card className="h-100 explanation-card border-info">
+          <Card className="h-100 explanation-card border-info d-flex flex-column">
             <Card.Header className="bg-info text-white d-flex justify-content-between align-items-center">
               <Card.Title className="mb-0">
                 SHAP Analysis
@@ -648,33 +648,35 @@ const ExplanationPage = () => {
                 ) : shapData.explanation ? 'Regenerate' : 'Generate'}
               </Button>
             </Card.Header>
-            <Card.Body>
-              {shapData.explanation ? (
-                <div
-                  dangerouslySetInnerHTML={{ __html: shapData.explanation }}
-                  className="shap-visualization"
+            <Card.Body className="flex-grow-1 d-flex flex-column">
+              <div className="flex-grow-1">
+                {shapData.explanation ? (
+                  <div
+                    dangerouslySetInnerHTML={{ __html: shapData.explanation }}
+                    className="shap-visualization"
+                  />
+                ) : (
+                  <div className="text-muted text-center py-5">
+                    <p>Click "Generate" to create SHAP visualization</p>
+                  </div>
+                )}
+              </div>
+              <div className="mt-auto">
+                <RatingSection
+                  title="SHAP Analysis"
+                  value={shapRating}
+                  onChange={setShapRating}
+                  disabled={!shapData.explanation}
                 />
-              ) : (
-                <div className="text-muted text-center py-5">
-                  <p>Click "Generate" to create SHAP visualization</p>
-                </div>
-              )}
+              </div>
             </Card.Body>
-            <Card.Footer>
-              <RatingSection
-                title="SHAP Analysis"
-                value={shapRating}
-                onChange={setShapRating}
-                disabled={!shapData.explanation}
-              />
-            </Card.Footer>
           </Card>
         </Col>
       )}
 
       {/* LLM/SHAP-Enhanced Explanations */}
       <Col lg={classification?.method === "llm" ? 12 : 8}>
-        <Card className="h-100">
+        <Card className="h-100 d-flex flex-column">
           <Card.Header>
             <div className="d-flex justify-content-between align-items-center">
               <Card.Title className="mb-0">
@@ -704,11 +706,11 @@ const ExplanationPage = () => {
               </div>
             </div>
           </Card.Header>
-          <Card.Body className="p-0">
+          <Card.Body className="p-0 flex-grow-1 d-flex flex-column">
             <Tabs
               activeKey={activeModel}
               onSelect={(k) => setActiveModel(k as string)}
-              className="model-tabs border-bottom-0"
+              className="model-tabs border-bottom-0 flex-grow-1 d-flex flex-column"
               fill
             >
               {availableModels.map(model => (
@@ -721,73 +723,55 @@ const ExplanationPage = () => {
                     </div>
                   }
                 >
-                  <div className="p-4">
-                    <Row className="g-4">
+                  <div className="p-4 flex-grow-1 d-flex flex-column">
+                    <Row className="g-4 flex-grow-1">
                       {/* Direct Explanation always shown */}
-                      <Col md={classification?.method === 'llm' ? 12 : 6}>
-                        <div className="explanation-section">
+                      <Col md={classification?.method === 'llm' ? 12 : 6} className="d-flex flex-column">
+                        <div className="explanation-section d-flex flex-column h-100">
                           <h6 className="text-primary mb-3">Direct Explanation</h6>
-                          <div className="explanation-content mb-3">
+                          <div className="explanation-content mb-3 flex-grow-1">
                             {explanations[activeModel]?.llm ? (
-                              <div className="p-3 bg-light rounded">
+                              <div className="p-3 bg-light rounded h-100">
                                 {explanations[activeModel].llm}
                               </div>
                             ) : (
-                              <div className="text-muted text-center py-4 border rounded">
+                              <div className="text-muted text-center py-4 border rounded h-100 d-flex align-items-center justify-content-center">
                                 No explanation generated yet
                               </div>
                             )}
                           </div>
-                          {/* (Faithfulness + rating for direct) */}
-                          <div className="d-flex align-items-center gap-3 my-3">
-                            <Button
-                              size="sm"
-                              variant="outline-info"
-                              onClick={() => get_faithfulness(activeModel, 'llm')}
-                              disabled={
-                                (isFetchingFaithfulness?.modelId === activeModel &&
-                                  isFetchingFaithfulness?.type === 'llm') ||
-                                !explanations[activeModel]?.llm
-                              }
-                            >
-                              {(isFetchingFaithfulness?.modelId === activeModel &&
-                                isFetchingFaithfulness?.type === 'llm') ? (
-                                <Spinner size="sm" />
-                              ) : "Compute Faithfulness"}
-                            </Button>
-                            {faithfulnessScores[activeModel]?.llm !== null && (
+                          {/* Faithfulness scores display */}
+                          {faithfulnessScores[activeModel]?.llm !== null && (
+                            <div className="d-flex align-items-center gap-3 my-3">
                               <div className="d-flex align-items-center">
                                 <span className="badge rounded-pill bg-info fs-6 px-3 py-2">
                                   Faithfulness: {faithfulnessScores[activeModel]?.llm?.toFixed(2)}
                                 </span>
                               </div>
-                            )}
-                            {faithfulnessError &&
-                              isFetchingFaithfulness?.modelId === activeModel &&
-                              isFetchingFaithfulness?.type === 'llm' && (
-                                <span className="text-danger ms-2">{faithfulnessError}</span>
-                              )}
+                            </div>
+                          )}
+                          <div className="mt-auto">
+                            <RatingSection
+                              title="Direct Explanation"
+                              value={ratings[activeModel]?.llm || 0}
+                              onChange={(rating: number) => handleRatingChange(activeModel, 'llm', rating)}
+                              disabled={!explanations[activeModel]?.llm}
+                            />
                           </div>
-                          <RatingSection
-                            title="Direct Explanation"
-                            value={ratings[activeModel]?.llm || 0}
-                            onChange={(rating: number) => handleRatingChange(activeModel, 'llm', rating)}
-                            disabled={!explanations[activeModel]?.llm}
-                          />
                         </div>
                       </Col>
                       {/* SHAP-Enhanced only if not LLM */}
                       {classification?.method !== 'llm' && (
-                        <Col md={6}>
-                          <div className="explanation-section">
+                        <Col md={6} className="d-flex flex-column">
+                          <div className="explanation-section d-flex flex-column h-100">
                             <h6 className="text-success mb-3">SHAP-Enhanced Analysis</h6>
-                            <div className="explanation-content mb-3">
+                            <div className="explanation-content mb-3 flex-grow-1">
                               {explanations[activeModel]?.combined ? (
-                                <div className="p-3 bg-light rounded">
+                                <div className="p-3 bg-light rounded h-100">
                                   {explanations[activeModel].combined}
                                 </div>
                               ) : (
-                                <div className="text-muted text-center py-4 border rounded">
+                                <div className="text-muted text-center py-4 border rounded h-100 d-flex align-items-center justify-content-center">
                                   {!shapData.shapWords ?
                                     "Generate SHAP analysis first" :
                                     "Generate combined analysis"
@@ -795,42 +779,24 @@ const ExplanationPage = () => {
                                 </div>
                               )}
                             </div>
-                            {/* (Faithfulness + rating for SHAP-Enhanced) */}
-                            <div className="d-flex align-items-center gap-3 my-3">
-                              <Button
-                                size="sm"
-                                variant="outline-info"
-                                onClick={() => get_faithfulness(activeModel, 'combined')}
-                                disabled={
-                                  (isFetchingFaithfulness?.modelId === activeModel &&
-                                    isFetchingFaithfulness?.type === 'combined') ||
-                                  !explanations[activeModel]?.combined
-                                }
-                              >
-                                {(isFetchingFaithfulness?.modelId === activeModel &&
-                                  isFetchingFaithfulness?.type === 'combined') ? (
-                                  <Spinner size="sm" />
-                                ) : "Compute Faithfulness"}
-                              </Button>
-                              {faithfulnessScores[activeModel]?.combined !== null && (
+                            {/* Faithfulness scores display */}
+                            {faithfulnessScores[activeModel]?.combined !== null && (
+                              <div className="d-flex align-items-center gap-3 my-3">
                                 <div className="d-flex align-items-center">
                                   <span className="badge rounded-pill bg-info fs-6 px-3 py-2">
                                     Faithfulness: {faithfulnessScores[activeModel]?.combined?.toFixed(2)}
                                   </span>
                                 </div>
-                              )}
-                              {faithfulnessError &&
-                                isFetchingFaithfulness?.modelId === activeModel &&
-                                isFetchingFaithfulness?.type === 'combined' && (
-                                  <span className="text-danger ms-2">{faithfulnessError}</span>
-                                )}
+                              </div>
+                            )}
+                            <div className="mt-auto">
+                              <RatingSection
+                                title="Combined Analysis"
+                                value={ratings[activeModel]?.combined || 0}
+                                onChange={(rating: number) => handleRatingChange(activeModel, 'combined', rating)}
+                                disabled={!explanations[activeModel]?.combined}
+                              />
                             </div>
-                            <RatingSection
-                              title="Combined Analysis"
-                              value={ratings[activeModel]?.combined || 0}
-                              onChange={(rating: number) => handleRatingChange(activeModel, 'combined', rating)}
-                              disabled={!explanations[activeModel]?.combined}
-                            />
                           </div>
                         </Col>
                       )}

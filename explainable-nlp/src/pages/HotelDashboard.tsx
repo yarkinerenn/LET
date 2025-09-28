@@ -13,6 +13,7 @@ const COLORS = ['#FF4136', '#2ECC40', '#FFBB28', '#FF8042'];
 // --- Local types (kept minimal to avoid coupling) ---
 interface ClassificationResult {
   text?: string;
+  question?: string;
   label: string | number;
   score: number;
   actualLabel?: string | number;
@@ -249,7 +250,7 @@ const HotelDashboard = () => {
                         const pred = toHotelLabel(result.label);
                         const gold = result.actualLabel !== undefined ? toHotelLabel(result.actualLabel) : undefined;
                         const isMismatch = gold !== undefined && pred !== gold;
-                        const questionText = result.text || result.original_data?.question || result.original_data?.citing_prompt || '';
+                        const questionText = result.question || result.text || result.original_data?.question || result.original_data?.citing_prompt || '';
                         const shown = expandedRow === index ? questionText : questionText.slice(0, 220) + (questionText.length > 220 ? '...' : '');
                         // Calculate the actual index in the full dataset
                         const actualIndex = (currentPage - 1) * itemsPerPage + index;
