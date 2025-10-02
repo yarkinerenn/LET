@@ -36,6 +36,7 @@ def make_long(df_trials, n_trials=16):
             faith= str(row.get(f"Q{q}_Faith", "")).strip().upper()  # 'F' or 'U'
             plaus = pd.to_numeric(row.get(f"Q{q}_Plausibility", np.nan), errors="coerce")
             dconf = pd.to_numeric(row.get(f"Q{q}_Delta", np.nan), errors="coerce")
+            model_size = pd.to_numeric(row.get(f"Q{q}_Model_Size", np.nan), errors="coerce")
 
             def norm_dt(x):
                 x = x.lower()
@@ -64,6 +65,7 @@ def make_long(df_trials, n_trials=16):
                 "faith": 1 if faith == "F" else 0,  # 1=faithful, 0=unfaithful
                 "plaus": plaus,
                 "delta_conf": dconf,
+                "model_size": model_size,  # 1=big LLM, 0=small LLM
                 "ai_correct": ai_correct,
                 "human_pre_correct": human_pre_correct,
                 "changed_to_correct": changed_to_correct,
@@ -117,33 +119,25 @@ def test_H7(long_df):
     m = logit("post_correct ~ faith", df)
     return summarize(m)
 
-# H8: Larger LLMs produce more plausible explanations  (needs model_size column: 1=large, 0=small)
+# H8: Larger LLMs produce more plausible explanations  (model_size: 1=large, 0=small)
 def test_H8(long_df):
-    if "model_size" not in long_df.columns:
-        return {"error": "model_size column missing (0=small,1=large)."}
     m = ols("plaus ~ model_size", long_df)
     return summarize(m)
 
 # H9: Larger LLMs produce higher RAIR (on RAIR-eligible subset)
 def test_H9(long_df):
-    if "model_size" not in long_df.columns:
-        return {"error": "model_size column missing."}
     df = long_df[(long_df["ai_correct"]==1) & (long_df["human_pre_correct"]==0)].copy()
     m = logit("changed_to_correct ~ model_size", df)
     return summarize(m)
 
 # H10: Larger LLMs produce higher RSR (on RSR-eligible subset)
 def test_H10(long_df):
-    if "model_size" not in long_df.columns:
-        return {"error": "model_size column missing."}
     df = long_df[(long_df["ai_correct"]==0) & (long_df["human_pre_correct"]==1)].copy()
     m = logit("stayed_correct ~ model_size", df)
     return summarize(m)
 
 # H11: Larger LLMs produce bigger confidence changes
 def test_H11(long_df):
-    if "model_size" not in long_df.columns:
-        return {"error": "model_size column missing."}
     m = ols("delta_conf ~ model_size", long_df)
     return summarize(m)
 
@@ -163,20 +157,20 @@ def run_all_hypotheses(df_trials, n_trials=16):
     long_df = make_long(df_trials, n_trials=n_trials)
     results=()
 
-    # results = {
-    #     "H1":  test_H1(long_df),
-    #     "H2":  test_H2(long_df),
-    #     "H3":  test_H3(long_df),
-    #     "H4":  test_H4(long_df),
-    #     "H5":  test_H5(long_df),
-    #     "H6":  test_H6(long_df),
-    #     "H7":  test_H7(long_df),
-    #     "H8":  test_H8(long_df),
-    #     "H9":  test_H9(long_df),
-    #     "H10": test_H10(long_df),
-    #     "H11": test_H11(long_df),
-    #     "H12": test_H12(long_df),
-    # }
+    results = {
+        "H1":  test_H1(long_df),
+        "H2":  test_H2(long_df),
+        "H3":  test_H3(long_df),
+        "H4":  test_H4(long_df),
+        "H5":  test_H5(long_df),
+        "H6":  test_H6(long_df),
+        "H7":  test_H7(long_df),
+        "H8":  test_H8(long_df),
+        "H9":  test_H9(long_df),
+        "H10": test_H10(long_df),
+        "H11": test_H11(long_df),
+        "H12": test_H12(long_df),
+    }
     return results, long_df
 
 def main():
@@ -184,15 +178,18 @@ def main():
 
     results, long_df = run_all_hypotheses(df_trials, n_trials=16)
 
-    # print("=== Hypothesis Test Results Summary ===")
-    # for key, res in results.items():
-    #     print(f"{key}:")
-    #     if isinstance(res, dict) and "error" in res:
-    #         print(f"  Error: {res['error']}")
-    #     else:
-    #         params = res.get("params", {})
-    #         print(f"  Params: {params}")
-    #         print(f"  Number of observations: {res.get('n', 'N/A')}")
+    print("=== Hypothesis Test Results Summary ===")
+    for key, res in results.items():
+        print(f"{key}:")
+        if isinstance(res, dict) and "error" in res:
+            print(f"  Error: {res['error']}")
+        else:
+            params = res.get("params", {})
+            pvalues = res.get("pvalues", {})
+            print(f"  Params: {params}")
+            print(f"  P-values: {pvalues}")
+            print(f"  Number of observations: {res.get('n', 'N/A')}")
+            print()
     print("\n=== Long DataFrame ===")
     print(long_df)
     print("\nDataFrame Info:")

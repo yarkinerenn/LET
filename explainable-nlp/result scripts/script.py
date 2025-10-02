@@ -118,7 +118,7 @@ def compute_rair_global(df_trials: pd.DataFrame, n_trials: int = 16) -> tuple[pd
     }
 def build_full_with_deltas_and_labels():
     # === Config ===
-    file_path = "experiment.xlsx"
+    file_paths = ["experiment.xlsx", "experiment2.xlsx"]
     sheet = 0
     start_col_index = 8   # 0-based index of the first trial column
     n_trials = 16
@@ -134,8 +134,33 @@ def build_full_with_deltas_and_labels():
     AI_LABELS    = list(AI_STRING.strip())
     FAITH_LABELS = list(FAITH_STRING.strip())
 
-    # === Load ===
-    df_orig = pd.read_excel(file_path, sheet_name=sheet)
+    # === Load and combine both files ===
+    df_orig = None
+    for i, file_path in enumerate(file_paths):
+        try:
+            df_temp = pd.read_excel(file_path, sheet_name=sheet)
+            # Add Form column: A for experiment.xlsx, B for experiment2.xlsx
+            df_temp["Form"] = "A" if i == 0 else "B"
+            
+            if i == 0:
+                # First file - use as base
+                df_orig = df_temp
+                print(f"Loaded {len(df_temp)} rows from {file_path} (base file)")
+            else:
+                # Subsequent files - align columns and append
+                # Use the column names from the first file
+                df_temp.columns = df_orig.columns
+                df_orig = pd.concat([df_orig, df_temp], ignore_index=True)
+                print(f"Loaded {len(df_temp)} rows from {file_path} (appended)")
+                
+        except FileNotFoundError:
+            print(f"Warning: {file_path} not found, skipping...")
+    
+    if df_orig is None:
+        raise FileNotFoundError("No experiment files found!")
+    
+    print(f"Combined total: {len(df_orig)} rows")
+    print(f"Form column distribution: {df_orig['Form'].value_counts().to_dict()}")
     original_cols = list(df_orig.columns)
 
     # === Rename trial columns by position ===
@@ -152,6 +177,18 @@ def build_full_with_deltas_and_labels():
         mapping[cols[4]] = f"Q{i+1}_Plausibility"
 
     df = df_orig.rename(columns=mapping)
+    
+    # Debug: Check if Form column is still there and show some sample data
+    print(f"Form column after renaming: {'Form' in df.columns}")
+    if 'Form' in df.columns:
+        print(f"Form distribution after renaming: {df['Form'].value_counts().to_dict()}")
+        # Show a few sample rows for each form
+        for form in ['A', 'B']:
+            form_data = df[df['Form'] == form]
+            if len(form_data) > 0:
+                print(f"Sample data for Form {form}:")
+                print(f"  Q1_Review: {form_data['Q1_Review'].iloc[0] if 'Q1_Review' in form_data.columns else 'MISSING'}")
+                print(f"  Q1_ReviewExp: {form_data['Q1_ReviewExp'].iloc[0] if 'Q1_ReviewExp' in form_data.columns else 'MISSING'}")
 
     # === Compute deltas and drop Conf1/Conf2 ===
     for i in range(1, n_trials + 1):
@@ -186,7 +223,7 @@ def build_full_with_deltas_and_labels():
                       .map({"d":"D", "deceptive":"D", "t":"T", "truthful":"T"})
                       .fillna(""))
 
-    # === Add GT, AI, Faith columns per question ===
+    # === Add GT, AI, Faith, Model_Size columns per question ===
     for i in range(1, n_trials + 1):
         gt    = normalize_DT(GT_LABELS[i-1])    if i-1 < len(GT_LABELS)    else ""
         ai    = normalize_DT(AI_LABELS[i-1])    if i-1 < len(AI_LABELS)    else ""
@@ -194,6 +231,16 @@ def build_full_with_deltas_and_labels():
         df[f"Q{i}_GT"]    = gt
         df[f"Q{i}_AI"]    = ai
         df[f"Q{i}_Faith"] = faith
+        
+        # Model size per question based on form and question number
+        # Form A: Q1-8 = big LLM (1), Q9-16 = small LLM (0)
+        # Form B: Q1-8 = small LLM (0), Q9-16 = big LLM (1)
+        if i <= 8:  # First 8 questions
+            # For Form A: big LLM (1), For Form B: small LLM (0)
+            df[f"Q{i}_Model_Size"] = df["Form"].map({"A": 1, "B": 0})
+        else:  # Last 8 questions (9-16)
+            # For Form A: small LLM (0), For Form B: big LLM (1)
+            df[f"Q{i}_Model_Size"] = df["Form"].map({"A": 0, "B": 1})
 
     # === Disagreement column (human AFTER explanation vs AI) ===
     for i in range(1, n_trials + 1):
@@ -217,10 +264,15 @@ def build_full_with_deltas_and_labels():
             f"Q{i}_GT",
             f"Q{i}_AI",
             f"Q{i}_Faith",
+            f"Q{i}_Model_Size",
             f"Q{i}_Disagree",
         ):
             if name in df.columns:
                 trial_cols.append(name)
+
+    # Add Form column to trial columns if it exists
+    if "Form" in df.columns:
+        trial_cols.append("Form")
 
     df_trials = df[trial_cols]
 
