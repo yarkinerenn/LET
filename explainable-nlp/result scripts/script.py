@@ -237,6 +237,110 @@ def build_full_with_deltas_and_labels():
 
 import math
 
+def compute_initial_accuracy_per_user(df_trials: pd.DataFrame, n_trials: int = 16) -> tuple[pd.DataFrame, float, dict]:
+    """
+    Compute initial accuracy per user using Q_Review columns (before explanations).
+    Each row gets its own accuracy value based on that user's responses.
+    """
+    initial_accuracies = []
+    global_correct = 0
+    global_total = 0
+    
+    for _, row in df_trials.iterrows():
+        user_correct = 0
+        user_total = 0
+        
+        for q in range(1, n_trials + 1):
+            need = [f"Q{q}_Review", f"Q{q}_GT"]
+            if not all(c in df_trials.columns for c in need):
+                continue
+                
+            review = str(row.get(f"Q{q}_Review", "")).strip()
+            gt = str(row.get(f"Q{q}_GT", "")).strip().upper()
+            
+            # Normalize review response
+            review = {"d":"D","deceptive":"D","t":"T","truthful":"T"}.get(review.lower(), "")
+            
+            if review in {"D","T"} and gt in {"D","T"}:
+                user_total += 1
+                global_total += 1
+                if review == gt:
+                    user_correct += 1
+                    global_correct += 1
+        
+        user_accuracy = user_correct / user_total if user_total > 0 else math.nan
+        initial_accuracies.append(user_accuracy)
+    
+    global_accuracy = global_correct / global_total if global_total > 0 else math.nan
+    
+    out = df_trials.copy()
+    out["Initial_Accuracy_User"] = initial_accuracies
+    out["Initial_Accuracy_Global"] = global_accuracy
+    
+    print("=== Initial Accuracy Summary ===")
+    print(f"Global - Total valid responses: {global_total}")
+    print(f"Global - Correct initial responses: {global_correct}")
+    print(f"Global Initial Accuracy = {global_accuracy:.4f}")
+    print(f"Per-user accuracies (first 10): {initial_accuracies[:10]}")
+    
+    return out, global_accuracy, {
+        "global_total": global_total,
+        "global_correct": global_correct,
+        "per_user_accuracies": initial_accuracies
+    }
+
+def compute_final_accuracy_per_user(df_trials: pd.DataFrame, n_trials: int = 16) -> tuple[pd.DataFrame, float, dict]:
+    """
+    Compute final accuracy per user using Q_ReviewExp columns (after explanations).
+    Each row gets its own accuracy value based on that user's responses.
+    """
+    final_accuracies = []
+    global_correct = 0
+    global_total = 0
+    
+    for _, row in df_trials.iterrows():
+        user_correct = 0
+        user_total = 0
+        
+        for q in range(1, n_trials + 1):
+            need = [f"Q{q}_ReviewExp", f"Q{q}_GT"]
+            if not all(c in df_trials.columns for c in need):
+                continue
+                
+            review_exp = str(row.get(f"Q{q}_ReviewExp", "")).strip()
+            gt = str(row.get(f"Q{q}_GT", "")).strip().upper()
+            
+            # Normalize review response
+            review_exp = {"d":"D","deceptive":"D","t":"T","truthful":"T"}.get(review_exp.lower(), "")
+            
+            if review_exp in {"D","T"} and gt in {"D","T"}:
+                user_total += 1
+                global_total += 1
+                if review_exp == gt:
+                    user_correct += 1
+                    global_correct += 1
+        
+        user_accuracy = user_correct / user_total if user_total > 0 else math.nan
+        final_accuracies.append(user_accuracy)
+    
+    global_accuracy = global_correct / global_total if global_total > 0 else math.nan
+    
+    out = df_trials.copy()
+    out["Final_Accuracy_User"] = final_accuracies
+    out["Final_Accuracy_Global"] = global_accuracy
+    
+    print("=== Final Accuracy Summary ===")
+    print(f"Global - Total valid responses: {global_total}")
+    print(f"Global - Correct final responses: {global_correct}")
+    print(f"Global Final Accuracy = {global_accuracy:.4f}")
+    print(f"Per-user accuracies (first 10): {final_accuracies[:10]}")
+    
+    return out, global_accuracy, {
+        "global_total": global_total,
+        "global_correct": global_correct,
+        "per_user_accuracies": final_accuracies
+    }
+
 def compute_rair_rsr_global_and_per_user(df_trials: pd.DataFrame, n_trials: int = 16) -> tuple[pd.DataFrame, dict]:
     """
     Adds 4 columns:
@@ -358,16 +462,25 @@ def compute_rair_rsr_global_and_per_user(df_trials: pd.DataFrame, n_trials: int 
 if __name__ == "__main__":
     df_trials = build_full_with_deltas_and_labels()
 
-    # Compute global + per-user metrics in one go (and append columns)
-    df_with_metrics, metrics_summary = compute_rair_rsr_global_and_per_user(df_trials, n_trials=16)
+    # Compute initial accuracy per user (using Q_Review)
+    df_with_initial_acc, initial_accuracy_global, initial_acc_summary = compute_initial_accuracy_per_user(df_trials, n_trials=16)
+    
+    # Compute final accuracy per user (using Q_ReviewExp)
+    df_with_final_acc, final_accuracy_global, final_acc_summary = compute_final_accuracy_per_user(df_with_initial_acc, n_trials=16)
 
-    print("\n=== DataFrame head with global & per-user metrics ===")
+    # Compute global + per-user metrics in one go (and append columns)
+    df_with_metrics, metrics_summary = compute_rair_rsr_global_and_per_user(df_with_final_acc, n_trials=16)
+
+    print("\n=== DataFrame head with all metrics ===")
     print(df_with_metrics.head().to_string())
 
-    print("\n=== Metrics Summary ===")
+    print("\n=== All Metrics Summary ===")
+    print(f"Global Initial Accuracy: {initial_accuracy_global:.4f}")
+    print(f"Global Final Accuracy: {final_accuracy_global:.4f}")
+    print(f"Global Accuracy Improvement: {final_accuracy_global - initial_accuracy_global:.4f}")
     print(metrics_summary)
 
-    # Export DataFrame with metrics to Excel
+    # Export DataFrame with all metrics to Excel
     output_excel_path = "experiment_results_with_metrics.xlsx"
     df_with_metrics.to_excel(output_excel_path, index=False)
-    print(f"DataFrame with metrics exported to '{output_excel_path}'.")
+    print(f"DataFrame with all metrics exported to '{output_excel_path}'.")
