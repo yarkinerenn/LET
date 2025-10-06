@@ -141,6 +141,13 @@ def test_H11(long_df):
     m = ols("delta_conf ~ model_size", long_df)
     return summarize(m)
 
+# H13: Larger LLMs have higher accuracy (final task accuracy)
+def test_H13(long_df):
+    df = long_df.copy()
+    df["post_correct"] = (df["post"] == df["gt"]).astype(int)
+    m = logit("post_correct ~ model_size", df)
+    return summarize(m)
+
 # H12: Low-quality (unfaithful) explanations aligned with initial judgment cause sticking to a wrong answer (reduced self-reliance)
 # Interpret as: on trials where human initially wrong AND AI wrong OR (optionally) aligned with pre,
 # unfaithful explanations increase probability of staying wrong.
@@ -169,7 +176,7 @@ def run_all_hypotheses(df_trials, n_trials=16):
         "H9":  test_H9(long_df),
         "H10": test_H10(long_df),
         "H11": test_H11(long_df),
-        "H12": test_H12(long_df),
+        "H13": test_H13(long_df),
     }
     return results, long_df
 
