@@ -190,14 +190,15 @@ def build_full_with_deltas_and_labels():
                 print(f"  Q1_Review: {form_data['Q1_Review'].iloc[0] if 'Q1_Review' in form_data.columns else 'MISSING'}")
                 print(f"  Q1_ReviewExp: {form_data['Q1_ReviewExp'].iloc[0] if 'Q1_ReviewExp' in form_data.columns else 'MISSING'}")
 
-    # === Compute deltas and drop Conf1/Conf2 ===
+    # === Compute deltas but keep Conf1/Conf2 for plotting ===
     for i in range(1, n_trials + 1):
         c1, c2, d = f"Q{i}_Conf1", f"Q{i}_Conf2", f"Q{i}_Delta"
         if c1 in df.columns and c2 in df.columns:
             conf1 = pd.to_numeric(df[c1], errors="coerce")
             conf2 = pd.to_numeric(df[c2], errors="coerce")
             df[d] = conf2 - conf1
-            df.drop(columns=[c1, c2], inplace=True)
+            # Keep Conf1 and Conf2 for distribution plotting
+            # df.drop(columns=[c1, c2], inplace=True)
 
     # === Normalizers ===
     def normalize_DT(label: str) -> str:
@@ -259,6 +260,8 @@ def build_full_with_deltas_and_labels():
         for name in (
             f"Q{i}_Review",
             f"Q{i}_ReviewExp",
+            f"Q{i}_Conf1",
+            f"Q{i}_Conf2",
             f"Q{i}_Plausibility",
             f"Q{i}_Delta",
             f"Q{i}_GT",
@@ -492,7 +495,7 @@ def compute_rair_rsr_global_and_per_user(df_trials: pd.DataFrame, n_trials: int 
 
     # quick print
     print("=== GLOBAL ===")
-    print(f"RAIR_global: {('NaN' if math.isnan(rair_global) else f'{rair_global:.4f}')}  "
+    print(f"RAIR_global: {('NaN' if math.isnan(rair_global) else f'{rair_global:.4f}')}  "  
           f"(eligible={g_elig_rair}, corrected={g_corrected}, not_corrected={g_notcorr})")
     print(f"RSR_global : {('NaN' if math.isnan(rsr_global)  else f'{rsr_global:.4f}')}  "
           f"(eligible={g_elig_rsr}, stayed={g_stayed}, switched={g_switched})")
