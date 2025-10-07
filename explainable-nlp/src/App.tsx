@@ -34,7 +34,7 @@ function AppContent() {
                 <Container>
                     <Navbar.Brand as={Link} to="/" className="fw-bold">
                         <i className="bi bi-shield-lock me-2"></i>
-                        XNLP
+                        LET
                     </Navbar.Brand>
                     <Navbar.Toggle aria-controls="basic-navbar-nav" />
                     <Navbar.Collapse id="basic-navbar-nav">

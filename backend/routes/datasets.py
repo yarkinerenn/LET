@@ -175,12 +175,12 @@ def upload_dataset():
 @datasets_bp.route("/api/datasets", methods=["GET"])
 @login_required
 def get_datasets():
-    """List datasets uploaded/imported by the current user."""
+    """List datasets uploaded/imported by the current user, plus public datasets."""
     user_id = ObjectId(current_user.id)
     datasets = list(
         mongo.db.datasets.find(
-            {"user_id": user_id},
-            {"_id": 1, "filename": 1, "uploaded_at": 1, "source": 1},
+            {"$or": [{"user_id": user_id}, {"is_public": True}]},
+            {"_id": 1, "filename": 1, "uploaded_at": 1, "source": 1, "is_public": 1},
         )
     )
     for d in datasets:
