@@ -304,6 +304,362 @@ def plot_per_question_accuracy(long_df: pd.DataFrame, out_path: str = "per_quest
     print(f"Saved plot to {out_path}")
     return out_path
 
+def plot_conf_vs_rair_scatter(long_df: pd.DataFrame, out_path: str = "conf_vs_rair_scatter.png") -> str:
+    """
+    Binned bar plot of confidence change (delta_conf) vs RAIR (changed_to_correct).
+    Only includes RAIR-eligible trials (AI correct & human initially wrong).
+    """
+    # Filter to RAIR-eligible subset
+    df = long_df[(long_df["ai_correct"]==1) & (long_df["human_pre_correct"]==0)].copy()
+    
+    if len(df) == 0:
+        print("No RAIR-eligible data for plot")
+        return out_path
+    
+    # Create bins for confidence change
+    bins = [-10, -2, -1, 0, 1, 2, 10]  # Adjusted for typical confidence changes
+    labels = ['≤-2', '-1', '0', '1', '2', '≥3']
+    df['conf_bin'] = pd.cut(df['delta_conf'], bins=bins, labels=labels, include_lowest=True)
+    
+    # Calculate mean RAIR for each bin
+    binned_rair = df.groupby('conf_bin', observed=True)['changed_to_correct'].agg(['mean', 'count']).reset_index()
+    binned_rair.columns = ['conf_bin', 'mean_rair', 'count']
+    
+    plt.figure(figsize=(7, 5))
+    
+    bars = plt.bar(range(len(binned_rair)), binned_rair['mean_rair'], 
+                   color="#4C78A8", alpha=0.8, edgecolor="black")
+    
+    # Add count labels on top of bars
+    for i, (bar, count) in enumerate(zip(bars, binned_rair['count'])):
+        height = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2., height + 0.02,
+                f'n={int(count)}', ha='center', va='bottom', fontsize=8)
+    
+    plt.xticks(range(len(binned_rair)), binned_rair['conf_bin'])
+    plt.xlabel("ΔConfidence (Post - Pre)")
+    plt.ylabel("Mean RAIR (Proportion Changed to Correct)")
+    plt.title("Confidence Change vs. RAIR (Binned)")
+    plt.ylim(0, 1)
+    plt.grid(axis="y", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=200)
+    plt.close()
+    print(f"Saved plot to {out_path}")
+    return out_path
+
+def plot_conf_vs_rsr_scatter(long_df: pd.DataFrame, out_path: str = "conf_vs_rsr_scatter.png") -> str:
+    """
+    Binned bar plot of confidence change (delta_conf) vs RSR (stayed_correct).
+    Only includes RSR-eligible trials (AI wrong & human initially correct).
+    """
+    # Filter to RSR-eligible subset
+    df = long_df[(long_df["ai_correct"]==0) & (long_df["human_pre_correct"]==1)].copy()
+    
+    if len(df) == 0:
+        print("No RSR-eligible data for plot")
+        return out_path
+    
+    # Create bins for confidence change
+    bins = [-10, -2, -1, 0, 1, 2, 10]  # Adjusted for typical confidence changes
+    labels = ['≤-2', '-1', '0', '1', '2', '≥3']
+    df['conf_bin'] = pd.cut(df['delta_conf'], bins=bins, labels=labels, include_lowest=True)
+    
+    # Calculate mean RSR for each bin
+    binned_rsr = df.groupby('conf_bin', observed=True)['stayed_correct'].agg(['mean', 'count']).reset_index()
+    binned_rsr.columns = ['conf_bin', 'mean_rsr', 'count']
+    
+    plt.figure(figsize=(7, 5))
+    
+    bars = plt.bar(range(len(binned_rsr)), binned_rsr['mean_rsr'], 
+                   color="#F58518", alpha=0.8, edgecolor="black")
+    
+    # Add count labels on top of bars
+    for i, (bar, count) in enumerate(zip(bars, binned_rsr['count'])):
+        height = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2., height + 0.02,
+                f'n={int(count)}', ha='center', va='bottom', fontsize=8)
+    
+    plt.xticks(range(len(binned_rsr)), binned_rsr['conf_bin'])
+    plt.xlabel("ΔConfidence (Post - Pre)")
+    plt.ylabel("Mean RSR (Proportion Stayed Correct)")
+    plt.title("Confidence Change vs. RSR (Binned)")
+    plt.ylim(0, 1)
+    plt.grid(axis="y", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=200)
+    plt.close()
+    print(f"Saved plot to {out_path}")
+    return out_path
+
+def plot_rair_rsr_by_modelsize(long_df: pd.DataFrame, out_path: str = "rair_rsr_by_modelsize.png") -> str:
+    """
+    Bar plot showing mean RAIR and RSR by model size.
+    RAIR is computed on RAIR-eligible subset, RSR on RSR-eligible subset.
+    0 = Small LLM (Llama 3.1 8B), 1 = Large LLM (Llama 3.3 70B)
+    """
+    # RAIR-eligible: AI correct & human initially wrong
+    df_rair = long_df[(long_df["ai_correct"]==1) & (long_df["human_pre_correct"]==0)].copy()
+    df_rair["rair"] = df_rair["changed_to_correct"].astype(float)
+    mean_rair = df_rair.groupby("model_size")["rair"].agg(['mean', 'count']).reset_index()
+    mean_rair.columns = ["model_size", "mean_rair", "count_rair"]
+    
+    # RSR-eligible: AI wrong & human initially correct
+    df_rsr = long_df[(long_df["ai_correct"]==0) & (long_df["human_pre_correct"]==1)].copy()
+    df_rsr["rsr"] = df_rsr["stayed_correct"].astype(float)
+    mean_rsr = df_rsr.groupby("model_size")["rsr"].agg(['mean', 'count']).reset_index()
+    mean_rsr.columns = ["model_size", "mean_rsr", "count_rsr"]
+    
+    # Merge
+    summary = pd.merge(mean_rair, mean_rsr, on="model_size", how="outer").fillna(0)
+    summary['model_label'] = summary['model_size'].map({0: "Small LLM\n(Llama 3.1 8B)", 1: "Large LLM\n(Llama 3.3 70B)"})
+    
+    # Plot
+    plt.figure(figsize=(8, 5))
+    x = np.arange(len(summary))
+    width = 0.35
+    
+    bars1 = plt.bar(x - width/2, summary["mean_rair"], width, label="RAIR", color="#4C78A8", alpha=0.8, edgecolor="black")
+    bars2 = plt.bar(x + width/2, summary["mean_rsr"], width, label="RSR", color="#F58518", alpha=0.8, edgecolor="black")
+    
+    # Add value labels on bars
+    for bar, val in zip(bars1, summary["mean_rair"]):
+        height = bar.get_height()
+        if height > 0:
+            plt.text(bar.get_x() + bar.get_width()/2., height + 0.02,
+                    f'{val:.3f}', ha='center', va='bottom', fontsize=8)
+    
+    for bar, val in zip(bars2, summary["mean_rsr"]):
+        height = bar.get_height()
+        if height > 0:
+            plt.text(bar.get_x() + bar.get_width()/2., height + 0.02,
+                    f'{val:.3f}', ha='center', va='bottom', fontsize=8)
+    
+    plt.xticks(x, summary["model_label"])
+    plt.ylabel("Mean Reliance (Proportion)")
+    plt.xlabel("")
+    plt.title("Mean RAIR and RSR by Model Size")
+    plt.ylim(0, 1)
+    plt.legend(loc="best")
+    plt.grid(axis="y", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=200)
+    plt.close()
+    print(f"Saved plot to {out_path}")
+    
+    # Print statistics
+    for idx, row in summary.iterrows():
+        model_name = row['model_label'].replace('\n', ' ')
+        print(f"{model_name}:")
+        print(f"  RAIR: M = {row['mean_rair']:.3f}, n = {int(row['count_rair'])}")
+        print(f"  RSR: M = {row['mean_rsr']:.3f}, n = {int(row['count_rsr'])}")
+    
+    return out_path
+
+def plot_conf_change_by_modelsize(long_df: pd.DataFrame, out_path: str = "conf_change_by_modelsize.png") -> str:
+    """
+    Bar plot of mean confidence change (delta_conf) by model size.
+    0 = Small LLM (Llama 3.1 8B), 1 = Large LLM (Llama 3.3 70B)
+    """
+    df = long_df.dropna(subset=["delta_conf", "model_size"]).copy()
+    
+    # Group by model size and compute mean confidence change
+    summary = df.groupby("model_size")["delta_conf"].agg(['mean', 'std', 'count']).reset_index()
+    summary['model_label'] = summary['model_size'].map({0: "Small LLM\n(Llama 3.1 8B)", 1: "Large LLM\n(Llama 3.3 70B)"})
+    
+    plt.figure(figsize=(7, 5))
+    
+    bars = plt.bar(range(len(summary)), summary['mean'], 
+                   color=["#72B7B2", "#4C78A8"], alpha=0.8, edgecolor="black", width=0.6)
+    
+    # Add error bars (standard deviation)
+    plt.errorbar(range(len(summary)), summary['mean'], yerr=summary['std'], 
+                 fmt='none', ecolor='black', capsize=5, alpha=0.7)
+    
+    # Add value labels on top of bars
+    for i, (bar, mean_val, count) in enumerate(zip(bars, summary['mean'], summary['count'])):
+        height = bar.get_height()
+        y_pos = height + summary['std'].iloc[i] + 0.05 if height > 0 else height - summary['std'].iloc[i] - 0.05
+        va = 'bottom' if height > 0 else 'top'
+        plt.text(bar.get_x() + bar.get_width()/2., y_pos,
+                f'M={mean_val:.2f}\nn={int(count)}', ha='center', va=va, fontsize=9)
+    
+    plt.xticks(range(len(summary)), summary['model_label'])
+    plt.ylabel("Mean Confidence Change (Post - Pre)")
+    plt.xlabel("")
+    plt.title("Mean Change in Confidence by Model Size")
+    plt.axhline(0, color='gray', linestyle='--', linewidth=1, alpha=0.5)
+    plt.grid(axis="y", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=200)
+    plt.close()
+    print(f"Saved plot to {out_path}")
+    
+    # Print statistics
+    for idx, row in summary.iterrows():
+        model_name = row['model_label'].replace('\n', ' ')
+        print(f"{model_name}: M = {row['mean']:.2f}, SD = {row['std']:.2f}, n = {int(row['count'])}")
+    
+    return out_path
+
+def plot_plaus_vs_rair_rsr(long_df: pd.DataFrame, out_path: str = "plaus_vs_rair_rsr.png") -> str:
+    """
+    Binned bar plot showing effect of plausibility on RAIR and RSR.
+    Groups plausibility into bins and computes mean RAIR/RSR for each bin.
+    """
+    # RAIR-eligible: AI correct & human initially wrong
+    df_rair = long_df[(long_df["ai_correct"]==1) & (long_df["human_pre_correct"]==0)].copy()
+    df_rair["rair"] = df_rair["changed_to_correct"].astype(float)
+    
+    # Group by plausibility rating
+    rair_by_plaus = df_rair.groupby("plaus")["rair"].agg(['mean', 'count']).reset_index()
+    rair_by_plaus.columns = ["plaus", "mean_rair", "count_rair"]
+    
+    # RSR-eligible: AI wrong & human initially correct
+    df_rsr = long_df[(long_df["ai_correct"]==0) & (long_df["human_pre_correct"]==1)].copy()
+    df_rsr["rsr"] = df_rsr["stayed_correct"].astype(float)
+    
+    # Group by plausibility rating
+    rsr_by_plaus = df_rsr.groupby("plaus")["rsr"].agg(['mean', 'count']).reset_index()
+    rsr_by_plaus.columns = ["plaus", "mean_rsr", "count_rsr"]
+    
+    # Merge on plausibility
+    summary = pd.merge(rair_by_plaus, rsr_by_plaus, on="plaus", how="outer").fillna(0)
+    summary = summary.sort_values("plaus")
+    
+    # Plot
+    plt.figure(figsize=(10, 5))
+    x = np.arange(len(summary))
+    width = 0.35
+    
+    bars1 = plt.bar(x - width/2, summary["mean_rair"], width, label="RAIR", color="#4C78A8", alpha=0.8, edgecolor="black")
+    bars2 = plt.bar(x + width/2, summary["mean_rsr"], width, label="RSR", color="#F58518", alpha=0.8, edgecolor="black")
+    
+    # Add value labels on bars
+    for bar, val, count in zip(bars1, summary["mean_rair"], summary["count_rair"]):
+        height = bar.get_height()
+        if height > 0:
+            plt.text(bar.get_x() + bar.get_width()/2., height + 0.02,
+                    f'{val:.2f}\n(n={int(count)})', ha='center', va='bottom', fontsize=7)
+    
+    for bar, val, count in zip(bars2, summary["mean_rsr"], summary["count_rsr"]):
+        height = bar.get_height()
+        if height > 0:
+            plt.text(bar.get_x() + bar.get_width()/2., height + 0.02,
+                    f'{val:.2f}\n(n={int(count)})', ha='center', va='bottom', fontsize=7)
+    
+    plt.xticks(x, [f'{int(p)}' for p in summary["plaus"]])
+    plt.xlabel("Plausibility Rating (1-5)")
+    plt.ylabel("Mean Reliance (Proportion)")
+    plt.title("Effect of Perceived Plausibility on RAIR and RSR")
+    plt.ylim(0, 1.1)
+    plt.legend(loc="best")
+    plt.grid(axis="y", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=200)
+    plt.close()
+    print(f"Saved plot to {out_path}")
+    
+    # Print statistics
+    print("\nPlausibility vs RAIR/RSR:")
+    for idx, row in summary.iterrows():
+        print(f"Plausibility {int(row['plaus'])}:")
+        print(f"  RAIR: M = {row['mean_rair']:.3f}, n = {int(row['count_rair'])}")
+        print(f"  RSR: M = {row['mean_rsr']:.3f}, n = {int(row['count_rsr'])}")
+    
+    return out_path
+
+def plot_accuracy_by_modelsize(long_df: pd.DataFrame, out_path: str = "accuracy_by_modelsize.png") -> str:
+    """
+    Bar plot of final accuracy (post-decision correctness) by model size.
+    0 = Small LLM (Llama 3.1 8B), 1 = Large LLM (Llama 3.3 70B)
+    """
+    df = long_df.copy()
+    df["post_correct"] = (df["post"] == df["gt"]).astype(float)
+    
+    # Group by model size and compute mean accuracy
+    summary = df.groupby("model_size")["post_correct"].agg(['mean', 'std', 'count']).reset_index()
+    summary['model_label'] = summary['model_size'].map({0: "Small LLM\n(Llama 3.1 8B)", 1: "Large LLM\n(Llama 3.3 70B)"})
+    
+    plt.figure(figsize=(7, 5))
+    
+    bars = plt.bar(range(len(summary)), summary['mean'], 
+                   color=["#72B7B2", "#4C78A8"], alpha=0.8, edgecolor="black", width=0.6)
+    
+    # Add error bars (standard deviation)
+    plt.errorbar(range(len(summary)), summary['mean'], yerr=summary['std'], 
+                 fmt='none', ecolor='black', capsize=5, alpha=0.7)
+    
+    # Add value labels on top of bars
+    for i, (bar, mean_val, count) in enumerate(zip(bars, summary['mean'], summary['count'])):
+        height = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2., height + summary['std'].iloc[i] + 0.02,
+                f'M={mean_val:.3f}\nn={int(count)}', ha='center', va='bottom', fontsize=9)
+    
+    plt.xticks(range(len(summary)), summary['model_label'])
+    plt.ylabel("Final Accuracy (Proportion Correct)")
+    plt.xlabel("")
+    plt.title("Final Accuracy by Model Size")
+    plt.ylim(0, 1)
+    plt.axhline(0.5, color='gray', linestyle='--', linewidth=1, alpha=0.5, label="Chance (50%)")
+    plt.legend(loc="upper right")
+    plt.grid(axis="y", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=200)
+    plt.close()
+    print(f"Saved plot to {out_path}")
+    
+    # Print statistics
+    for idx, row in summary.iterrows():
+        model_name = row['model_label'].replace('\n', ' ')
+        print(f"{model_name}: Accuracy M = {row['mean']:.3f}, SD = {row['std']:.3f}, n = {int(row['count'])}")
+    
+    return out_path
+
+def plot_plausibility_by_modelsize(long_df: pd.DataFrame, out_path: str = "plausibility_by_modelsize.png") -> str:
+    """
+    Bar plot of mean plausibility ratings by model size.
+    0 = Small LLM (Llama 3.1 8B), 1 = Large LLM (Llama 3.3 70B)
+    """
+    df = long_df.dropna(subset=["plaus", "model_size"]).copy()
+    
+    # Group by model size and compute mean plausibility
+    summary = df.groupby("model_size")["plaus"].agg(['mean', 'std', 'count']).reset_index()
+    summary['model_label'] = summary['model_size'].map({0: "Small LLM\n(Llama 3.1 8B)", 1: "Large LLM\n(Llama 3.3 70B)"})
+    
+    plt.figure(figsize=(7, 5))
+    
+    bars = plt.bar(range(len(summary)), summary['mean'], 
+                   color=["#72B7B2", "#4C78A8"], alpha=0.8, edgecolor="black", width=0.6)
+    
+    # Add error bars (standard deviation)
+    plt.errorbar(range(len(summary)), summary['mean'], yerr=summary['std'], 
+                 fmt='none', ecolor='black', capsize=5, alpha=0.7)
+    
+    # Add value labels on top of bars
+    for i, (bar, mean_val, count) in enumerate(zip(bars, summary['mean'], summary['count'])):
+        height = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2., height + summary['std'].iloc[i] + 0.1,
+                f'M={mean_val:.2f}\nn={int(count)}', ha='center', va='bottom', fontsize=9)
+    
+    plt.xticks(range(len(summary)), summary['model_label'])
+    plt.ylabel("Mean Plausibility Rating (1–5)")
+    plt.xlabel("")
+    plt.title("Mean Plausibility Ratings by Model Size")
+    plt.ylim(0, 5.5)
+    plt.grid(axis="y", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=200)
+    plt.close()
+    print(f"Saved plot to {out_path}")
+    
+    # Print statistics
+    for idx, row in summary.iterrows():
+        model_name = row['model_label'].replace('\n', ' ')
+        print(f"{model_name}: M = {row['mean']:.2f}, SD = {row['std']:.2f}, n = {int(row['count'])}")
+    
+    return out_path
+
 def plot_confidence_plausibility_distribution(df_trials: pd.DataFrame, out_path: str = "confidence_plausibility_distribution.png") -> str:
     """
     Plot distributions of confidence ratings (before/after, assumed 1-7 scale) and plausibility (1-5 scale).
@@ -457,6 +813,13 @@ def main():
     plot_plausibility_violin_by_faith(long_df)
     plot_per_question_accuracy(long_df)
     plot_confidence_plausibility_distribution(df_trials)
+    plot_conf_vs_rair_scatter(long_df)
+    plot_conf_vs_rsr_scatter(long_df)
+    plot_rair_rsr_by_modelsize(long_df)
+    plot_conf_change_by_modelsize(long_df)
+    plot_accuracy_by_modelsize(long_df)
+    plot_plaus_vs_rair_rsr(long_df)
+    plot_plausibility_by_modelsize(long_df)
 
 if __name__ == "__main__":
     main()
