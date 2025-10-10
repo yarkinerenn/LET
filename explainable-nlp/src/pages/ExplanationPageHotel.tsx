@@ -204,9 +204,9 @@ const ExplanationPageHotel: React.FC = () => {
       <div className="d-flex justify-content-between align-items-center mb-4">
         <Button
           variant="outline-secondary"
-          onClick={() => navigate(`/datasets/${datasetId}/classifications_hotel/${classificationId}`)}
+          onClick={() => navigate(entry?.method === 'explore' ? `/datasets/${datasetId}` : `/datasets/${datasetId}/classifications_hotel/${classificationId}`)}
         >
-          ← Back to Hotel Classification
+          ← Back to {entry?.method === 'explore' ? 'Datasets' : 'Hotel Classification'}
         </Button>
         <div className="d-flex align-items-center gap-3">
           <div className="text-muted">

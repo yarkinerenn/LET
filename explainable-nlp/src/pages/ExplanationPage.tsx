@@ -103,6 +103,11 @@ const ExplanationPage = () => {
 
     // Function to get the correct back navigation path based on data type
     const getBackNavigationPath = () => {
+        // If method is 'explore', always go back to datasets
+        if (classification?.method === 'explore') {
+            return `/datasets/${datasetId}`;
+        }
+        
         const dataType = classification?.data_type;
         if (dataType === "sentiment") {
             return `/datasets/${datasetId}/classifications/${classificationId}`;
@@ -438,7 +443,7 @@ const ExplanationPage = () => {
         variant="outline-secondary"
         onClick={() => navigate(getBackNavigationPath())}
       >
-        ← Back to Classification
+        ← Back to {classification?.method === 'explore' ? 'Datasets' : 'Classification'}
       </Button>
 
       <div className="d-flex align-items-center gap-3">

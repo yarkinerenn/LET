@@ -338,8 +338,8 @@ const ExplanationPageECQA = () => {
   return (
     <Container className="py-4 explanation-page" fluid>
       <div className="d-flex justify-content-between align-items-center mb-4">
-        <Button variant="outline-secondary" onClick={() => navigate(`/datasets/${datasetId}/classifications_ecqa/${classificationId}`)}>
-          ← Back to Classification
+        <Button variant="outline-secondary" onClick={() => navigate(entry?.method === 'explore' ? `/datasets/${datasetId}` : `/datasets/${datasetId}/classifications_ecqa/${classificationId}`)}>
+          ← Back to {entry?.method === 'explore' ? 'Datasets' : 'Classification'}
         </Button>
         <div className="d-flex align-items-center gap-3">
           <div className="text-muted">
