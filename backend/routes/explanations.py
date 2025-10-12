@@ -32,6 +32,16 @@ explanations_bp = Blueprint("explanations", __name__)
 def add_explanationmodels_to_classficication(classification_id):
     data = request.get_json()
     explanation_models = data.get('explanation_models', [])
+    
+    # Replace dots with underscores in model names to avoid MongoDB field name issues
+    explanation_models_safe = []
+    for model_dict in explanation_models:
+        safe_dict = {
+            'provider': model_dict['provider'],
+            'model': model_dict['model'].replace('.', '_')
+        }
+        explanation_models_safe.append(safe_dict)
+    
     mongo.db.classifications.update_one(
         {
             "_id": ObjectId(classification_id),
@@ -39,7 +49,7 @@ def add_explanationmodels_to_classficication(classification_id):
         },
         {
             "$set": {
-                "explanation_models": explanation_models,
+                "explanation_models": explanation_models_safe,
                 "updated_at": datetime.now()
             }
         }
@@ -106,13 +116,16 @@ def explain_prediction():
         datatype = data.get('datatype', 'sentiment')
 
         if classificationId == 'empty':
-            # use user’s preferred explanation provider/model
+            # use user's preferred explanation provider/model
             provider = user_doc.get('preferred_providerex', 'openai')
             model = user_doc.get('preferred_modelex', 'gpt-3.5-turbo')
         else:
             provider = data.get('provider', 'openai')
             model = data.get('model', 'gpt-3.5-turbo')
-
+        
+        # Convert underscores back to dots for API calls (stored with underscores in DB)
+        model_for_api = model.replace('_', '.')
+        
         resultId = data.get('resultId')
         predictedlabel = data.get('predictedlabel')
         truelabel = data.get('truelabel')
@@ -131,7 +144,7 @@ def explain_prediction():
                 return jsonify({'explanation': explanation_data, 'explainer_type': explainer_type, 'top_words': top_words})
             else:
                 explanation_text = generate_llm_explanationofdataset(
-                    text, predictedlabel, truelabel, confidence, provider, model, datatype
+                    text, predictedlabel, truelabel, confidence, provider, model_for_api, datatype
                 )
                 save_explanation_to_db(classificationId, current_user.id, resultId, 'llm', explanation_text, model)
                 return jsonify({"explanation": explanation_text, 'explainer_type': explainer_type})
@@ -149,7 +162,7 @@ def explain_prediction():
                 explanation_data, top_words_str, top_words = generate_shap_explanation(text, prediction['label'])
                 return jsonify({'explanation': explanation_data, 'explainer_type': explainer_type, 'top_words': top_words})
             else:
-                explanation_text = generate_llm_explanation(text, prediction['label'], prediction['score'], provider, model)
+                explanation_text = generate_llm_explanation(text, prediction['label'], prediction['score'], provider, model_for_api)
                 return jsonify({"explanation": explanation_text, 'explainer_type': explainer_type})
 
     except Exception as e:
@@ -176,6 +189,9 @@ def generate_llm_explanation_of_shap():
         else:
             provider = data.get('provider', 'openai')
             model = data.get('model', 'gpt-3.5-turbo')
+        
+        # Convert underscores back to dots for API calls (stored with underscores in DB)
+        model_for_api = model.replace('_', '.')
 
         if prediction_id:
             if not prediction_id or not text:
@@ -230,7 +246,7 @@ shap:
 Focus on key words and overall tone.
 Keep explanation under 3 sentences.
 """}],
-                    model=model,
+                    model=model_for_api,
                 )
                 content = chat_completion.choices[0].message.content
                 save_explanation_to_db(classificationId, current_user.id, resultId, 'shapwithllm', content, model)
@@ -255,7 +271,7 @@ Keep explanation under 3 sentences.
                     Keep explanation under 3 sentences.
                     """
                 response = client.chat.completions.create(
-                    model=model,
+                    model=model_for_api,
                     messages=[{"role": "user", "content": prompt}]
                 )
                 explanation = response.choices[0].message.content
@@ -263,7 +279,7 @@ Keep explanation under 3 sentences.
                 return explanation
 
             elif provider == 'ollama':
-                llm = Ollama(model=model, temperature=0)
+                llm = Ollama(model=model_for_api, temperature=0)
                 prompt = f"""
 Explain this sentiment analysis result in simple terms with most affecting words provided by SHAP:
 
@@ -338,7 +354,7 @@ shap:
 Focus on key words and overall tone.
 Keep explanation under 3 sentences.
 """}],
-                    model=model,
+                    model=model_for_api,
                 )
                 content = chat_completion.choices[0].message.content
                 save_explanation_to_db(classificationId, current_user.id, resultId, 'shapwithllm', content, model)
@@ -363,7 +379,7 @@ Focus on key words and overall tone.
 Keep explanation under 3 sentences.
 """
                 response = client.chat.completions.create(
-                    model=model,
+                    model=model_for_api,
                     messages=[{"role": "user", "content": prompt}]
                 )
                 explanation = response.choices[0].message.content
@@ -371,7 +387,7 @@ Keep explanation under 3 sentences.
                 return explanation
 
             elif provider == 'ollama':
-                llm = Ollama(model=model, temperature=0)
+                llm = Ollama(model=model_for_api, temperature=0)
                 prompt = f"""
 Explain this sentiment analysis result in simple terms with most affecting words provided by SHAP:
 
