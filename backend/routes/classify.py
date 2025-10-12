@@ -44,6 +44,9 @@ def classify_dataset(dataset_id):
         return jsonify({"error": "No JSON data provided"}), 400
 
     try:
+        # --- Get user preferences ---
+        user_doc = mongo.db.users.find_one({"_id": ObjectId(current_user.id)})
+        
         # --- Extract parameters ---
         method = data.get('method')
         if method != 'bert':
@@ -285,6 +288,16 @@ def classify_dataset(dataset_id):
         }
 
         classification_id = mongo.db.classifications.insert_one(classification_data).inserted_id
+        
+        # Add explanation models: prefer preferred_modelex, fallback to preferred_model
+        explanation_model = user_doc.get('preferred_modelex') or user_doc.get('preferred_model', 'gpt-3.5-turbo')
+        explanation_provider = user_doc.get('preferred_providerex') or user_doc.get('preferred_provider', 'openai')
+        
+        explanation_models = [{'provider': explanation_provider, 'model': explanation_model.replace('.', '_')}]
+        mongo.db.classifications.update_one(
+            {"_id": ObjectId(classification_id), "user_id": ObjectId(current_user.id)},
+            {"$set": {"explanation_models": explanation_models, "updated_at": datetime.now()}}
+        )
 
         return jsonify({
             "message": "BERT classification completed",

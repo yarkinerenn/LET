@@ -249,7 +249,7 @@ const Settings = () => {
                             <Form.Group className="mb-3">
                                 <Form.Label className="fw-semibold">OpenAI API Key</Form.Label>
                                 <Form.Control
-                                    type="text"
+                                    type="password"
                                     placeholder="Enter your OpenAI API key"
                                     value={openaiApi}
                                     onChange={(e) => setOpenaiApi(e.target.value)}
@@ -260,7 +260,7 @@ const Settings = () => {
                             <Form.Group className="mb-3">
                                 <Form.Label className="fw-semibold">Grok API Key</Form.Label>
                                 <Form.Control
-                                    type="text"
+                                    type="password"
                                     placeholder="Enter your Grok API key"
                                     value={grokApi}
                                     onChange={(e) => setGrokApi(e.target.value)}
@@ -271,7 +271,7 @@ const Settings = () => {
                             <Form.Group className="mb-3">
                                 <Form.Label className="fw-semibold">DeepSeek API Key</Form.Label>
                                 <Form.Control
-                                    type="text"
+                                    type="password"
                                     placeholder="Enter your Deepseek API key"
                                     value={deepseekApi}
                                     onChange={(e) => setdeepseekApi(e.target.value)}
@@ -282,7 +282,7 @@ const Settings = () => {
                             <Form.Group className="mb-3">
                                 <Form.Label className="fw-semibold">Openrouter API Key</Form.Label>
                                 <Form.Control
-                                    type="text"
+                                    type="password"
                                     placeholder="Enter your Openrouter API key"
                                     value={openrouterApi}
                                     onChange={(e) => setopenrouterApi(e.target.value)}
@@ -293,7 +293,7 @@ const Settings = () => {
                             <Form.Group className="mb-4">
                                 <Form.Label className="fw-semibold">Gemini API Key</Form.Label>
                                 <Form.Control
-                                    type="text"
+                                    type="password"
                                     placeholder="Enter your Gemini API key"
                                     value={geminiApi}
                                     onChange={(e) => setGeminiApi(e.target.value)}

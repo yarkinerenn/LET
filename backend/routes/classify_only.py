@@ -87,7 +87,7 @@ def process_classification_only_request(dataset_id, data, current_user):
     # Store results in database
     classification_id = store_classification_results(
         dataset_id, current_user.id, method, provider,
-        model_name, data_type, results, stats
+        model_name, data_type, results, stats, user_doc
     )
 
     return {
@@ -783,7 +783,7 @@ def count_predictions(y_true, y_pred, data_type, stats):
     return stats
 
 
-def store_classification_results(dataset_id, user_id, method, provider, model_name, data_type, results, stats):
+def store_classification_results(dataset_id, user_id, method, provider, model_name, data_type, results, stats, user_doc):
     """Store classification results in database"""
     classification_data = {
         "dataset_id": ObjectId(dataset_id),
@@ -799,4 +799,15 @@ def store_classification_results(dataset_id, user_id, method, provider, model_na
     }
 
     classification_id = mongo.db.classifications.insert_one(classification_data).inserted_id
+    
+    # Add explanation models: prefer preferred_modelex, fallback to preferred_model
+    explanation_model = user_doc.get('preferred_modelex') or user_doc.get('preferred_model', 'gpt-3.5-turbo')
+    explanation_provider = user_doc.get('preferred_providerex') or user_doc.get('preferred_provider', 'openai')
+    
+    explanation_models = [{'provider': explanation_provider, 'model': explanation_model.replace('.', '_')}]
+    mongo.db.classifications.update_one(
+        {"_id": ObjectId(classification_id), "user_id": ObjectId(user_id)},
+        {"$set": {"explanation_models": explanation_models, "updated_at": datetime.now()}}
+    )
+    
     return classification_id
