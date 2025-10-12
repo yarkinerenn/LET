@@ -826,7 +826,7 @@ const ExplanationPage = () => {
         {isSubmittingRatings ? (
           <Spinner size="sm" className="me-2" />
         ) : null}
-        Submit All Ratings ({Object.keys(ratings).length * 2 + 1} explanations)
+        Submit All Ratings
       </Button>
     </div>
   </Container>

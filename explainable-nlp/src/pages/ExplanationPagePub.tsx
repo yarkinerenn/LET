@@ -681,7 +681,7 @@ const ExplanationPagePubMedQA = () => {
           {isSubmittingRatings ? (
             <Spinner size="sm" className="me-2" />
           ) : null}
-          Submit All Ratings)
+          Submit All Ratings
         </Button>
       </div>
     </Container>
