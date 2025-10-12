@@ -204,7 +204,7 @@ const ExplanationPageSnarks: React.FC = () => {
       <div className="d-flex justify-content-between align-items-center mb-4">
         <Button
           variant="outline-secondary"
-          onClick={() => navigate(entry?.method === 'explore' ? `/datasets/${datasetId}` : `/datasets/${datasetId}/classifications_snarks/${classificationId}`)}
+          onClick={() => navigate(entry?.method === 'explore' ? `/dataset/${datasetId}` : `/datasets/${datasetId}/classifications_snarks/${classificationId}`)}
         >
           ← Back to {entry?.method === 'explore' ? 'Datasets' : 'Snarks Classification'}
         </Button>

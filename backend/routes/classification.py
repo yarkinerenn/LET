@@ -277,6 +277,12 @@ def create_or_get_empty_classification(dataset_id):
             data_type = "medical"
         elif "citing_prompt" in df.columns:
             data_type = "legal"
+        elif "q_text" in df.columns and "q_ans" in df.columns:
+            data_type = "ecqa"
+        elif "input" in df.columns and "target" in df.columns:
+            data_type = "snarks"
+        elif "deceptive" in df.columns and "polarity" in df.columns:
+            data_type = "hotel"
         elif "text" in df.columns:
             data_type = "sentiment"
         else:
@@ -302,10 +308,49 @@ def create_or_get_empty_classification(dataset_id):
             elif data_type == "legal":
                 results.append({
                     "citing_prompt": row.get("citing_prompt", ""),
-                    "choices": [row.get(f"holding_{i}", "") for i in range(5)],
+                    "holdings": [row.get(f"holding_{i}", "") for i in range(5)],
                     "label": "",
                     "score": None,
                     "actualLabel": row.get("label", ""),
+                    "llm_explanations": {},
+                    "shap_plot_explanation": "",
+                    "shapwithllm_explanations": {},
+                    "ratings": {},
+                    "trustworthiness_score": None
+                })
+            elif data_type == "ecqa":
+                results.append({
+                    "question": row.get("q_text", ""),
+                    "choices": [row.get('q_op1', ''), row.get('q_op2', ''), row.get('q_op3', ''), row.get('q_op4', ''), row.get('q_op5', '')],
+                    "ground_explanation": row.get("taskB", ""),
+                    "label": "",
+                    "score": None,
+                    "actualLabel": row.get("q_ans", ""),
+                    "llm_explanations": {},
+                    "shap_plot_explanation": "",
+                    "shapwithllm_explanations": {},
+                    "ratings": {},
+                    "trustworthiness_score": None
+                })
+            elif data_type == "snarks":
+                results.append({
+                    "question": row.get("input", ""),
+                    "label": "",
+                    "score": None,
+                    "actualLabel": row.get("target", ""),
+                    "llm_explanations": {},
+                    "shap_plot_explanation": "",
+                    "shapwithllm_explanations": {},
+                    "ratings": {},
+                    "trustworthiness_score": None
+                })
+            elif data_type == "hotel":
+                results.append({
+                    "question": row.get("text", ""),
+                    "polarity": row.get("polarity", ""),
+                    "label": "",
+                    "score": None,
+                    "actualLabel": row.get("deceptive", ""),
                     "llm_explanations": {},
                     "shap_plot_explanation": "",
                     "shapwithllm_explanations": {},
@@ -336,7 +381,12 @@ def create_or_get_empty_classification(dataset_id):
                     "ratings": {},
                     "trustworthiness_score": None
                 })
-        explanation_models = [{'provider': provider, 'model': model_name}]
+        
+        # Add explanation models: prefer preferred_modelex, fallback to preferred_model
+        explanation_model = user_doc.get('preferred_modelex') or user_doc.get('preferred_model', 'gpt-3.5-turbo')
+        explanation_provider = user_doc.get('preferred_providerex') or user_doc.get('preferred_provider', 'openai')
+        
+        explanation_models = [{'provider': explanation_provider, 'model': explanation_model.replace('.', '_')}]
 
 
         classification_data = {

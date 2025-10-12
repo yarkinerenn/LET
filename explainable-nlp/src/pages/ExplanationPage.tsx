@@ -105,7 +105,7 @@ const ExplanationPage = () => {
     const getBackNavigationPath = () => {
         // If method is 'explore', always go back to datasets
         if (classification?.method === 'explore') {
-            return `/datasets/${datasetId}`;
+            return `/dataset/${datasetId}`;
         }
         
         const dataType = classification?.data_type;
