@@ -373,15 +373,3 @@ If you use LET in your research, please cite:
   year = {2025}
 }
 ```
-
----
-
-## License
-
-[Add your license here]
-
----
-
-## Contact
-
-For questions, issues, or contributions, please open an issue on GitHub or contact [your contact information].
