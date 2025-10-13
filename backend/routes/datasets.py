@@ -112,6 +112,10 @@ def delete_dataset(dataset_id):
         })
         if not dataset:
             return jsonify({"error": "Dataset not found or unauthorized"}), 404
+        
+        # Prevent deletion of public datasets
+        if dataset.get("is_public", False):
+            return jsonify({"error": "Public datasets cannot be deleted"}), 403
 
         file_path = dataset.get("filepath")
 
