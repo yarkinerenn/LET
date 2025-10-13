@@ -254,6 +254,22 @@ def build_full_with_deltas_and_labels():
         else:
             df[f"Q{i}_Disagree"] = False
 
+    # === Extract demographic columns (first columns before trial data) ===
+    demo_cols_start = []
+    for col in original_cols[:start_col_index]:
+        if col in df.columns and col not in mapping.values():
+            demo_cols_start.append(col)
+    
+    # === Extract demographic columns at the end (after trial data) ===
+    end_col_index = start_col_index + n_trials * block_size
+    demo_cols_end = []
+    for col in original_cols[end_col_index:]:
+        if col in df.columns and col not in mapping.values() and col != "Form":  # Exclude Form as it's added separately
+            demo_cols_end.append(col)
+    
+    print(f"\n=== Pre-experiment columns found: {demo_cols_start} ===")
+    print(f"=== Post-experiment demographic columns found: {demo_cols_end} ===")
+    
     # === Arrange trial columns ===
     trial_cols = []
     for i in range(1, n_trials + 1):
@@ -277,10 +293,12 @@ def build_full_with_deltas_and_labels():
     if "Form" in df.columns:
         trial_cols.append("Form")
 
-    df_trials = df[trial_cols]
+    # Combine demographic (start + end) and trial columns
+    all_cols = demo_cols_start + trial_cols + demo_cols_end
+    df_trials = df[all_cols]
 
-    # === Preview full trial data ===
-    print("=== Trial-only DataFrame head (first 5 rows) ===")
+    # === Preview full data including demographics ===
+    print("=== DataFrame head with demographics and trials (first 5 rows) ===")
     print(df_trials.head().to_string())
 
     # === Preview only the disagreement columns ===
