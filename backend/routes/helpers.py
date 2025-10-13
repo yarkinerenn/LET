@@ -103,7 +103,7 @@ def save_ratings_to_db(classification_id, user_id, result_id, ratings, timestamp
         }
     )
 
-    return result.modified_count > 0
+    return result.matched_count > 0
 
 def get_top_phrases(shap_values_obj, instance_idx=0, class_idx=1, top_n=5):
     """From the shapley value extract the most affecting word for the classification"""
