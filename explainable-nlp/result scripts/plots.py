@@ -3,6 +3,21 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+# TUM Color Palette
+TUM_BLUE = "#0065BD"           # Primary blue
+TUM_BLUE_DARK = "#005293"      # Secondary dark blue
+TUM_BLUE_DARKER = "#003359"    # Secondary darker blue
+TUM_ORANGE = "#E37222"         # Accent orange
+TUM_GREEN = "#A2AD00"          # Accent green
+TUM_LIGHT_BLUE = "#98C6EA"     # Accent light blue
+TUM_MED_BLUE = "#64A0C8"       # Accent medium blue
+TUM_BEIGE = "#DAD7CB"          # Accent beige
+TUM_GRAY_80 = "#333333"        # 80% black
+TUM_GRAY_50 = "#808080"        # 50% black
+TUM_GRAY_20 = "#CCCCCC"        # 20% black
+TUM_BLACK = "#000000"
+TUM_WHITE = "#FFFFFF"
+
 def plot_mean_rair_rsr_by_faith(long_df: pd.DataFrame, out_path: str = "mean_rair_rsr_by_faith.png") -> str:
     """
     Compute mean RAIR (on RAIR-eligible subset) and mean RSR (on RSR-eligible subset)
@@ -49,7 +64,7 @@ def plot_mean_conf_change_by_faith(long_df: pd.DataFrame, out_path: str = "mean_
     summary["faith_label"] = summary["faith"].map({1: "Faithful", 0: "Unfaithful"})
 
     plt.figure(figsize=(6,4))
-    sns.barplot(data=summary, x="faith_label", y="delta_conf", color="#4C78A8")
+    sns.barplot(data=summary, x="faith_label", y="delta_conf", color=TUM_BLUE)
     plt.ylabel("Mean Confidence Change (post - pre)")
     plt.xlabel("")
     plt.title("Average Confidence Change by Faithfulness")
@@ -71,7 +86,7 @@ def plot_mean_final_accuracy_by_faith(long_df: pd.DataFrame, out_path: str = "me
     summary["faith_label"] = summary["faith"].map({1: "Faithful", 0: "Unfaithful"})
 
     plt.figure(figsize=(6,4))
-    sns.barplot(data=summary, x="faith_label", y="post_correct", color="#72B7B2")
+    sns.barplot(data=summary, x="faith_label", y="post_correct", color=TUM_MED_BLUE)
     plt.ylabel("Mean Final Accuracy (post == GT)")
     plt.xlabel("")
     plt.title("Mean Final Task Accuracy by Faithfulness")
@@ -90,7 +105,7 @@ def plot_plausibility_violin_by_faith(long_df: pd.DataFrame, out_path: str = "pl
     df["faith_label"] = df["faith"].map({1: "Faithful", 0: "Unfaithful"})
 
     plt.figure(figsize=(7,4))
-    sns.violinplot(data=df, x="faith_label", y="plaus", inner="box", cut=0, palette=["#4C78A8", "#F58518"])
+    sns.violinplot(data=df, x="faith_label", y="plaus", inner="box", cut=0, palette=[TUM_BLUE, TUM_ORANGE])
     plt.xlabel("")
     plt.ylabel("Plausibility (1–5)")
     plt.title("Plausibility by Faithfulness")
@@ -127,8 +142,8 @@ def plot_per_question_accuracy(long_df: pd.DataFrame, out_path: str = "per_quest
     before = accuracy_by_q["Before"].values
     after = accuracy_by_q["After"].values
     
-    plt.bar(x - width/2, before, width, label="Before (Initial)", color="#4C78A8", alpha=0.8)
-    plt.bar(x + width/2, after, width, label="After (Post-explanation)", color="#F58518", alpha=0.8)
+    plt.bar(x - width/2, before, width, label="Before (Initial)", color=TUM_BLUE, alpha=0.8)
+    plt.bar(x + width/2, after, width, label="After (Post-explanation)", color=TUM_ORANGE, alpha=0.8)
     
     # Add chance line at 0.5
     plt.axhline(0.5, color="gray", linestyle="--", linewidth=1.5, label="Chance (50%)")
@@ -170,7 +185,7 @@ def plot_conf_vs_rair_scatter(long_df: pd.DataFrame, out_path: str = "conf_vs_ra
     plt.figure(figsize=(7, 5))
     
     bars = plt.bar(range(len(binned_rair)), binned_rair['mean_rair'], 
-                   color="#4C78A8", alpha=0.8, edgecolor="black")
+                   color=TUM_BLUE, alpha=0.8, edgecolor="black")
     
     # Add count labels on top of bars
     for i, (bar, count) in enumerate(zip(bars, binned_rair['count'])):
@@ -214,7 +229,7 @@ def plot_conf_vs_rsr_scatter(long_df: pd.DataFrame, out_path: str = "conf_vs_rsr
     plt.figure(figsize=(7, 5))
     
     bars = plt.bar(range(len(binned_rsr)), binned_rsr['mean_rsr'], 
-                   color="#F58518", alpha=0.8, edgecolor="black")
+                   color=TUM_ORANGE, alpha=0.8, edgecolor="black")
     
     # Add count labels on top of bars
     for i, (bar, count) in enumerate(zip(bars, binned_rsr['count'])):
@@ -261,8 +276,8 @@ def plot_rair_rsr_by_modelsize(long_df: pd.DataFrame, out_path: str = "rair_rsr_
     x = np.arange(len(summary))
     width = 0.35
     
-    bars1 = plt.bar(x - width/2, summary["mean_rair"], width, label="RAIR", color="#4C78A8", alpha=0.8, edgecolor="black")
-    bars2 = plt.bar(x + width/2, summary["mean_rsr"], width, label="RSR", color="#F58518", alpha=0.8, edgecolor="black")
+    bars1 = plt.bar(x - width/2, summary["mean_rair"], width, label="RAIR", color=TUM_BLUE, alpha=0.8, edgecolor="black")
+    bars2 = plt.bar(x + width/2, summary["mean_rsr"], width, label="RSR", color=TUM_ORANGE, alpha=0.8, edgecolor="black")
     
     # Add value labels on bars
     for bar, val in zip(bars1, summary["mean_rair"]):
@@ -312,7 +327,7 @@ def plot_conf_change_by_modelsize(long_df: pd.DataFrame, out_path: str = "conf_c
     plt.figure(figsize=(7, 5))
     
     bars = plt.bar(range(len(summary)), summary['mean'], 
-                   color=["#72B7B2", "#4C78A8"], alpha=0.8, edgecolor="black", width=0.6)
+                   color=[TUM_MED_BLUE, TUM_BLUE], alpha=0.8, edgecolor="black", width=0.6)
     
     # Add error bars (standard deviation)
     plt.errorbar(range(len(summary)), summary['mean'], yerr=summary['std'], 
@@ -374,8 +389,8 @@ def plot_plaus_vs_rair_rsr(long_df: pd.DataFrame, out_path: str = "plaus_vs_rair
     x = np.arange(len(summary))
     width = 0.35
     
-    bars1 = plt.bar(x - width/2, summary["mean_rair"], width, label="RAIR", color="#4C78A8", alpha=0.8, edgecolor="black")
-    bars2 = plt.bar(x + width/2, summary["mean_rsr"], width, label="RSR", color="#F58518", alpha=0.8, edgecolor="black")
+    bars1 = plt.bar(x - width/2, summary["mean_rair"], width, label="RAIR", color=TUM_BLUE, alpha=0.8, edgecolor="black")
+    bars2 = plt.bar(x + width/2, summary["mean_rsr"], width, label="RSR", color=TUM_ORANGE, alpha=0.8, edgecolor="black")
     
     # Add value labels on bars
     for bar, val, count in zip(bars1, summary["mean_rair"], summary["count_rair"]):
@@ -426,7 +441,7 @@ def plot_accuracy_by_modelsize(long_df: pd.DataFrame, out_path: str = "accuracy_
     plt.figure(figsize=(7, 5))
     
     bars = plt.bar(range(len(summary)), summary['mean'], 
-                   color=["#72B7B2", "#4C78A8"], alpha=0.8, edgecolor="black", width=0.6)
+                   color=[TUM_MED_BLUE, TUM_BLUE], alpha=0.8, edgecolor="black", width=0.6)
     
     # Add error bars (standard deviation)
     plt.errorbar(range(len(summary)), summary['mean'], yerr=summary['std'], 
@@ -472,7 +487,7 @@ def plot_plausibility_by_modelsize(long_df: pd.DataFrame, out_path: str = "plaus
     plt.figure(figsize=(7, 5))
     
     bars = plt.bar(range(len(summary)), summary['mean'], 
-                   color=["#72B7B2", "#4C78A8"], alpha=0.8, edgecolor="black", width=0.6)
+                   color=[TUM_MED_BLUE, TUM_BLUE], alpha=0.8, edgecolor="black", width=0.6)
     
     # Add error bars (standard deviation)
     plt.errorbar(range(len(summary)), summary['mean'], yerr=summary['std'], 
@@ -547,8 +562,8 @@ def plot_confidence_plausibility_distribution(df_trials: pd.DataFrame, out_path:
         
         x = np.array(all_vals)
         width = 0.35
-        ax1.bar(x - width/2, conf1_freq, width, label="Before (Conf1)", color="#4C78A8", alpha=0.8, edgecolor="black")
-        ax1.bar(x + width/2, conf2_freq, width, label="After (Conf2)", color="#F58518", alpha=0.8, edgecolor="black")
+        ax1.bar(x - width/2, conf1_freq, width, label="Before (Conf1)", color=TUM_BLUE, alpha=0.8, edgecolor="black")
+        ax1.bar(x + width/2, conf2_freq, width, label="After (Conf2)", color=TUM_ORANGE, alpha=0.8, edgecolor="black")
         
         ax1.set_xlabel("Confidence Rating (1-7)")
         ax1.set_ylabel("Frequency")
@@ -577,7 +592,7 @@ def plot_confidence_plausibility_distribution(df_trials: pd.DataFrame, out_path:
     ax2 = axes[1]
     if plaus_values:
         plaus_counts = pd.Series(plaus_values).value_counts().sort_index()
-        ax2.bar(plaus_counts.index, plaus_counts.values, color="#72B7B2", alpha=0.8, edgecolor="black")
+        ax2.bar(plaus_counts.index, plaus_counts.values, color=TUM_MED_BLUE, alpha=0.8, edgecolor="black")
         ax2.set_xlabel("Plausibility Rating (1-5)")
         ax2.set_ylabel("Frequency")
         ax2.set_title("Distribution of Plausibility Ratings")
