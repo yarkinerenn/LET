@@ -57,7 +57,8 @@ from plots import (
     plot_plaus_vs_rair_rsr,
     plot_accuracy_by_modelsize,
     plot_plausibility_by_modelsize,
-    plot_confidence_plausibility_distribution
+    plot_confidence_plausibility_distribution,
+    plot_human_accuracy_before_after
 )
 
 def logit(formula, data):
@@ -872,6 +873,7 @@ def main():
     plot_mean_final_accuracy_by_faith(long_df)
     plot_plausibility_violin_by_faith(long_df)
     plot_per_question_accuracy(long_df)
+    plot_human_accuracy_before_after(long_df)
     plot_confidence_plausibility_distribution(df_trials)
     plot_conf_vs_rair_scatter(long_df)
     plot_conf_vs_rsr_scatter(long_df)

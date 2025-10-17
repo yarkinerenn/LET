@@ -517,6 +517,76 @@ def plot_plausibility_by_modelsize(long_df: pd.DataFrame, out_path: str = "plaus
     
     return out_path
 
+def plot_human_accuracy_before_after(long_df: pd.DataFrame, out_path: str = "human_accuracy_before_after.png") -> str:
+    """
+    Bar plot comparing initial human accuracy (before AI) vs final accuracy (after seeing AI).
+    Shows overall improvement in human decision-making after exposure to AI explanations.
+    """
+    df = long_df.copy()
+    
+    # Compute pre and post accuracy
+    df["pre_correct"] = (df["pre"] == df["gt"]).astype(float)
+    df["post_correct"] = (df["post"] == df["gt"]).astype(float)
+    
+    # Calculate means and standard deviations
+    pre_mean = df["pre_correct"].mean()
+    post_mean = df["post_correct"].mean()
+    
+    pre_std = df["pre_correct"].std()
+    post_std = df["post_correct"].std()
+    
+    n = len(df)
+    
+    # Create bar plot
+    plt.figure(figsize=(7, 5))
+    
+    labels = ['Initial\n(Before AI)', 'Final\n(After AI)']
+    means = [pre_mean, post_mean]
+    stds = [pre_std, post_std]
+    colors = [TUM_BLUE, TUM_ORANGE]
+    
+    bars = plt.bar(range(2), means, color=colors, alpha=0.8, edgecolor="black", width=0.6)
+    
+    # Add error bars (standard deviation)
+    plt.errorbar(range(2), means, yerr=stds, 
+                 fmt='none', ecolor='black', capsize=5, alpha=0.7)
+    
+    # Add value labels on top of bars
+    for i, (bar, mean_val, std_val) in enumerate(zip(bars, means, stds)):
+        height = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2., height + std_val + 0.02,
+                f'M={mean_val:.3f}\n(SD={std_val:.3f})', ha='center', va='bottom', fontsize=9)
+    
+    plt.xticks(range(2), labels)
+    plt.ylabel("Accuracy (Proportion Correct)")
+    plt.xlabel("")
+    plt.title("Human Accuracy: Before vs After AI Explanations")
+    plt.ylim(0, 1)
+    
+    # Add chance line
+    plt.axhline(0.5, color=TUM_GRAY_50, linestyle='--', linewidth=1, alpha=0.7, label="Chance (50%)")
+    
+    # Add improvement annotation
+    improvement = post_mean - pre_mean
+    improvement_pct = (improvement / pre_mean) * 100
+    plt.text(0.5, 0.05, f'Improvement: {improvement:+.3f} ({improvement_pct:+.1f}%)', 
+             ha='center', fontsize=10, 
+             bbox=dict(boxstyle="round", facecolor=TUM_BEIGE, alpha=0.8))
+    
+    plt.legend(loc="upper right")
+    plt.grid(axis="y", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=200)
+    plt.close()
+    
+    print(f"Saved plot to {out_path}")
+    print(f"Initial accuracy: M = {pre_mean:.3f}, SD = {pre_std:.3f}")
+    print(f"Final accuracy: M = {post_mean:.3f}, SD = {post_std:.3f}")
+    print(f"Improvement: {improvement:.3f} ({improvement_pct:+.1f}%)")
+    print(f"Total observations: n = {n}")
+    
+    return out_path
+
 def plot_confidence_plausibility_distribution(df_trials: pd.DataFrame, out_path: str = "confidence_plausibility_distribution.png") -> str:
     """
     Plot distributions of confidence ratings (before/after, assumed 1-7 scale) and plausibility (1-5 scale).
