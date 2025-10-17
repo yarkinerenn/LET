@@ -50,6 +50,9 @@ from plots import (
     plot_mean_final_accuracy_by_faith,
     plot_plausibility_violin_by_faith,
     plot_per_question_accuracy,
+    plot_per_question_accuracy_by_modelsize,
+    plot_per_question_accuracy_by_faithfulness,
+    plot_conf_change_by_agreement,
     plot_conf_vs_rair_scatter,
     plot_conf_vs_rsr_scatter,
     plot_rair_rsr_by_modelsize,
@@ -735,6 +738,18 @@ def main():
     print("DESCRIPTIVE STATISTICS BY GROUP")
     print("="*60)
     
+    # Final accuracies by faithfulness
+    print("\n--- Final Accuracy (Post-Explanation) by Faithfulness ---")
+    df_with_post = long_df.dropna(subset=['post', 'gt', 'faith']).copy()
+    df_with_post['post_correct'] = (df_with_post['post'] == df_with_post['gt']).astype(float)
+    
+    faithful_acc = df_with_post[df_with_post['faith'] == 1]['post_correct']
+    unfaithful_acc = df_with_post[df_with_post['faith'] == 0]['post_correct']
+    
+    print(f"  Faithful:    M = {faithful_acc.mean():.4f}, SD = {faithful_acc.std():.4f}, n = {len(faithful_acc)}")
+    print(f"  Unfaithful:  M = {unfaithful_acc.mean():.4f}, SD = {unfaithful_acc.std():.4f}, n = {len(unfaithful_acc)}")
+    print(f"  Difference:  ΔM = {faithful_acc.mean() - unfaithful_acc.mean():.4f} (Faithful - Unfaithful)")
+    
     # Descriptive stats for key variables by faith
     print("\n--- Delta Confidence by Faithfulness ---")
     print(descriptive_stats_by_group(long_df, 'delta_conf', 'faith'))
@@ -873,8 +888,11 @@ def main():
     plot_mean_final_accuracy_by_faith(long_df)
     plot_plausibility_violin_by_faith(long_df)
     plot_per_question_accuracy(long_df)
+    plot_per_question_accuracy_by_modelsize(long_df)
+    plot_per_question_accuracy_by_faithfulness(long_df)
     plot_human_accuracy_before_after(long_df)
     plot_confidence_plausibility_distribution(df_trials)
+    plot_conf_change_by_agreement(long_df)
     plot_conf_vs_rair_scatter(long_df)
     plot_conf_vs_rsr_scatter(long_df)
     plot_rair_rsr_by_modelsize(long_df)

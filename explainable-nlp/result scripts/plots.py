@@ -161,6 +161,179 @@ def plot_per_question_accuracy(long_df: pd.DataFrame, out_path: str = "per_quest
     print(f"Saved plot to {out_path}")
     return out_path
 
+
+def plot_per_question_accuracy_by_modelsize(long_df: pd.DataFrame, out_path: str = "per_question_accuracy_by_modelsize.png") -> str:
+    """
+    Plot accuracy per question showing:
+    1. Initial accuracy (before seeing AI explanations)
+    2. Small LLM accuracy (after seeing small LLM explanations)
+    3. Large LLM accuracy (after seeing large LLM explanations)
+    """
+    df = long_df.copy()
+    df["pre_correct"] = (df["pre"] == df["gt"]).astype(float)
+    df["post_correct"] = (df["post"] == df["gt"]).astype(float)
+    
+    # Initial accuracy (same for all, averaged across all participants)
+    initial_acc = df.groupby("Q")["pre_correct"].mean().reset_index()
+    initial_acc.columns = ["Question", "Initial"]
+    
+    # Small LLM accuracy (model_size == 0)
+    small_llm = df[df["model_size"] == 0].groupby("Q")["post_correct"].mean().reset_index()
+    small_llm.columns = ["Question", "Small_LLM"]
+    
+    # Large LLM accuracy (model_size == 1)
+    large_llm = df[df["model_size"] == 1].groupby("Q")["post_correct"].mean().reset_index()
+    large_llm.columns = ["Question", "Large_LLM"]
+    
+    # Merge all together
+    accuracy_by_q = initial_acc.merge(small_llm, on="Question", how="left").merge(large_llm, on="Question", how="left")
+    
+    # Plot
+    plt.figure(figsize=(14, 6))
+    x = np.arange(1, 17)
+    width = 0.25
+    
+    initial = accuracy_by_q["Initial"].values
+    small = accuracy_by_q["Small_LLM"].values
+    large = accuracy_by_q["Large_LLM"].values
+    
+    plt.bar(x - width, initial, width, label="Initial (Before)", color=TUM_GRAY_50, alpha=0.8)
+    plt.bar(x, small, width, label="Small LLM (Llama 3.1 8B)", color=TUM_LIGHT_BLUE, alpha=0.8)
+    plt.bar(x + width, large, width, label="Large LLM (Llama 3.3 70B)", color=TUM_BLUE, alpha=0.8)
+    
+    # Add chance line at 0.5
+    plt.axhline(0.5, color="gray", linestyle="--", linewidth=1.5, label="Chance (50%)")
+    
+    plt.xlabel("Question Number")
+    plt.ylabel("Accuracy (Proportion Correct)")
+    plt.title("Accuracy per Question: Initial vs. Small vs. Large LLM")
+    plt.xticks(x)
+    plt.ylim(0, 1)
+    plt.legend(loc="best")
+    plt.grid(axis="y", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=200)
+    plt.close()
+    print(f"Saved plot to {out_path}")
+    return out_path
+
+
+def plot_per_question_accuracy_by_faithfulness(long_df: pd.DataFrame, out_path: str = "per_question_accuracy_by_faithfulness.png") -> str:
+    """
+    Plot accuracy per question showing:
+    1. Initial accuracy (before seeing AI explanations)
+    2. Faithful explanations accuracy (after seeing faithful explanations)
+    3. Unfaithful explanations accuracy (after seeing unfaithful explanations)
+    """
+    df = long_df.copy()
+    df["pre_correct"] = (df["pre"] == df["gt"]).astype(float)
+    df["post_correct"] = (df["post"] == df["gt"]).astype(float)
+    
+    # Initial accuracy (same for all, averaged across all participants)
+    initial_acc = df.groupby("Q")["pre_correct"].mean().reset_index()
+    initial_acc.columns = ["Question", "Initial"]
+    
+    # Faithful explanations accuracy (faith == 1)
+    faithful = df[df["faith"] == 1].groupby("Q")["post_correct"].mean().reset_index()
+    faithful.columns = ["Question", "Faithful"]
+    
+    # Unfaithful explanations accuracy (faith == 0)
+    unfaithful = df[df["faith"] == 0].groupby("Q")["post_correct"].mean().reset_index()
+    unfaithful.columns = ["Question", "Unfaithful"]
+    
+    # Merge all together
+    accuracy_by_q = initial_acc.merge(faithful, on="Question", how="left").merge(unfaithful, on="Question", how="left")
+    
+    # Plot
+    plt.figure(figsize=(14, 6))
+    x = np.arange(1, 17)
+    width = 0.25
+    
+    initial = accuracy_by_q["Initial"].values
+    faith = accuracy_by_q["Faithful"].values
+    unfaith = accuracy_by_q["Unfaithful"].values
+    
+    plt.bar(x - width, initial, width, label="Initial (Before)", color=TUM_GRAY_50, alpha=0.8)
+    plt.bar(x, faith, width, label="Faithful", color=TUM_GREEN, alpha=0.8)
+    plt.bar(x + width, unfaith, width, label="Unfaithful", color=TUM_ORANGE, alpha=0.8)
+    
+    # Add chance line at 0.5
+    plt.axhline(0.5, color="gray", linestyle="--", linewidth=1.5, label="Chance (50%)")
+    
+    plt.xlabel("Question Number")
+    plt.ylabel("Accuracy (Proportion Correct)")
+    plt.title("Accuracy per Question: Initial vs. Faithful vs. Unfaithful")
+    plt.xticks(x)
+    plt.ylim(0, 1)
+    plt.legend(loc="best")
+    plt.grid(axis="y", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=200)
+    plt.close()
+    print(f"Saved plot to {out_path}")
+    return out_path
+
+def plot_conf_change_by_agreement(long_df: pd.DataFrame, out_path: str = "conf_change_by_agreement.png") -> str:
+    """
+    Plot confidence change based on whether human and AI initially agreed or disagreed.
+    Agreement: Human's initial answer (pre) matches AI's prediction (ai)
+    Disagreement: Human's initial answer (pre) differs from AI's prediction (ai)
+    """
+    df = long_df.dropna(subset=["delta_conf", "pre", "ai"]).copy()
+    
+    # Create agreement variable: 1 if human and AI agree initially, 0 if they disagree
+    df["agreement"] = (df["pre"] == df["ai"]).astype(int)
+    
+    # Calculate mean confidence change by agreement
+    summary = df.groupby("agreement")["delta_conf"].agg(['mean', 'std', 'count']).reset_index()
+    summary["agreement_label"] = summary["agreement"].map({1: "Agreement\n(Human = AI)", 0: "Disagreement\n(Human ≠ AI)"})
+    
+    # Calculate 95% CI
+    summary['se'] = summary['std'] / np.sqrt(summary['count'])
+    summary['ci'] = 1.96 * summary['se']
+    
+    # Plot
+    plt.figure(figsize=(8, 6))
+    x = np.arange(len(summary))
+    
+    bars = plt.bar(x, summary["mean"], color=[TUM_BLUE, TUM_ORANGE], alpha=0.8, edgecolor="black", linewidth=1.5)
+    
+    # Add error bars
+    plt.errorbar(x, summary["mean"], yerr=summary["ci"], fmt='none', ecolor='black', capsize=5, capthick=2)
+    
+    # Add value labels on bars
+    for i, (idx, row) in enumerate(summary.iterrows()):
+        plt.text(i, row["mean"] + row["ci"] + 0.02, f"{row['mean']:.3f}", 
+                ha='center', va='bottom', fontsize=10, fontweight='bold')
+    
+    # Add sample size labels
+    for i, (idx, row) in enumerate(summary.iterrows()):
+        plt.text(i, -0.05, f"n = {int(row['count'])}", 
+                ha='center', va='top', fontsize=9, style='italic')
+    
+    plt.xticks(x, summary["agreement_label"])
+    plt.ylabel("Mean Confidence Change (post - pre)", fontsize=11)
+    plt.xlabel("")
+    plt.title("Confidence Change: Agreement vs. Disagreement with AI", fontsize=12, fontweight='bold')
+    plt.axhline(0, color="gray", linestyle="--", linewidth=1.5, alpha=0.7)
+    plt.grid(axis="y", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=200)
+    plt.close()
+    
+    # Print summary statistics
+    print(f"\nConfidence Change by Agreement:")
+    print(f"  Agreement (Human = AI): M = {summary.loc[summary['agreement']==1, 'mean'].values[0]:.3f}, "
+          f"SD = {summary.loc[summary['agreement']==1, 'std'].values[0]:.3f}, "
+          f"n = {int(summary.loc[summary['agreement']==1, 'count'].values[0])}")
+    print(f"  Disagreement (Human ≠ AI): M = {summary.loc[summary['agreement']==0, 'mean'].values[0]:.3f}, "
+          f"SD = {summary.loc[summary['agreement']==0, 'std'].values[0]:.3f}, "
+          f"n = {int(summary.loc[summary['agreement']==0, 'count'].values[0])}")
+    
+    print(f"Saved plot to {out_path}")
+    return out_path
+
+
 def plot_conf_vs_rair_scatter(long_df: pd.DataFrame, out_path: str = "conf_vs_rair_scatter.png") -> str:
     """
     Binned bar plot of confidence change (delta_conf) vs RAIR (changed_to_correct).
