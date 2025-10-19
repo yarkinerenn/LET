@@ -118,7 +118,13 @@ def compute_rair_global(df_trials: pd.DataFrame, n_trials: int = 16) -> tuple[pd
     }
 def build_full_with_deltas_and_labels():
     # === Config ===
-    file_paths = ["experiment.xlsx", "experiment2.xlsx"]
+    # Each tuple: (file_path, form)
+    file_paths = [
+        ("experiment.xlsx", "A"),
+        ("Prolific-big-small.xlsx", "A"),
+        ("experiment2.xlsx", "B"),
+        ("Prolific-small-big.xlsx", "B"),
+    ]
     sheet = 0
     start_col_index = 8   # 0-based index of the first trial column
     n_trials = 16
@@ -134,24 +140,24 @@ def build_full_with_deltas_and_labels():
     AI_LABELS    = list(AI_STRING.strip())
     FAITH_LABELS = list(FAITH_STRING.strip())
 
-    # === Load and combine both files ===
+    # === Load and combine all files ===
     df_orig = None
-    for i, file_path in enumerate(file_paths):
+    for i, (file_path, form) in enumerate(file_paths):
         try:
             df_temp = pd.read_excel(file_path, sheet_name=sheet)
-            # Add Form column: A for experiment.xlsx, B for experiment2.xlsx
-            df_temp["Form"] = "A" if i == 0 else "B"
+            # Add Form column based on the tuple
+            df_temp["Form"] = form
             
             if i == 0:
                 # First file - use as base
                 df_orig = df_temp
-                print(f"Loaded {len(df_temp)} rows from {file_path} (base file)")
+                print(f"Loaded {len(df_temp)} rows from {file_path} as Form {form} (base file)")
             else:
                 # Subsequent files - align columns and append
                 # Use the column names from the first file
                 df_temp.columns = df_orig.columns
                 df_orig = pd.concat([df_orig, df_temp], ignore_index=True)
-                print(f"Loaded {len(df_temp)} rows from {file_path} (appended)")
+                print(f"Loaded {len(df_temp)} rows from {file_path} as Form {form} (appended)")
                 
         except FileNotFoundError:
             print(f"Warning: {file_path} not found, skipping...")
