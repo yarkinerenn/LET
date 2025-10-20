@@ -334,6 +334,142 @@ def plot_conf_change_by_agreement(long_df: pd.DataFrame, out_path: str = "conf_c
     return out_path
 
 
+def plot_aor_scatter_by_faith(long_df: pd.DataFrame, out_path: str = "aor_by_faith_scatter.png") -> str:
+    """
+    Plot RAIR (x-axis) vs RSR (y-axis) as two points: Faithful vs Unfaithful.
+    Also annotate AOR for each group, defined as the mean of RAIR and RSR:
+        AOR = (RAIR + RSR) / 2
+    """
+    # RAIR-eligible: AI correct & human initially wrong
+    df_rair = long_df[(long_df["ai_correct"]==1) & (long_df["human_pre_correct"]==0)].copy()
+    df_rair["rair"] = df_rair["changed_to_correct"].astype(float)
+    rair_by_faith = df_rair.groupby("faith")["rair"].mean().rename("RAIR")
+
+    # RSR-eligible: AI wrong & human initially correct
+    df_rsr = long_df[(long_df["ai_correct"]==0) & (long_df["human_pre_correct"]==1)].copy()
+    df_rsr["rsr"] = df_rsr["stayed_correct"].astype(float)
+    rsr_by_faith = df_rsr.groupby("faith")["rsr"].mean().rename("RSR")
+
+    # Combine
+    summary = pd.concat([rair_by_faith, rsr_by_faith], axis=1).reset_index()  # columns: faith, RAIR, RSR
+    summary["faith_label"] = summary["faith"].map({1: "Faithful", 0: "Unfaithful"})
+    summary["AOR"] = (summary["RAIR"] + summary["RSR"]) / 2.0
+
+    # Plot scatter
+    plt.figure(figsize=(6, 6))
+    # Use TUM blue palette for both groups to match requested styling
+    colors = summary["faith"].map({1: TUM_BLUE, 0: TUM_LIGHT_BLUE}).values
+    plt.scatter(summary["RAIR"], summary["RSR"], s=180, c=colors, edgecolor="black", linewidth=1.5)
+
+    # Annotate each point with label and AOR
+    for _, row in summary.iterrows():
+        label = f"{row['faith_label']}\nAOR={row['AOR']:.3f}"
+        # Place Faithful label below the dot to avoid overlap; Unfaithful above
+        if int(row["faith"]) == 1:
+            plt.annotate(label, (row["RAIR"], row["RSR"]), xytext=(8, -12), textcoords="offset points",
+                         ha="left", va="top",
+                         bbox=dict(boxstyle="round", facecolor="white", alpha=0.9))
+        else:
+            plt.annotate(label, (row["RAIR"], row["RSR"]), xytext=(8, 10), textcoords="offset points",
+                         ha="left", va="bottom",
+                         bbox=dict(boxstyle="round", facecolor="white", alpha=0.9))
+
+    # Formatting
+    plt.xlabel("RAIR (AI correct & human initially wrong -> changed to correct)")
+    plt.ylabel("RSR (AI wrong & human initially correct -> stayed correct)")
+    plt.title("AOR Scatter by Faithfulness: RAIR (x) vs RSR (y)")
+    plt.xlim(0, 1)
+    plt.ylim(0, 1)
+    plt.grid(True, alpha=0.3)
+
+    # Legend handles
+    from matplotlib.lines import Line2D
+    legend_elements = [
+        Line2D([0], [0], marker='o', color='w', label='Faithful', markerfacecolor=TUM_BLUE, markeredgecolor='black', markersize=10),
+        Line2D([0], [0], marker='o', color='w', label='Unfaithful', markerfacecolor=TUM_LIGHT_BLUE, markeredgecolor='black', markersize=10)
+    ]
+    plt.legend(handles=legend_elements, loc="lower right")
+
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=200)
+    plt.close()
+
+    # Print summary
+    print("RAIR/RSR/AOR by Faithfulness:")
+    for _, row in summary.iterrows():
+        print(f"  {row['faith_label']}: RAIR={row['RAIR']:.3f}, RSR={row['RSR']:.3f}, AOR={row['AOR']:.3f}")
+
+    print(f"Saved plot to {out_path}")
+    return out_path
+
+
+def plot_aor_scatter_by_modelsize(long_df: pd.DataFrame, out_path: str = "aor_by_modelsize_scatter.png") -> str:
+    """
+    Plot RAIR (x-axis) vs RSR (y-axis) as two points: Small vs Large LLMs.
+    Annotate AOR = (RAIR + RSR)/2 for each.
+    model_size: 0 = Small LLM, 1 = Large LLM
+    """
+    # RAIR-eligible subset
+    df_rair = long_df[(long_df["ai_correct"]==1) & (long_df["human_pre_correct"]==0)].copy()
+    df_rair["rair"] = df_rair["changed_to_correct"].astype(float)
+    rair_by_size = df_rair.groupby("model_size")["rair"].mean().rename("RAIR")
+
+    # RSR-eligible subset
+    df_rsr = long_df[(long_df["ai_correct"]==0) & (long_df["human_pre_correct"]==1)].copy()
+    df_rsr["rsr"] = df_rsr["stayed_correct"].astype(float)
+    rsr_by_size = df_rsr.groupby("model_size")["rsr"].mean().rename("RSR")
+
+    # Combine
+    summary = pd.concat([rair_by_size, rsr_by_size], axis=1).reset_index()  # columns: model_size, RAIR, RSR
+    summary["size_label"] = summary["model_size"].map({0: "Small LLM\n(Llama 3.1 8B)", 1: "Large LLM\n(Llama 3.3 70B)"})
+    summary["AOR"] = (summary["RAIR"] + summary["RSR"]) / 2.0
+
+    # Plot scatter with TUM blues
+    plt.figure(figsize=(6, 6))
+    colors = summary["model_size"].map({1: TUM_BLUE, 0: TUM_LIGHT_BLUE}).values
+    plt.scatter(summary["RAIR"], summary["RSR"], s=180, c=colors, edgecolor="black", linewidth=1.5)
+
+    # Annotate: Large above, Small below to avoid overlap
+    for _, row in summary.iterrows():
+        label = f"{row['size_label']}\nAOR={row['AOR']:.3f}"
+        if int(row["model_size"]) == 0:
+            plt.annotate(label, (row["RAIR"], row["RSR"]), xytext=(8, -12), textcoords="offset points",
+                         ha="left", va="top",
+                         bbox=dict(boxstyle="round", facecolor="white", alpha=0.9))
+        else:
+            plt.annotate(label, (row["RAIR"], row["RSR"]), xytext=(8, 10), textcoords="offset points",
+                         ha="left", va="bottom",
+                         bbox=dict(boxstyle="round", facecolor="white", alpha=0.9))
+
+    # Axes and layout
+    plt.xlabel("RAIR (AI correct & human initially wrong -> changed to correct)")
+    plt.ylabel("RSR (AI wrong & human initially correct -> stayed correct)")
+    plt.title("AOR Scatter by Model Size: RAIR (x) vs RSR (y)")
+    plt.xlim(0, 1)
+    plt.ylim(0, 1)
+    plt.grid(True, alpha=0.3)
+
+    from matplotlib.lines import Line2D
+    legend_elements = [
+        Line2D([0], [0], marker='o', color='w', label='Large LLM', markerfacecolor=TUM_BLUE, markeredgecolor='black', markersize=10),
+        Line2D([0], [0], marker='o', color='w', label='Small LLM', markerfacecolor=TUM_LIGHT_BLUE, markeredgecolor='black', markersize=10)
+    ]
+    plt.legend(handles=legend_elements, loc="lower right")
+
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=200)
+    plt.close()
+
+    # Print summary
+    print("RAIR/RSR/AOR by Model Size:")
+    for _, row in summary.iterrows():
+        size = "Large" if int(row["model_size"]) == 1 else "Small"
+        print(f"  {size}: RAIR={row['RAIR']:.3f}, RSR={row['RSR']:.3f}, AOR={row['AOR']:.3f}")
+
+    print(f"Saved plot to {out_path}")
+    return out_path
+
+
 def plot_conf_vs_rair_scatter(long_df: pd.DataFrame, out_path: str = "conf_vs_rair_scatter.png") -> str:
     """
     Binned bar plot of confidence change (delta_conf) vs RAIR (changed_to_correct).

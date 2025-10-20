@@ -52,6 +52,8 @@ from plots import (
     plot_per_question_accuracy,
     plot_per_question_accuracy_by_modelsize,
     plot_per_question_accuracy_by_faithfulness,
+    plot_aor_scatter_by_faith,
+    plot_aor_scatter_by_modelsize,
     plot_conf_change_by_agreement,
     plot_conf_vs_rair_scatter,
     plot_conf_vs_rsr_scatter,
@@ -892,6 +894,8 @@ def main():
     plot_per_question_accuracy_by_faithfulness(long_df)
     plot_human_accuracy_before_after(long_df)
     plot_confidence_plausibility_distribution(df_trials)
+    plot_aor_scatter_by_faith(long_df)
+    plot_aor_scatter_by_modelsize(long_df)
     plot_conf_change_by_agreement(long_df)
     plot_conf_vs_rair_scatter(long_df)
     plot_conf_vs_rsr_scatter(long_df)
