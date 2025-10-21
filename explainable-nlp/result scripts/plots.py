@@ -273,6 +273,67 @@ def plot_per_question_accuracy_by_faithfulness(long_df: pd.DataFrame, out_path: 
     print(f"Saved plot to {out_path}")
     return out_path
 
+def plot_plausibility_by_agreement(long_df: pd.DataFrame, out_path: str = "plausibility_by_agreement.png") -> str:
+    """
+    Plot plausibility ratings based on whether human and AI initially agreed or disagreed.
+    Agreement: Human's initial answer (pre) matches AI's prediction (ai)
+    Disagreement: Human's initial answer (pre) differs from AI's prediction (ai)
+    """
+    df = long_df.dropna(subset=["plaus", "pre", "ai"]).copy()
+    
+    # Create agreement variable: 1 if human and AI agree initially, 0 if they disagree
+    df["agreement"] = (df["pre"] == df["ai"]).astype(int)
+    
+    # Calculate mean plausibility by agreement
+    summary = df.groupby("agreement")["plaus"].agg(['mean', 'std', 'count']).reset_index()
+    summary["agreement_label"] = summary["agreement"].map({1: "Agreement\n(Human = AI)", 0: "Disagreement\n(Human ≠ AI)"})
+    
+    # Calculate 95% CI
+    summary['se'] = summary['std'] / np.sqrt(summary['count'])
+    summary['ci'] = 1.96 * summary['se']
+    
+    # Plot
+    plt.figure(figsize=(8, 6))
+    x = np.arange(len(summary))
+    
+    bars = plt.bar(x, summary["mean"], color=[TUM_BLUE, TUM_ORANGE], alpha=0.8, edgecolor="black", linewidth=1.5)
+    
+    # Add error bars
+    plt.errorbar(x, summary["mean"], yerr=summary["ci"], fmt='none', ecolor='black', capsize=5, capthick=2)
+    
+    # Add value labels on bars
+    for i, (idx, row) in enumerate(summary.iterrows()):
+        plt.text(i, row["mean"] + row["ci"] + 0.05, f"{row['mean']:.3f}", 
+                ha='center', va='bottom', fontsize=10, fontweight='bold')
+    
+    # Add sample size labels
+    for i, (idx, row) in enumerate(summary.iterrows()):
+        plt.text(i, 0.3, f"n = {int(row['count'])}", 
+                ha='center', va='bottom', fontsize=9, style='italic')
+    
+    plt.xticks(x, summary["agreement_label"])
+    plt.ylabel("Mean Plausibility Rating (1-5)", fontsize=11)
+    plt.xlabel("")
+    plt.title("Plausibility: Agreement vs. Disagreement with AI", fontsize=12, fontweight='bold')
+    plt.ylim(0, 5.5)
+    plt.grid(axis="y", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=200)
+    plt.close()
+    
+    # Print summary statistics
+    print(f"\nPlausibility by Agreement:")
+    print(f"  Agreement (Human = AI): M = {summary.loc[summary['agreement']==1, 'mean'].values[0]:.3f}, "
+          f"SD = {summary.loc[summary['agreement']==1, 'std'].values[0]:.3f}, "
+          f"n = {int(summary.loc[summary['agreement']==1, 'count'].values[0])}")
+    print(f"  Disagreement (Human ≠ AI): M = {summary.loc[summary['agreement']==0, 'mean'].values[0]:.3f}, "
+          f"SD = {summary.loc[summary['agreement']==0, 'std'].values[0]:.3f}, "
+          f"n = {int(summary.loc[summary['agreement']==0, 'count'].values[0])}")
+    
+    print(f"Saved plot to {out_path}")
+    return out_path
+
+
 def plot_conf_change_by_agreement(long_df: pd.DataFrame, out_path: str = "conf_change_by_agreement.png") -> str:
     """
     Plot confidence change based on whether human and AI initially agreed or disagreed.
