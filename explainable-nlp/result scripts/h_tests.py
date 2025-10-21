@@ -54,6 +54,8 @@ from plots import (
     plot_per_question_accuracy_by_faithfulness,
     plot_aor_scatter_by_faith,
     plot_aor_scatter_by_modelsize,
+    plot_plausibility_vs_accuracy,
+    plot_plausibility_vs_conf_change,
     plot_conf_change_by_agreement,
     plot_conf_vs_rair_scatter,
     plot_conf_vs_rsr_scatter,
@@ -562,6 +564,17 @@ def test_H14(long_df, normality_results=None):
     result['n_clusters'] = len(df['participant'].unique())
     return result
 
+# H15: Higher perceived plausibility is associated with larger confidence changes
+def test_H15(long_df, normality_results=None):
+    df = long_df.dropna(subset=['delta_conf', 'plaus']).copy()
+    m = ols_clustered("delta_conf ~ plaus", df, cluster_var='participant')
+    result = summarize(m)
+    result['test_type'] = 'OLS (Cluster-Robust SEs)'
+    result['n_clusters'] = len(df['participant'].unique())
+    if normality_results and 'delta_conf' in normality_results:
+        result['normality'] = normality_results['delta_conf']
+    return result
+
 def run_normality_tests(long_df):
     """
     Run Shapiro-Wilk normality tests on key continuous variables
@@ -618,7 +631,8 @@ def create_hypothesis_summary_table(results):
         "H11": "Model Size → Δ-Confidence",
         "H12": "Model Size → Final Accuracy",
         "H13": "Plausibility → RAIR",
-        "H14": "Plausibility → RSR"
+        "H14": "Plausibility → RSR",
+        "H15": "Plausibility → Δ-Confidence"
     }
     
     for h_key, res in results.items():
@@ -687,6 +701,7 @@ def run_all_hypotheses(df_trials, n_trials=16):
         "H12": test_H12(long_df, normality_results),
         "H13": test_H13(long_df, normality_results),
         "H14": test_H14(long_df, normality_results),
+        "H15": test_H15(long_df, normality_results),
     }
     return results, long_df, normality_results
 
@@ -896,6 +911,8 @@ def main():
     plot_confidence_plausibility_distribution(df_trials)
     plot_aor_scatter_by_faith(long_df)
     plot_aor_scatter_by_modelsize(long_df)
+    plot_plausibility_vs_accuracy(long_df)
+    plot_plausibility_vs_conf_change(long_df)
     plot_conf_change_by_agreement(long_df)
     plot_conf_vs_rair_scatter(long_df)
     plot_conf_vs_rsr_scatter(long_df)

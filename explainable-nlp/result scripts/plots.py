@@ -470,6 +470,147 @@ def plot_aor_scatter_by_modelsize(long_df: pd.DataFrame, out_path: str = "aor_by
     return out_path
 
 
+def plot_plausibility_vs_accuracy(long_df: pd.DataFrame, out_path: str = "plausibility_vs_accuracy.png") -> str:
+    """
+    Plot the relationship between plausibility ratings and final accuracy.
+    Shows mean accuracy for each plausibility level (1-5) to see if more 
+    plausible explanations lead to higher accuracy.
+    """
+    df = long_df.dropna(subset=["plaus", "post", "gt"]).copy()
+    df["post_correct"] = (df["post"] == df["gt"]).astype(float)
+    
+    # Group by plausibility and compute mean accuracy
+    summary = df.groupby("plaus")["post_correct"].agg(['mean', 'std', 'count']).reset_index()
+    summary.columns = ["plausibility", "accuracy", "std", "count"]
+    
+    # Calculate 95% CI
+    summary['se'] = summary['std'] / np.sqrt(summary['count'])
+    summary['ci'] = 1.96 * summary['se']
+    
+    # Plot
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Bar plot with error bars
+    bars = ax.bar(summary["plausibility"], summary["accuracy"], 
+                   color=TUM_BLUE, alpha=0.7, edgecolor="black", linewidth=1.5)
+    ax.errorbar(summary["plausibility"], summary["accuracy"], 
+                yerr=summary["ci"], fmt='none', ecolor='black', capsize=5, capthick=2)
+    
+    # Add trend line
+    z = np.polyfit(summary["plausibility"], summary["accuracy"], 1)
+    p = np.poly1d(z)
+    x_trend = np.linspace(summary["plausibility"].min(), summary["plausibility"].max(), 100)
+    ax.plot(x_trend, p(x_trend), color=TUM_ORANGE, linewidth=2.5, 
+            linestyle="--", label=f"Trend: y={z[0]:.3f}x+{z[1]:.3f}")
+    
+    # Add value labels on bars
+    for i, row in summary.iterrows():
+        ax.text(row["plausibility"], row["accuracy"] + row["ci"] + 0.02, 
+               f"{row['accuracy']:.3f}", ha='center', va='bottom', fontsize=9, fontweight='bold')
+    
+    # Add sample size labels
+    for i, row in summary.iterrows():
+        ax.text(row["plausibility"], 0.02, f"n={int(row['count'])}", 
+               ha='center', va='bottom', fontsize=8, style='italic')
+    
+    ax.set_xlabel("Plausibility Rating (1 = Not at all plausible, 5 = Very plausible)", fontsize=11)
+    ax.set_ylabel("Final Accuracy (Proportion Correct)", fontsize=11)
+    ax.set_title("Relationship Between Plausibility and Final Accuracy", fontsize=12, fontweight='bold')
+    ax.set_xticks([1, 2, 3, 4, 5])
+    ax.set_ylim(0, 1)
+    ax.axhline(0.5, color="gray", linestyle=":", linewidth=1.5, alpha=0.5, label="Chance (50%)")
+    ax.legend(loc="best")
+    ax.grid(axis="y", alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=200)
+    plt.close()
+    
+    # Print summary
+    print("\nPlausibility vs Accuracy:")
+    for _, row in summary.iterrows():
+        print(f"  Plausibility {int(row['plausibility'])}: Accuracy={row['accuracy']:.3f}, "
+              f"SD={row['std']:.3f}, n={int(row['count'])}")
+    
+    # Correlation
+    corr = df[["plaus", "post_correct"]].corr().iloc[0, 1]
+    print(f"  Correlation (Pearson r): {corr:.3f}")
+    
+    print(f"Saved plot to {out_path}")
+    return out_path
+
+
+def plot_plausibility_vs_conf_change(long_df: pd.DataFrame, out_path: str = "plausibility_vs_conf_change.png") -> str:
+    """
+    Plot the relationship between plausibility ratings and confidence change.
+    Shows mean confidence change for each plausibility level (1-5) to see if more 
+    plausible explanations lead to larger confidence changes.
+    """
+    df = long_df.dropna(subset=["plaus", "delta_conf"]).copy()
+    
+    # Group by plausibility and compute mean confidence change
+    summary = df.groupby("plaus")["delta_conf"].agg(['mean', 'std', 'count']).reset_index()
+    summary.columns = ["plausibility", "conf_change", "std", "count"]
+    
+    # Calculate 95% CI
+    summary['se'] = summary['std'] / np.sqrt(summary['count'])
+    summary['ci'] = 1.96 * summary['se']
+    
+    # Plot
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Bar plot with error bars
+    bars = ax.bar(summary["plausibility"], summary["conf_change"], 
+                   color=TUM_MED_BLUE, alpha=0.7, edgecolor="black", linewidth=1.5)
+    ax.errorbar(summary["plausibility"], summary["conf_change"], 
+                yerr=summary["ci"], fmt='none', ecolor='black', capsize=5, capthick=2)
+    
+    # Add trend line
+    z = np.polyfit(summary["plausibility"], summary["conf_change"], 1)
+    p = np.poly1d(z)
+    x_trend = np.linspace(summary["plausibility"].min(), summary["plausibility"].max(), 100)
+    ax.plot(x_trend, p(x_trend), color=TUM_ORANGE, linewidth=2.5, 
+            linestyle="--", label=f"Trend: y={z[0]:.3f}x+{z[1]:.3f}")
+    
+    # Add value labels on bars
+    for i, row in summary.iterrows():
+        y_pos = row["conf_change"] + row["ci"] + 0.05 if row["conf_change"] >= 0 else row["conf_change"] - row["ci"] - 0.05
+        va = 'bottom' if row["conf_change"] >= 0 else 'top'
+        ax.text(row["plausibility"], y_pos, 
+               f"{row['conf_change']:.3f}", ha='center', va=va, fontsize=9, fontweight='bold')
+    
+    # Add sample size labels at bottom
+    y_min = min(summary["conf_change"] - summary["ci"])
+    for i, row in summary.iterrows():
+        ax.text(row["plausibility"], y_min - 0.1, f"n={int(row['count'])}", 
+               ha='center', va='top', fontsize=8, style='italic')
+    
+    ax.set_xlabel("Plausibility Rating (1 = Not at all plausible, 5 = Very plausible)", fontsize=11)
+    ax.set_ylabel("Mean Confidence Change (post - pre)", fontsize=11)
+    ax.set_title("Relationship Between Plausibility and Confidence Change", fontsize=12, fontweight='bold')
+    ax.set_xticks([1, 2, 3, 4, 5])
+    ax.axhline(0, color="gray", linestyle="--", linewidth=1.5, alpha=0.7, label="No change")
+    ax.legend(loc="best")
+    ax.grid(axis="y", alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=200)
+    plt.close()
+    
+    # Print summary
+    print("\nPlausibility vs Confidence Change:")
+    for _, row in summary.iterrows():
+        print(f"  Plausibility {int(row['plausibility'])}: Conf Change={row['conf_change']:.3f}, "
+              f"SD={row['std']:.3f}, n={int(row['count'])}")
+    
+    # Correlation
+    corr = df[["plaus", "delta_conf"]].corr().iloc[0, 1]
+    print(f"  Correlation (Pearson r): {corr:.3f}")
+    
+    print(f"Saved plot to {out_path}")
+    return out_path
+
+
 def plot_conf_vs_rair_scatter(long_df: pd.DataFrame, out_path: str = "conf_vs_rair_scatter.png") -> str:
     """
     Binned bar plot of confidence change (delta_conf) vs RAIR (changed_to_correct).
