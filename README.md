@@ -2,8 +2,6 @@
 
 **LET (LLM Explanation Tool)** is a comprehensive web-based platform for generating, evaluating, and comparing natural language explanations from large language models (LLMs). Built for researchers and practitioners in explainable AI, LET addresses the growing need to understand and assess the quality of AI-generated explanations across multiple dimensions.
 
-GitHub Link: https://github.com/yarkinerenn/thesisXNLP
-
 ---
 
 ## Table of Contents
