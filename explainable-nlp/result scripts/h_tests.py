@@ -589,6 +589,81 @@ def test_H16(long_df, normality_results=None):
         result['normality'] = normality_results['plaus']
     return result
 
+def compute_rair_rsr_by_age(df_trials, long_df):
+    """
+    Compute RAIR and RSR by age groups
+    """
+    # Merge age information into long_df
+    age_col = 'What is your age?'
+    if age_col not in df_trials.columns:
+        print("Age column not found in data")
+        return
+    
+    # Get age for each participant (using index as participant ID)
+    participant_age = df_trials[[age_col]].copy()
+    participant_age['participant'] = participant_age.index
+    participant_age.columns = ['age_group', 'participant']
+    
+    # Merge with long_df
+    long_with_age = long_df.merge(participant_age, on='participant', how='left')
+    
+    # Define age order
+    age_order = ['18-24', '25-34', '35-44', '45-54', '55-64', '65+']
+    
+    print("\n" + "="*80)
+    print("RAIR AND RSR BY AGE GROUP")
+    print("="*80)
+    
+    results = []
+    
+    for age_group in age_order:
+        age_data = long_with_age[long_with_age['age_group'] == age_group]
+        
+        if len(age_data) == 0:
+            continue
+        
+        # RAIR: AI correct & human initially wrong
+        rair_eligible = age_data[(age_data['ai_correct']==1) & (age_data['human_pre_correct']==0)]
+        rair = rair_eligible['changed_to_correct'].mean() if len(rair_eligible) > 0 else float('nan')
+        rair_n = len(rair_eligible)
+        
+        # RSR: AI wrong & human initially correct
+        rsr_eligible = age_data[(age_data['ai_correct']==0) & (age_data['human_pre_correct']==1)]
+        rsr = rsr_eligible['stayed_correct'].mean() if len(rsr_eligible) > 0 else float('nan')
+        rsr_n = len(rsr_eligible)
+        
+        # AOR: average of RAIR and RSR
+        aor = (rair + rsr) / 2.0 if not (pd.isna(rair) or pd.isna(rsr)) else float('nan')
+        
+        # Count unique participants in this age group
+        n_participants = age_data['participant'].nunique()
+        
+        results.append({
+            'Age Group': age_group,
+            'N Participants': n_participants,
+            'RAIR': rair,
+            'RAIR_n': rair_n,
+            'RSR': rsr,
+            'RSR_n': rsr_n,
+            'AOR': aor
+        })
+        
+        print(f"\n{age_group}:")
+        print(f"  Participants: {n_participants}")
+        print(f"  RAIR: {rair:.3f} (n={rair_n} eligible trials)" if not pd.isna(rair) else f"  RAIR: N/A (n={rair_n})")
+        print(f"  RSR:  {rsr:.3f} (n={rsr_n} eligible trials)" if not pd.isna(rsr) else f"  RSR:  N/A (n={rsr_n})")
+        print(f"  AOR:  {aor:.3f}" if not pd.isna(aor) else f"  AOR:  N/A")
+    
+    # Create DataFrame for easier viewing
+    results_df = pd.DataFrame(results)
+    
+    print("\n" + "="*80)
+    print("SUMMARY TABLE:")
+    print("="*80)
+    print(results_df.to_string(index=False))
+    
+    return results_df
+
 def run_normality_tests(long_df):
     """
     Run Shapiro-Wilk normality tests on key continuous variables
@@ -766,6 +841,9 @@ def main():
                 if norm_info.get('normal') is not None:
                     status = "NORMAL" if norm_info['normal'] else "NOT NORMAL"
                     print(f"  Normality: {status} (W={norm_info['statistic']:.4f}, p={norm_info['p_value']:.4f})")
+    
+    # RAIR and RSR by age groups
+    compute_rair_rsr_by_age(df_trials, long_df)
     
     print("\n" + "="*60)
     print("DESCRIPTIVE STATISTICS BY GROUP")
