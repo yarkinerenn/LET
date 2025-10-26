@@ -120,15 +120,41 @@ def build_full_with_deltas_and_labels():
     # === Config ===
     # Each tuple: (file_path, form)
     file_paths = [
-        ("experiment.xlsx", "A"),
         ("Prolific-big-small.xlsx", "A"),
-        ("experiment2.xlsx", "B"),
         ("Prolific-small-big.xlsx", "B"),
     ]
     sheet = 0
     start_col_index = 8   # 0-based index of the first trial column
     n_trials = 16
     block_size = 5
+    
+    # === JOB FILTER CONFIG ===
+    # Set to True to filter by job field, False to include all participants
+    FILTER_BY_JOB = False
+    
+    # Column name for job/occupation field (adjust if needed)
+    JOB_COLUMN = "What is your field of work/study ?"
+    
+    # Filter mode: "include" or "exclude"
+    FILTER_MODE = "include"  # "include" = only CS/AI, "exclude" = exclude CS/AI
+    
+    # Keywords to match (case-insensitive, partial match)
+    # Add or modify keywords as needed
+    CS_AI_KEYWORDS = [
+        "computer science",
+        "computer",
+        "ai",
+        "artificial intelligence",
+        "machine learning",
+        "data science",
+        "software",
+        "programmer",
+        "developer",
+        "engineer",
+        "tech",
+        "it ",
+        "information technology"
+    ]
 
     # === Compact strings (no spaces), length should be n_trials ===
     GT_STRING     = "DTDTDTDTTDTDTDTD"   # Ground truth per question (D/T)
@@ -165,8 +191,42 @@ def build_full_with_deltas_and_labels():
     if df_orig is None:
         raise FileNotFoundError("No experiment files found!")
     
-    print(f"Combined total: {len(df_orig)} rows")
+    print(f"Combined total: {len(df_orig)} rows (before filtering)")
     print(f"Form column distribution: {df_orig['Form'].value_counts().to_dict()}")
+    
+    # === Apply Job Filter if enabled ===
+    if FILTER_BY_JOB:
+        if JOB_COLUMN in df_orig.columns:
+            print(f"\n=== Applying Job Filter ===")
+            print(f"Filter mode: {FILTER_MODE}")
+            print(f"Looking for keywords: {CS_AI_KEYWORDS[:5]}... (and {len(CS_AI_KEYWORDS)-5} more)")
+            
+            # Function to check if job matches CS/AI keywords
+            def is_cs_ai_job(job_text):
+                if pd.isna(job_text):
+                    return False
+                job_lower = str(job_text).lower()
+                return any(keyword.lower() in job_lower for keyword in CS_AI_KEYWORDS)
+            
+            # Create mask for CS/AI jobs
+            cs_ai_mask = df_orig[JOB_COLUMN].apply(is_cs_ai_job)
+            
+            # Apply filter based on mode
+            if FILTER_MODE == "include":
+                df_orig = df_orig[cs_ai_mask].copy()
+                print(f"Keeping only CS/AI participants: {len(df_orig)} rows remaining")
+            elif FILTER_MODE == "exclude":
+                df_orig = df_orig[~cs_ai_mask].copy()
+                print(f"Excluding CS/AI participants: {len(df_orig)} rows remaining")
+            else:
+                print(f"Warning: Invalid FILTER_MODE '{FILTER_MODE}'. Using all data.")
+            
+            print(f"Form distribution after filtering: {df_orig['Form'].value_counts().to_dict()}")
+        else:
+            print(f"\nWarning: Job column '{JOB_COLUMN}' not found. Available columns:")
+            print([col for col in df_orig.columns if 'occupation' in col.lower() or 'job' in col.lower() or 'work' in col.lower() or 'field' in col.lower()][:10])
+            print("Proceeding without job filter...")
+    
     original_cols = list(df_orig.columns)
 
     # === Rename trial columns by position ===
@@ -312,7 +372,8 @@ def build_full_with_deltas_and_labels():
     print("\n=== Disagreement columns (first 5 rows) ===")
     print(df_trials[disagree_cols].head().to_string())
 
-    return df_trials
+    # Return DataFrame along with filter configuration
+    return df_trials, FILTER_BY_JOB, FILTER_MODE
 
 import math
 
@@ -539,7 +600,7 @@ def compute_rair_rsr_global_and_per_user(df_trials: pd.DataFrame, n_trials: int 
 
 # Run
 if __name__ == "__main__":
-    df_trials = build_full_with_deltas_and_labels()
+    df_trials, filter_by_job, filter_mode = build_full_with_deltas_and_labels()
 
     # Compute initial accuracy per user (using Q_Review)
     df_with_initial_acc, initial_accuracy_global, initial_acc_summary = compute_initial_accuracy_per_user(df_trials, n_trials=16)
@@ -560,6 +621,16 @@ if __name__ == "__main__":
     print(metrics_summary)
 
     # Export DataFrame with all metrics to Excel
-    output_excel_path = "experiment_results_with_metrics.xlsx"
+    # Use different filename if job filter is enabled
+    if filter_by_job:
+        if filter_mode == "include":
+            output_excel_path = "experiment_results_with_metrics_byjob_csai_only.xlsx"
+        elif filter_mode == "exclude":
+            output_excel_path = "experiment_results_with_metrics_byjob_no_csai.xlsx"
+        else:
+            output_excel_path = "experiment_results_with_metrics_byjob.xlsx"
+    else:
+        output_excel_path = "experiment_results_with_metrics.xlsx"
+    
     df_with_metrics.to_excel(output_excel_path, index=False)
-    print(f"DataFrame with all metrics exported to '{output_excel_path}'.")
+    print(f"\nDataFrame with all metrics exported to '{output_excel_path}'.")

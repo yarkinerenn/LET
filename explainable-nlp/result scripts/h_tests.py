@@ -797,7 +797,7 @@ def run_all_hypotheses(df_trials, n_trials=16):
     return results, long_df, normality_results
 
 def main():
-    df_trials = pd.read_excel("experiment_results_with_metrics.xlsx")
+    df_trials = pd.read_excel("experiment_results_with_metrics_byjob_csai_only.xlsx")
 
     results, long_df, normality_results = run_all_hypotheses(df_trials, n_trials=16)
     
