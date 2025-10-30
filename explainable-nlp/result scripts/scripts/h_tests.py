@@ -797,7 +797,7 @@ def run_all_hypotheses(df_trials, n_trials=16):
     return results, long_df, normality_results
 
 def main():
-    df_trials = pd.read_excel("experiment_results_with_metrics_byjob_csai_only.xlsx")
+    df_trials = pd.read_excel("../data/experiment_results_with_metrics_byjob_csai_only.xlsx")
 
     results, long_df, normality_results = run_all_hypotheses(df_trials, n_trials=16)
     
@@ -809,8 +809,8 @@ def main():
     print(summary_table.to_string(index=False))
     
     # Save summary table to CSV
-    summary_table.to_csv("hypothesis_summary_table.csv", index=False)
-    print("\n✓ Summary table saved to: hypothesis_summary_table.csv")
+    summary_table.to_csv("../data/hypothesis_summary_table.csv", index=False)
+    print("\n✓ Summary table saved to: ../data/hypothesis_summary_table.csv")
 
     print("\n" + "="*60)
     print("DETAILED HYPOTHESIS TEST RESULTS")
@@ -890,8 +890,8 @@ def main():
     print(participant_df.describe())
     
     # Save participant aggregates
-    participant_df.to_csv("participant_level_aggregates.csv", index=False)
-    print("\n✓ Participant aggregates saved to: participant_level_aggregates.csv")
+    participant_df.to_csv("../data/participant_level_aggregates.csv", index=False)
+    print("\n✓ Participant aggregates saved to: ../data/participant_level_aggregates.csv")
     
     # Within-subjects comparisons (repeated measures design)
     print("\n" + "="*60)
@@ -943,8 +943,8 @@ def main():
     # Export within-subjects comparisons
     if faith_comparisons:
         faith_df_export = pd.DataFrame(faith_comparisons)
-        faith_df_export.to_csv("within_subjects_comparisons_faithfulness.csv", index=False)
-        print("\n✓ Faithfulness comparisons saved to: within_subjects_comparisons_faithfulness.csv")
+        faith_df_export.to_csv("../data/within_subjects_comparisons_faithfulness.csv", index=False)
+        print("\n✓ Faithfulness comparisons saved to: ../data/within_subjects_comparisons_faithfulness.csv")
     
     print("\n\n--- Comparisons by MODEL SIZE (Paired Tests) ---")
     model_size_comparisons = []
@@ -987,35 +987,35 @@ def main():
     # Export within-subjects comparisons
     if model_size_comparisons:
         model_size_df_export = pd.DataFrame(model_size_comparisons)
-        model_size_df_export.to_csv("within_subjects_comparisons_modelsize.csv", index=False)
-        print("\n✓ Model size comparisons saved to: within_subjects_comparisons_modelsize.csv")
+        model_size_df_export.to_csv("../data/within_subjects_comparisons_modelsize.csv", index=False)
+        print("\n✓ Model size comparisons saved to: ../data/within_subjects_comparisons_modelsize.csv")
 
     # Plots
     print("\n" + "="*60)
     print("GENERATING VISUALIZATIONS")
     print("="*60)
-    plot_mean_rair_rsr_by_faith(long_df)
-    plot_mean_conf_change_by_faith(long_df)
-    plot_mean_final_accuracy_by_faith(long_df)
-    plot_plausibility_violin_by_faith(long_df)
-    plot_per_question_accuracy(long_df)
-    plot_per_question_accuracy_by_modelsize(long_df)
-    plot_per_question_accuracy_by_faithfulness(long_df)
-    plot_human_accuracy_before_after(long_df)
-    plot_confidence_plausibility_distribution(df_trials)
-    plot_aor_scatter_by_faith(long_df)
-    plot_aor_scatter_by_modelsize(long_df)
-    plot_plausibility_vs_accuracy(long_df)
-    plot_plausibility_vs_conf_change(long_df)
-    plot_plausibility_by_agreement(long_df)
-    plot_conf_change_by_agreement(long_df)
-    plot_conf_vs_rair_scatter(long_df)
-    plot_conf_vs_rsr_scatter(long_df)
-    plot_rair_rsr_by_modelsize(long_df)
-    plot_conf_change_by_modelsize(long_df)
-    plot_accuracy_by_modelsize(long_df)
-    plot_plaus_vs_rair_rsr(long_df)
-    plot_plausibility_by_modelsize(long_df)
+    plot_mean_rair_rsr_by_faith(long_df, out_path="../plots/general/mean_rair_rsr_by_faith.png")
+    plot_mean_conf_change_by_faith(long_df, out_path="../plots/general/mean_conf_change_by_faith.png")
+    plot_mean_final_accuracy_by_faith(long_df, out_path="../plots/general/mean_final_accuracy_by_faith.png")
+    plot_plausibility_violin_by_faith(long_df, out_path="../plots/general/plausibility_violin_by_faith.png")
+    plot_per_question_accuracy(long_df, out_path="../plots/general/per_question_accuracy.png")
+    plot_per_question_accuracy_by_modelsize(long_df, out_path="../plots/general/per_question_accuracy_by_modelsize.png")
+    plot_per_question_accuracy_by_faithfulness(long_df, out_path="../plots/general/per_question_accuracy_by_faithfulness.png")
+    plot_human_accuracy_before_after(long_df, out_path="../plots/general/human_accuracy_before_after.png")
+    plot_confidence_plausibility_distribution(df_trials, out_path="../plots/general/confidence_plausibility_distribution.png")
+    plot_aor_scatter_by_faith(long_df, out_path="../plots/general/aor_by_faith_scatter.png")
+    plot_aor_scatter_by_modelsize(long_df, out_path="../plots/general/aor_by_modelsize_scatter.png")
+    plot_plausibility_vs_accuracy(long_df, out_path="../plots/general/plausibility_vs_accuracy.png")
+    plot_plausibility_vs_conf_change(long_df, out_path="../plots/general/plausibility_vs_conf_change.png")
+    plot_plausibility_by_agreement(long_df, out_path="../plots/general/plausibility_by_agreement.png")
+    plot_conf_change_by_agreement(long_df, out_path="../plots/general/conf_change_by_agreement.png")
+    plot_conf_vs_rair_scatter(long_df, out_path="../plots/general/conf_vs_rair_scatter.png")
+    plot_conf_vs_rsr_scatter(long_df, out_path="../plots/general/conf_vs_rsr_scatter.png")
+    plot_rair_rsr_by_modelsize(long_df, out_path="../plots/general/rair_rsr_by_modelsize.png")
+    plot_conf_change_by_modelsize(long_df, out_path="../plots/general/conf_change_by_modelsize.png")
+    plot_accuracy_by_modelsize(long_df, out_path="../plots/general/accuracy_by_modelsize.png")
+    plot_plaus_vs_rair_rsr(long_df, out_path="../plots/general/plaus_vs_rair_rsr.png")
+    plot_plausibility_by_modelsize(long_df, out_path="../plots/general/plausibility_by_modelsize.png")
     print("✓ All visualizations generated")
     
     # Final summary
@@ -1023,10 +1023,10 @@ def main():
     print("ANALYSIS COMPLETE - OUTPUT FILES")
     print("="*60)
     print("\nCSV Files Generated:")
-    print("  • hypothesis_summary_table.csv")
-    print("  • participant_level_aggregates.csv")
-    print("  • within_subjects_comparisons_faithfulness.csv")
-    print("  • within_subjects_comparisons_modelsize.csv")
+    print("  • ../data/hypothesis_summary_table.csv")
+    print("  • ../data/participant_level_aggregates.csv")
+    print("  • ../data/within_subjects_comparisons_faithfulness.csv")
+    print("  • ../data/within_subjects_comparisons_modelsize.csv")
     print("\nAll visualization plots have been saved as PNG files.")
     print("\nNote: This analysis uses WITHIN-SUBJECTS (repeated measures) tests")
     print("because each participant experienced both conditions (faithful/unfaithful).")

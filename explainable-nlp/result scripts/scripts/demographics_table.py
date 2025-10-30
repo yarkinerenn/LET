@@ -1,7 +1,7 @@
 import pandas as pd
 
 # Load the data
-df = pd.read_excel("experiment_results_with_metrics.xlsx")
+df = pd.read_excel("../data/experiment_results_with_metrics.xlsx")
 
 # Total number of participants
 N = len(df)

@@ -1,9 +1,15 @@
 """
-NLP Experience Analysis Script
-===============================
+Education Level Analysis Script
+================================
 
-Analyzes the relationship between participants' self-rated NLP experience (1-5 Likert scale)
-and key performance metrics using rigorous statistical methods.
+Analyzes the relationship between participants' education level and key performance metrics
+using rigorous statistical methods.
+
+Education Levels (ordinal):
+- High school diploma (1)
+- Bachelor's degree (2)
+- Master's degree (3)
+- PhD or equivalent (4)
 
 Metrics analyzed:
 - RAIR (Reliance on AI when AI is right)
@@ -21,11 +27,11 @@ Statistical Methods:
    - Same methodology as h_tests.py
 
 Visualizations:
-- Box plots with overlaid individual data points (clearer for Likert scale)
+- Box plots with overlaid individual data points
 - Violin plots showing full distribution shapes
 - Mean and median lines clearly marked
-- Sample sizes for each experience level
-- Trend lines and correlation coefficients displayed
+- Sample sizes for each education level
+- AOR scatter plot (RAIR vs RSR)
 
 Always uses unfiltered data (all participants regardless of job filter).
 """
@@ -53,56 +59,48 @@ TUM_GRAY_50 = "#808080"
 TUM_GRAY_20 = "#CCCCCC"
 
 # Configuration
-NLP_EXP_COL = 'Please rate your experience with NLP'
-DATA_FILE = 'experiment_results_with_metrics.xlsx'
-OUTPUT_FOLDER = 'nlp_experience_plots'
+EDU_COLUMN = "What is your highest achieved level of education?"
+DATA_FILE = '../data/experiment_results_with_metrics.xlsx'
+OUTPUT_FOLDER = '../plots/demographic_analyses/education_level_plots'
+
+# Map education levels to ordinal numbers
+EDU_MAPPING = {
+    "High school diploma": 1,
+    "Bachelor's degree": 2,
+    "Master's degree": 3,
+    "PhD or equivalent": 4,
+    "Phd or equivalent": 4  # Handle possible case variation
+}
+
+# Reverse mapping for labels
+EDU_LABELS = {
+    1: "High School",
+    2: "Bachelor's",
+    3: "Master's",
+    4: "PhD"
+}
 
 
-def add_nlp_experience_to_long(long_df, df_wide, nlp_col):
+def add_education_to_long(long_df, df_wide, edu_col):
     """
-    Add participant-level NLP experience rating to long format DataFrame.
-    
-    Parameters:
-    -----------
-    long_df : pd.DataFrame
-        Long format data with 'participant' column
-    df_wide : pd.DataFrame
-        Wide format data with NLP experience column
-    nlp_col : str
-        Name of NLP experience column
-        
-    Returns:
-    --------
-    pd.DataFrame
-        Long format with added 'nlp_experience' column
+    Add participant-level education level to long format DataFrame.
+    Convert categorical education to ordinal numbers.
     """
-    # Create mapping from participant index to NLP experience
-    nlp_exp_map = df_wide[nlp_col].to_dict()
-    long_df['nlp_experience'] = long_df['participant'].map(nlp_exp_map)
+    # Create mapping from participant index to education
+    edu_map = df_wide[edu_col].map(EDU_MAPPING).to_dict()
+    long_df['education_level'] = long_df['participant'].map(edu_map)
     return long_df
 
 
 def compute_participant_level_metrics(long_df, df_wide):
     """
     Aggregate trial-level metrics to participant level and merge with wide format metrics.
-    
-    Parameters:
-    -----------
-    long_df : pd.DataFrame
-        Long format data with trial-level metrics
-    df_wide : pd.DataFrame
-        Wide format data with participant-level metrics
-        
-    Returns:
-    --------
-    pd.DataFrame
-        Participant-level aggregates with all metrics
     """
     # Aggregate from long format
     participant_agg = long_df.groupby('participant').agg({
         'plaus': 'mean',
         'delta_conf': 'mean',
-        'nlp_experience': 'first'
+        'education_level': 'first'
     }).reset_index()
     
     # Rename for clarity
@@ -124,32 +122,17 @@ def compute_participant_level_metrics(long_df, df_wide):
     return participant_metrics
 
 
-def spearman_correlations(participant_df, nlp_col, metrics):
+def spearman_correlations(participant_df, edu_col, metrics):
     """
-    Compute Spearman rank correlations between NLP experience and all metrics.
-    
-    Parameters:
-    -----------
-    participant_df : pd.DataFrame
-        Participant-level data
-    nlp_col : str
-        Name of NLP experience column
-    metrics : list
-        List of metric column names to correlate
-        
-    Returns:
-    --------
-    pd.DataFrame
-        Correlation results with rho, p-value, n, and significance
+    Compute Spearman rank correlations between education level and all metrics.
     """
     results = []
     
     for metric in metrics:
         # Remove NaN values for this pair
-        valid_data = participant_df[[nlp_col, metric]].dropna()
+        valid_data = participant_df[[edu_col, metric]].dropna()
         
         if len(valid_data) < 3:
-            # Not enough data for correlation
             results.append({
                 'Metric': metric,
                 'Spearman_rho': np.nan,
@@ -161,7 +144,7 @@ def spearman_correlations(participant_df, nlp_col, metrics):
             continue
         
         # Compute Spearman correlation
-        rho, p_value = stats.spearmanr(valid_data[nlp_col], valid_data[metric])
+        rho, p_value = stats.spearmanr(valid_data[edu_col], valid_data[metric])
         
         # Determine significance
         if p_value < 0.001:
@@ -173,7 +156,7 @@ def spearman_correlations(participant_df, nlp_col, metrics):
         else:
             sig = ''
         
-        # Interpret effect size (Cohen's guidelines for correlation)
+        # Interpret effect size
         abs_rho = abs(rho)
         if abs_rho < 0.1:
             effect = 'Negligible'
@@ -196,23 +179,9 @@ def spearman_correlations(participant_df, nlp_col, metrics):
     return pd.DataFrame(results)
 
 
-def plot_boxplot_by_experience(df, x_col, y_col, title, output_path):
+def plot_boxplot_by_education(df, x_col, y_col, title, output_path):
     """
-    Create box plot with overlaid points showing distribution by NLP experience level.
-    Much clearer than scatter plots for Likert scale data.
-    
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        Data to plot
-    x_col : str
-        X-axis column (NLP experience)
-    y_col : str
-        Y-axis column (metric)
-    title : str
-        Plot title
-    output_path : str
-        Path to save the plot
+    Create box plot with overlaid points showing distribution by education level.
     """
     # Remove NaN values
     plot_data = df[[x_col, y_col]].dropna()
@@ -228,7 +197,7 @@ def plot_boxplot_by_experience(df, x_col, y_col, title, output_path):
     positions = sorted(plot_data[x_col].unique())
     box_data = [plot_data[plot_data[x_col] == pos][y_col].values for pos in positions]
     
-    bp = ax.boxplot(box_data, positions=positions, widths=0.5, patch_artist=True,
+    bp = ax.boxplot(box_data, positions=positions, widths=0.4, patch_artist=True,
                      boxprops=dict(facecolor=TUM_LIGHT_BLUE, alpha=0.7, edgecolor=TUM_BLUE_DARK),
                      whiskerprops=dict(color=TUM_BLUE_DARK, linewidth=1.5),
                      capprops=dict(color=TUM_BLUE_DARK, linewidth=1.5),
@@ -238,7 +207,7 @@ def plot_boxplot_by_experience(df, x_col, y_col, title, output_path):
     # Overlay individual points with jitter
     for pos in positions:
         pos_data = plot_data[plot_data[x_col] == pos][y_col].values
-        jitter = np.random.normal(0, 0.08, len(pos_data))
+        jitter = np.random.normal(0, 0.06, len(pos_data))
         ax.scatter(pos + jitter, pos_data, alpha=0.4, s=40, color=TUM_BLUE, edgecolors='none')
     
     # Add mean line
@@ -261,12 +230,12 @@ def plot_boxplot_by_experience(df, x_col, y_col, title, output_path):
             transform=ax.transAxes, fontsize=11, verticalalignment='bottom', horizontalalignment='right',
             bbox=dict(boxstyle='round', facecolor='white', alpha=0.9, edgecolor=TUM_GRAY_50))
     
-    ax.set_xlabel('NLP Experience Level', fontsize=13, fontweight='bold')
+    ax.set_xlabel('Education Level', fontsize=13, fontweight='bold')
     ax.set_ylabel(y_col.replace('_', ' '), fontsize=13, fontweight='bold')
     ax.set_title(title, fontsize=15, fontweight='bold', pad=20)
-    ax.set_xlim(0.5, 5.5)
-    ax.set_xticks([1, 2, 3, 4, 5])
-    ax.set_xticklabels(['1\n(Novice)', '2', '3\n(Intermediate)', '4', '5\n(Expert)'])
+    ax.set_xlim(0.5, 4.5)
+    ax.set_xticks([1, 2, 3, 4])
+    ax.set_xticklabels([EDU_LABELS[i] for i in [1, 2, 3, 4]])
     ax.grid(True, alpha=0.2, linestyle='--', axis='y')
     ax.legend(loc='upper left', fontsize=10)
     
@@ -276,16 +245,9 @@ def plot_boxplot_by_experience(df, x_col, y_col, title, output_path):
     print(f"Saved: {output_path}")
 
 
-def plot_metrics_by_experience(participant_df, output_path):
+def plot_metrics_by_education(participant_df, output_path):
     """
-    Create separate subplots for each metric showing clear distributions by experience level.
-    
-    Parameters:
-    -----------
-    participant_df : pd.DataFrame
-        Participant-level data
-    output_path : str
-        Path to save the plot
+    Create separate subplots for each metric showing clear distributions by education level.
     """
     metrics = ['RAIR_user', 'RSR_user', 'Mean_Plausibility', 'Mean_Conf_Delta', 'Final_Accuracy_User']
     metric_labels = ['RAIR', 'RSR', 'Mean Plausibility', 'Mean Confidence Change', 'Final Accuracy']
@@ -297,17 +259,17 @@ def plot_metrics_by_experience(participant_df, output_path):
     
     for idx, (metric, label, color) in enumerate(zip(metrics, metric_labels, colors)):
         ax = axes[idx]
-        plot_data = participant_df[['nlp_experience', metric]].dropna()
+        plot_data = participant_df[['education_level', metric]].dropna()
         
         if len(plot_data) == 0:
             ax.text(0.5, 0.5, 'No data', ha='center', va='center', transform=ax.transAxes)
             continue
         
         # Create violin plot
-        positions = sorted(plot_data['nlp_experience'].unique())
-        violin_data = [plot_data[plot_data['nlp_experience'] == pos][metric].values for pos in positions]
+        positions = sorted(plot_data['education_level'].unique())
+        violin_data = [plot_data[plot_data['education_level'] == pos][metric].values for pos in positions]
         
-        parts = ax.violinplot(violin_data, positions=positions, widths=0.6, 
+        parts = ax.violinplot(violin_data, positions=positions, widths=0.5, 
                               showmeans=True, showmedians=True, showextrema=True)
         
         # Style violin plots
@@ -323,18 +285,18 @@ def plot_metrics_by_experience(participant_df, output_path):
         
         # Overlay individual points
         for pos in positions:
-            pos_data = plot_data[plot_data['nlp_experience'] == pos][metric].values
-            jitter = np.random.normal(0, 0.06, len(pos_data))
+            pos_data = plot_data[plot_data['education_level'] == pos][metric].values
+            jitter = np.random.normal(0, 0.05, len(pos_data))
             ax.scatter(pos + jitter, pos_data, alpha=0.3, s=25, color='black', edgecolors='none')
         
         # Add trend line
-        z = np.polyfit(plot_data['nlp_experience'], plot_data[metric], 1)
+        z = np.polyfit(plot_data['education_level'], plot_data[metric], 1)
         p = np.poly1d(z)
-        x_line = np.linspace(1, 5, 100)
+        x_line = np.linspace(1, 4, 100)
         ax.plot(x_line, p(x_line), color='red', linewidth=2, linestyle='--', alpha=0.7, label='Trend')
         
         # Compute correlation
-        rho, p_value = stats.spearmanr(plot_data['nlp_experience'], plot_data[metric])
+        rho, p_value = stats.spearmanr(plot_data['education_level'], plot_data[metric])
         sig = '***' if p_value < 0.001 else '**' if p_value < 0.01 else '*' if p_value < 0.05 else 'ns'
         
         # Add stats annotation
@@ -342,50 +304,44 @@ def plot_metrics_by_experience(participant_df, output_path):
                 fontsize=10, verticalalignment='top', 
                 bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
         
-        ax.set_xlabel('NLP Experience', fontsize=11, fontweight='bold')
+        ax.set_xlabel('Education Level', fontsize=11, fontweight='bold')
         ax.set_ylabel(label, fontsize=11, fontweight='bold')
         ax.set_title(label, fontsize=13, fontweight='bold')
-        ax.set_xlim(0.5, 5.5)
-        ax.set_xticks([1, 2, 3, 4, 5])
+        ax.set_xlim(0.5, 4.5)
+        ax.set_xticks([1, 2, 3, 4])
+        ax.set_xticklabels([EDU_LABELS[i] for i in [1, 2, 3, 4]], fontsize=9)
         ax.grid(True, alpha=0.2, linestyle='--', axis='y')
     
     # Remove the 6th subplot
     fig.delaxes(axes[5])
     
-    plt.suptitle('Performance Metrics by NLP Experience Level', fontsize=16, fontweight='bold', y=1.00)
+    plt.suptitle('Performance Metrics by Education Level', fontsize=16, fontweight='bold', y=1.00)
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
     print(f"Saved: {output_path}")
 
 
-def plot_aor_scatter_by_nlp_experience(long_df, output_path):
+def plot_aor_scatter_by_education(long_df, output_path):
     """
-    Plot AOR scatter: RAIR (x-axis) vs RSR (y-axis) with one point per NLP experience level.
+    Plot AOR scatter: RAIR (x-axis) vs RSR (y-axis) with one point per education level.
     AOR (Appropriateness of Reliance) = (RAIR + RSR) / 2
-    
-    Parameters:
-    -----------
-    long_df : pd.DataFrame
-        Long format data with nlp_experience column
-    output_path : str
-        Path to save the plot
     """
     # RAIR-eligible: AI correct & human initially wrong
     df_rair = long_df[(long_df["ai_correct"]==1) & (long_df["human_pre_correct"]==0)].copy()
     df_rair["rair"] = df_rair["changed_to_correct"].astype(float)
-    rair_by_exp = df_rair.groupby("nlp_experience")["rair"].mean().rename("RAIR")
+    rair_by_edu = df_rair.groupby("education_level")["rair"].mean().rename("RAIR")
     
     # RSR-eligible: AI wrong & human initially correct
     df_rsr = long_df[(long_df["ai_correct"]==0) & (long_df["human_pre_correct"]==1)].copy()
     df_rsr["rsr"] = df_rsr["stayed_correct"].astype(float)
-    rsr_by_exp = df_rsr.groupby("nlp_experience")["rsr"].mean().rename("RSR")
+    rsr_by_edu = df_rsr.groupby("education_level")["rsr"].mean().rename("RSR")
     
     # Combine
-    summary = pd.concat([rair_by_exp, rsr_by_exp], axis=1).reset_index()
-    summary = summary.dropna()  # Remove any experience levels with missing data
+    summary = pd.concat([rair_by_edu, rsr_by_edu], axis=1).reset_index()
+    summary = summary.dropna()  # Remove any education levels with missing data
     summary["AOR"] = (summary["RAIR"] + summary["RSR"]) / 2.0
-    summary["exp_label"] = summary["nlp_experience"].apply(lambda x: f"Level {int(x)}")
+    summary["edu_label"] = summary["education_level"].map(EDU_LABELS)
     
     if len(summary) == 0:
         print("Warning: No valid data for AOR plot")
@@ -394,46 +350,53 @@ def plot_aor_scatter_by_nlp_experience(long_df, output_path):
     # Create plot
     fig, ax = plt.subplots(figsize=(8, 8))
     
-    # Color gradient for experience levels
-    colors = [TUM_BLUE_DARKER, TUM_BLUE_DARK, TUM_BLUE, TUM_MED_BLUE, TUM_LIGHT_BLUE]
-    exp_levels = sorted(summary["nlp_experience"].unique())
-    color_map = {level: colors[i % len(colors)] for i, level in enumerate(exp_levels)}
-    point_colors = [color_map[exp] for exp in summary["nlp_experience"]]
+    # Color gradient for education levels
+    colors = [TUM_BLUE_DARKER, TUM_BLUE_DARK, TUM_MED_BLUE, TUM_LIGHT_BLUE]
+    edu_levels = sorted(summary["education_level"].unique())
+    color_map = {level: colors[int(level)-1] for level in edu_levels}
+    point_colors = [color_map[edu] for edu in summary["education_level"]]
     
     # Scatter plot
-    scatter = ax.scatter(summary["RAIR"], summary["RSR"], s=250, c=point_colors, 
+    scatter = ax.scatter(summary["RAIR"], summary["RSR"], s=300, c=point_colors, 
                         edgecolor="black", linewidth=2, zorder=10, alpha=0.8)
     
     # Annotate each point with level and AOR
     for _, row in summary.iterrows():
-        level = int(row["nlp_experience"])
-        label = f"Level {level}\nAOR={row['AOR']:.3f}"
+        level = int(row["education_level"])
+        label = f"{row['edu_label']}\nAOR={row['AOR']:.3f}"
         
         # Position labels to avoid overlap
-        if level <= 2:
+        if level == 1:
             xytext = (10, -15)
             va = 'top'
+            ha = 'left'
+        elif level == 2:
+            xytext = (-15, -15)
+            va = 'top'
+            ha = 'right'
         elif level == 3:
             xytext = (10, 10)
             va = 'bottom'
-        else:
-            xytext = (-10, 10)
+            ha = 'left'
+        else:  # PhD
+            xytext = (-15, 10)
             va = 'bottom'
+            ha = 'right'
         
         ax.annotate(label, (row["RAIR"], row["RSR"]), 
                    xytext=xytext, textcoords="offset points",
-                   ha="left" if level <= 3 else "right", va=va,
+                   ha=ha, va=va,
                    fontsize=10, fontweight='bold',
                    bbox=dict(boxstyle="round,pad=0.5", facecolor="white", 
-                            edgecolor=color_map[row["nlp_experience"]], alpha=0.95, linewidth=2))
+                            edgecolor=color_map[row["education_level"]], alpha=0.95, linewidth=2))
     
-    # Add diagonal line for reference (AOR = 0.5 line where RAIR = RSR)
+    # Add diagonal line for reference
     ax.plot([0, 1], [0, 1], 'k--', alpha=0.3, linewidth=1.5, label='RAIR = RSR')
     
     # Formatting
     ax.set_xlabel('RAIR (Reliance on AI when Right)', fontsize=13, fontweight='bold')
     ax.set_ylabel('RSR (Resistance to wrong AI)', fontsize=13, fontweight='bold')
-    ax.set_title('Appropriateness of Reliance (AOR) by NLP Experience\nRAIR vs RSR', 
+    ax.set_title('Appropriateness of Reliance (AOR) by Education Level\nRAIR vs RSR', 
                 fontsize=15, fontweight='bold', pad=20)
     ax.set_xlim(-0.05, 1.05)
     ax.set_ylim(-0.05, 1.05)
@@ -449,11 +412,11 @@ def plot_aor_scatter_by_nlp_experience(long_df, output_path):
     # Legend
     from matplotlib.lines import Line2D
     legend_elements = [Line2D([0], [0], marker='o', color='w', 
-                             label=f'Level {int(level)}',
+                             label=EDU_LABELS[int(level)],
                              markerfacecolor=color_map[level], 
                              markeredgecolor='black', markersize=10)
-                      for level in exp_levels]
-    ax.legend(handles=legend_elements, loc='lower right', title='NLP Experience', 
+                      for level in edu_levels]
+    ax.legend(handles=legend_elements, loc='lower right', title='Education Level', 
              framealpha=0.95, edgecolor='black')
     
     plt.tight_layout()
@@ -462,39 +425,27 @@ def plot_aor_scatter_by_nlp_experience(long_df, output_path):
     
     # Print summary
     print("\n" + "="*80)
-    print("AOR (Appropriateness of Reliance) by NLP Experience Level")
+    print("AOR (Appropriateness of Reliance) by Education Level")
     print("="*80)
-    print(f"{'Level':<8} {'RAIR':<10} {'RSR':<10} {'AOR':<10}")
+    print(f"{'Level':<15} {'RAIR':<10} {'RSR':<10} {'AOR':<10}")
     print("-"*80)
     for _, row in summary.iterrows():
-        print(f"{int(row['nlp_experience']):<8} {row['RAIR']:<10.3f} {row['RSR']:<10.3f} {row['AOR']:<10.3f}")
+        print(f"{row['edu_label']:<15} {row['RAIR']:<10.3f} {row['RSR']:<10.3f} {row['AOR']:<10.3f}")
     print("="*80)
     
     print(f"\nSaved AOR plot to: {output_path}")
 
 
-def regression_analysis_clustered(long_df, nlp_col='nlp_experience'):
+def regression_analysis_clustered(long_df, edu_col='education_level'):
     """
     Perform regression analyses with cluster-robust standard errors.
     Uses the same methodology as h_tests.py to account for repeated measures.
-    
-    Parameters:
-    -----------
-    long_df : pd.DataFrame
-        Long format data with trial-level observations
-    nlp_col : str
-        Name of NLP experience column
-        
-    Returns:
-    --------
-    dict
-        Dictionary with regression results for each outcome
     """
     results = {}
     
-    # Prepare data - ensure nlp_experience is numeric
+    # Prepare data - ensure education_level is numeric
     analysis_df = long_df.copy()
-    analysis_df[nlp_col] = pd.to_numeric(analysis_df[nlp_col], errors='coerce')
+    analysis_df[edu_col] = pd.to_numeric(analysis_df[edu_col], errors='coerce')
     
     print("\n" + "="*80)
     print("REGRESSION ANALYSES WITH CLUSTER-ROBUST STANDARD ERRORS")
@@ -504,17 +455,17 @@ def regression_analysis_clustered(long_df, nlp_col='nlp_experience'):
     
     # 1. Plausibility (continuous) - OLS with cluster-robust SEs
     print("\n" + "-"*80)
-    print("1. PLAUSIBILITY ~ NLP_Experience (OLS with cluster-robust SEs)")
+    print("1. PLAUSIBILITY ~ Education_Level (OLS with cluster-robust SEs)")
     print("-"*80)
     try:
-        model_plaus = ols_clustered(f'plaus ~ {nlp_col}', data=analysis_df, cluster_var='participant')
+        model_plaus = ols_clustered(f'plaus ~ {edu_col}', data=analysis_df, cluster_var='participant')
         results['plausibility'] = model_plaus
         print(model_plaus.summary())
-        coef = model_plaus.params[nlp_col]
-        pval = model_plaus.pvalues[nlp_col]
+        coef = model_plaus.params[edu_col]
+        pval = model_plaus.pvalues[edu_col]
         sig = '***' if pval < 0.001 else '**' if pval < 0.01 else '*' if pval < 0.05 else ''
         print(f"\nCoefficient: {coef:.4f} {sig}")
-        print(f"Interpretation: Each 1-point increase in NLP experience is associated with")
+        print(f"Interpretation: Each 1-level increase in education is associated with")
         print(f"               {abs(coef):.4f} {'increase' if coef > 0 else 'decrease'} in plausibility rating")
     except Exception as e:
         print(f"Error: {e}")
@@ -522,17 +473,17 @@ def regression_analysis_clustered(long_df, nlp_col='nlp_experience'):
     
     # 2. Confidence change (continuous) - OLS with cluster-robust SEs
     print("\n" + "-"*80)
-    print("2. CONFIDENCE_CHANGE ~ NLP_Experience (OLS with cluster-robust SEs)")
+    print("2. CONFIDENCE_CHANGE ~ Education_Level (OLS with cluster-robust SEs)")
     print("-"*80)
     try:
-        model_conf = ols_clustered(f'delta_conf ~ {nlp_col}', data=analysis_df, cluster_var='participant')
+        model_conf = ols_clustered(f'delta_conf ~ {edu_col}', data=analysis_df, cluster_var='participant')
         results['confidence_change'] = model_conf
         print(model_conf.summary())
-        coef = model_conf.params[nlp_col]
-        pval = model_conf.pvalues[nlp_col]
+        coef = model_conf.params[edu_col]
+        pval = model_conf.pvalues[edu_col]
         sig = '***' if pval < 0.001 else '**' if pval < 0.01 else '*' if pval < 0.05 else ''
         print(f"\nCoefficient: {coef:.4f} {sig}")
-        print(f"Interpretation: Each 1-point increase in NLP experience is associated with")
+        print(f"Interpretation: Each 1-level increase in education is associated with")
         print(f"               {abs(coef):.4f} {'increase' if coef > 0 else 'decrease'} in confidence change")
     except Exception as e:
         print(f"Error: {e}")
@@ -540,20 +491,20 @@ def regression_analysis_clustered(long_df, nlp_col='nlp_experience'):
     
     # 3. Human final accuracy (binary) - Logistic regression with cluster-robust SEs
     print("\n" + "-"*80)
-    print("3. FINAL_ACCURACY (post==gt) ~ NLP_Experience (Logistic with cluster-robust SEs)")
+    print("3. FINAL_ACCURACY (post==gt) ~ Education_Level (Logistic with cluster-robust SEs)")
     print("-"*80)
     try:
         analysis_df['final_correct'] = (analysis_df['post'] == analysis_df['gt']).astype(int)
-        model_acc = logit_clustered(f'final_correct ~ {nlp_col}', data=analysis_df, cluster_var='participant')
+        model_acc = logit_clustered(f'final_correct ~ {edu_col}', data=analysis_df, cluster_var='participant')
         results['final_accuracy'] = model_acc
         print(model_acc.summary())
-        coef = model_acc.params[nlp_col]
-        pval = model_acc.pvalues[nlp_col]
+        coef = model_acc.params[edu_col]
+        pval = model_acc.pvalues[edu_col]
         sig = '***' if pval < 0.001 else '**' if pval < 0.01 else '*' if pval < 0.05 else ''
         odds_ratio = np.exp(coef)
         print(f"\nLog-odds coefficient: {coef:.4f} {sig}")
         print(f"Odds ratio: {odds_ratio:.4f}")
-        print(f"Interpretation: Each 1-point increase in NLP experience multiplies the odds")
+        print(f"Interpretation: Each 1-level increase in education multiplies the odds")
         print(f"               of being correct by {odds_ratio:.4f}")
     except Exception as e:
         print(f"Error: {e}")
@@ -567,17 +518,17 @@ def regression_analysis_clustered(long_df, nlp_col='nlp_experience'):
     try:
         rair_df = analysis_df[(analysis_df['ai_correct']==1) & (analysis_df['human_pre_correct']==0)].copy()
         print(f"RAIR-eligible trials: {len(rair_df)}")
-        if len(rair_df) >= 10:  # Need enough observations
-            model_rair = logit_clustered(f'changed_to_correct ~ {nlp_col}', data=rair_df, cluster_var='participant')
+        if len(rair_df) >= 10:
+            model_rair = logit_clustered(f'changed_to_correct ~ {edu_col}', data=rair_df, cluster_var='participant')
             results['rair'] = model_rair
             print(model_rair.summary())
-            coef = model_rair.params[nlp_col]
-            pval = model_rair.pvalues[nlp_col]
+            coef = model_rair.params[edu_col]
+            pval = model_rair.pvalues[edu_col]
             sig = '***' if pval < 0.001 else '**' if pval < 0.01 else '*' if pval < 0.05 else ''
             odds_ratio = np.exp(coef)
             print(f"\nLog-odds coefficient: {coef:.4f} {sig}")
             print(f"Odds ratio: {odds_ratio:.4f}")
-            print(f"Interpretation: Each 1-point increase in NLP experience multiplies the odds")
+            print(f"Interpretation: Each 1-level increase in education multiplies the odds")
             print(f"               of accepting AI's correct suggestion by {odds_ratio:.4f}")
         else:
             print("Insufficient RAIR-eligible observations for regression")
@@ -594,17 +545,17 @@ def regression_analysis_clustered(long_df, nlp_col='nlp_experience'):
     try:
         rsr_df = analysis_df[(analysis_df['ai_correct']==0) & (analysis_df['human_pre_correct']==1)].copy()
         print(f"RSR-eligible trials: {len(rsr_df)}")
-        if len(rsr_df) >= 10:  # Need enough observations
-            model_rsr = logit_clustered(f'stayed_correct ~ {nlp_col}', data=rsr_df, cluster_var='participant')
+        if len(rsr_df) >= 10:
+            model_rsr = logit_clustered(f'stayed_correct ~ {edu_col}', data=rsr_df, cluster_var='participant')
             results['rsr'] = model_rsr
             print(model_rsr.summary())
-            coef = model_rsr.params[nlp_col]
-            pval = model_rsr.pvalues[nlp_col]
+            coef = model_rsr.params[edu_col]
+            pval = model_rsr.pvalues[edu_col]
             sig = '***' if pval < 0.001 else '**' if pval < 0.01 else '*' if pval < 0.05 else ''
             odds_ratio = np.exp(coef)
             print(f"\nLog-odds coefficient: {coef:.4f} {sig}")
             print(f"Odds ratio: {odds_ratio:.4f}")
-            print(f"Interpretation: Each 1-point increase in NLP experience multiplies the odds")
+            print(f"Interpretation: Each 1-level increase in education multiplies the odds")
             print(f"               of resisting AI's wrong suggestion by {odds_ratio:.4f}")
         else:
             print("Insufficient RSR-eligible observations for regression")
@@ -619,31 +570,15 @@ def regression_analysis_clustered(long_df, nlp_col='nlp_experience'):
 
 
 def save_correlation_summary(results_df, output_path):
-    """
-    Save correlation results to CSV file.
-    
-    Parameters:
-    -----------
-    results_df : pd.DataFrame
-        Correlation results
-    output_path : str
-        Path to save CSV
-    """
+    """Save correlation results to CSV file."""
     results_df.to_csv(output_path, index=False)
     print(f"\nSaved correlation summary to: {output_path}")
 
 
 def print_correlation_summary(results_df):
-    """
-    Print formatted correlation summary to console.
-    
-    Parameters:
-    -----------
-    results_df : pd.DataFrame
-        Correlation results
-    """
+    """Print formatted correlation summary to console."""
     print("\n" + "="*80)
-    print("NLP EXPERIENCE CORRELATION ANALYSIS")
+    print("EDUCATION LEVEL CORRELATION ANALYSIS")
     print("="*80)
     print("\nSpearman Rank Correlations (Non-parametric)")
     print("Significance: * p<.05, ** p<.01, *** p<.001")
@@ -661,11 +596,9 @@ def print_correlation_summary(results_df):
 
 
 def main():
-    """
-    Main analysis function.
-    """
+    """Main analysis function."""
     print("="*80)
-    print("NLP EXPERIENCE ANALYSIS")
+    print("EDUCATION LEVEL ANALYSIS")
     print("="*80)
     print(f"\nLoading data from: {DATA_FILE}")
     print("Note: Always uses unfiltered data (all participants)\n")
@@ -685,11 +618,11 @@ def main():
         print(f"Error: {DATA_FILE} not found. Please run script.py first.")
         return
     
-    # Check if NLP experience column exists
-    if NLP_EXP_COL not in df_wide.columns:
-        print(f"\nError: Column '{NLP_EXP_COL}' not found in data.")
-        print("Available columns containing 'nlp' or 'experience':")
-        relevant_cols = [c for c in df_wide.columns if 'nlp' in c.lower() or 'experience' in c.lower()]
+    # Check if education column exists
+    if EDU_COLUMN not in df_wide.columns:
+        print(f"\nError: Column '{EDU_COLUMN}' not found in data.")
+        print("Available columns containing 'education':")
+        relevant_cols = [c for c in df_wide.columns if 'education' in c.lower()]
         for col in relevant_cols:
             print(f"  - {col}")
         return
@@ -699,19 +632,20 @@ def main():
     long_df = make_long(df_wide, n_trials=16)
     print(f"Created {len(long_df)} trial observations")
     
-    # Add NLP experience to long format
-    long_df = add_nlp_experience_to_long(long_df, df_wide, NLP_EXP_COL)
+    # Add education level to long format
+    long_df = add_education_to_long(long_df, df_wide, EDU_COLUMN)
     
     # Compute participant-level metrics
     print("\nComputing participant-level metrics...")
     participant_metrics = compute_participant_level_metrics(long_df, df_wide)
     print(f"Aggregated data for {len(participant_metrics)} participants")
     
-    # Check NLP experience distribution
-    nlp_exp_dist = participant_metrics['nlp_experience'].value_counts().sort_index()
-    print("\nNLP Experience Distribution:")
-    for level, count in nlp_exp_dist.items():
-        print(f"  Level {int(level)}: {count} participants")
+    # Check education level distribution
+    edu_dist = participant_metrics['education_level'].value_counts().sort_index()
+    print("\nEducation Level Distribution:")
+    for level, count in edu_dist.items():
+        if not np.isnan(level):
+            print(f"  {EDU_LABELS.get(int(level), 'Unknown')}: {count} participants")
     
     # Define metrics to analyze
     metrics = ['RAIR_user', 'RSR_user', 'Mean_Plausibility', 'Mean_Conf_Delta', 'Final_Accuracy_User']
@@ -721,13 +655,13 @@ def main():
     print("PART 1: SPEARMAN CORRELATIONS (Exploratory)")
     print("="*80)
     print("Performing Spearman rank correlations on participant-level aggregates...")
-    correlation_results = spearman_correlations(participant_metrics, 'nlp_experience', metrics)
+    correlation_results = spearman_correlations(participant_metrics, 'education_level', metrics)
     
     # Print summary
     print_correlation_summary(correlation_results)
     
     # Save correlation summary
-    csv_path = os.path.join(OUTPUT_FOLDER, 'nlp_experience_correlations.csv')
+    csv_path = os.path.join(OUTPUT_FOLDER, 'education_correlations.csv')
     save_correlation_summary(correlation_results, csv_path)
     
     # Perform regression analyses with cluster-robust SEs (main analysis)
@@ -735,32 +669,32 @@ def main():
     print("PART 2: REGRESSION ANALYSES (Main Analysis)")
     print("="*80)
     print("Using trial-level data with cluster-robust SEs (same as h_tests.py)")
-    regression_results = regression_analysis_clustered(long_df, nlp_col='nlp_experience')
+    regression_results = regression_analysis_clustered(long_df, edu_col='education_level')
     
     # Create visualizations
     print("\nCreating visualizations...")
     
-    # Individual box plots (clearer than scatter plots for Likert scale)
+    # Individual box plots
     plot_configs = [
-        ('RAIR_user', 'Reliance on AI when AI is Right (RAIR) by NLP Experience', 'nlp_exp_vs_rair.png'),
-        ('RSR_user', 'Resistance to Wrong AI (RSR) by NLP Experience', 'nlp_exp_vs_rsr.png'),
-        ('Mean_Plausibility', 'Mean Plausibility Rating by NLP Experience', 'nlp_exp_vs_plausibility.png'),
-        ('Mean_Conf_Delta', 'Mean Confidence Change by NLP Experience', 'nlp_exp_vs_conf_delta.png'),
-        ('Final_Accuracy_User', 'Final Accuracy by NLP Experience', 'nlp_exp_vs_accuracy.png')
+        ('RAIR_user', 'Reliance on AI when AI is Right (RAIR) by Education Level', 'edu_vs_rair.png'),
+        ('RSR_user', 'Resistance to Wrong AI (RSR) by Education Level', 'edu_vs_rsr.png'),
+        ('Mean_Plausibility', 'Mean Plausibility Rating by Education Level', 'edu_vs_plausibility.png'),
+        ('Mean_Conf_Delta', 'Mean Confidence Change by Education Level', 'edu_vs_conf_delta.png'),
+        ('Final_Accuracy_User', 'Final Accuracy by Education Level', 'edu_vs_accuracy.png')
     ]
     
     for metric, title, filename in plot_configs:
         plot_path = os.path.join(OUTPUT_FOLDER, filename)
-        plot_boxplot_by_experience(participant_metrics, 'nlp_experience', metric, title, plot_path)
+        plot_boxplot_by_education(participant_metrics, 'education_level', metric, title, plot_path)
     
     # Multi-panel plot
-    grouped_plot_path = os.path.join(OUTPUT_FOLDER, 'nlp_exp_metrics_by_level.png')
-    plot_metrics_by_experience(participant_metrics, grouped_plot_path)
+    grouped_plot_path = os.path.join(OUTPUT_FOLDER, 'edu_metrics_by_level.png')
+    plot_metrics_by_education(participant_metrics, grouped_plot_path)
     
     # AOR scatter plot
     print("\nCreating AOR scatter plot...")
-    aor_plot_path = os.path.join(OUTPUT_FOLDER, 'nlp_exp_aor_scatter.png')
-    plot_aor_scatter_by_nlp_experience(long_df, aor_plot_path)
+    aor_plot_path = os.path.join(OUTPUT_FOLDER, 'edu_aor_scatter.png')
+    plot_aor_scatter_by_education(long_df, aor_plot_path)
     
     print("\n" + "="*80)
     print("ANALYSIS COMPLETE")
@@ -772,20 +706,20 @@ def main():
     print("     - Accounts for repeated measures within participants")
     print("     - Same methodology as h_tests.py")
     print("\nVisualization Improvements:")
-    print("  - Box plots with individual data points (clearer than scatter plots)")
+    print("  - Box plots with individual data points")
     print("  - Violin plots showing full distributions")
     print("  - Mean and median lines clearly marked")
-    print("  - Sample sizes displayed for each experience level")
+    print("  - Sample sizes displayed for each education level")
     print("  - Correlation coefficients with significance shown on each plot")
     print("\nGenerated files:")
-    print(f"  - {OUTPUT_FOLDER}/nlp_experience_correlations.csv (correlation summary)")
-    print(f"  - {OUTPUT_FOLDER}/nlp_exp_vs_rair.png (box plot)")
-    print(f"  - {OUTPUT_FOLDER}/nlp_exp_vs_rsr.png (box plot)")
-    print(f"  - {OUTPUT_FOLDER}/nlp_exp_vs_plausibility.png (box plot)")
-    print(f"  - {OUTPUT_FOLDER}/nlp_exp_vs_conf_delta.png (box plot)")
-    print(f"  - {OUTPUT_FOLDER}/nlp_exp_vs_accuracy.png (box plot)")
-    print(f"  - {OUTPUT_FOLDER}/nlp_exp_metrics_by_level.png (multi-panel violin plots)")
-    print(f"  - {OUTPUT_FOLDER}/nlp_exp_aor_scatter.png (AOR scatter: RAIR vs RSR)")
+    print(f"  - {OUTPUT_FOLDER}/education_correlations.csv (correlation summary)")
+    print(f"  - {OUTPUT_FOLDER}/edu_vs_rair.png (box plot)")
+    print(f"  - {OUTPUT_FOLDER}/edu_vs_rsr.png (box plot)")
+    print(f"  - {OUTPUT_FOLDER}/edu_vs_plausibility.png (box plot)")
+    print(f"  - {OUTPUT_FOLDER}/edu_vs_conf_delta.png (box plot)")
+    print(f"  - {OUTPUT_FOLDER}/edu_vs_accuracy.png (box plot)")
+    print(f"  - {OUTPUT_FOLDER}/edu_metrics_by_level.png (multi-panel violin plots)")
+    print(f"  - {OUTPUT_FOLDER}/edu_aor_scatter.png (AOR scatter: RAIR vs RSR)")
     print("\nRegression results are printed above (full statsmodels output)")
     print("\n")
 

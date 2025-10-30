@@ -120,8 +120,8 @@ def build_full_with_deltas_and_labels():
     # === Config ===
     # Each tuple: (file_path, form)
     file_paths = [
-        ("Prolific-big-small.xlsx", "A"),
-        ("Prolific-small-big.xlsx", "B"),
+        ("../data/Prolific-big-small.xlsx", "A"),
+        ("../data/Prolific-small-big.xlsx", "B"),
     ]
     sheet = 0
     start_col_index = 8   # 0-based index of the first trial column
@@ -624,13 +624,13 @@ if __name__ == "__main__":
     # Use different filename if job filter is enabled
     if filter_by_job:
         if filter_mode == "include":
-            output_excel_path = "experiment_results_with_metrics_byjob_csai_only.xlsx"
+            output_excel_path = "../data/experiment_results_with_metrics_byjob_csai_only.xlsx"
         elif filter_mode == "exclude":
-            output_excel_path = "experiment_results_with_metrics_byjob_no_csai.xlsx"
+            output_excel_path = "../data/experiment_results_with_metrics_byjob_no_csai.xlsx"
         else:
-            output_excel_path = "experiment_results_with_metrics_byjob.xlsx"
+            output_excel_path = "../data/experiment_results_with_metrics_byjob.xlsx"
     else:
-        output_excel_path = "experiment_results_with_metrics.xlsx"
+        output_excel_path = "../data/experiment_results_with_metrics.xlsx"
     
     df_with_metrics.to_excel(output_excel_path, index=False)
     print(f"\nDataFrame with all metrics exported to '{output_excel_path}'.")

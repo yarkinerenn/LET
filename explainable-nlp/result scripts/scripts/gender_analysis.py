@@ -53,8 +53,8 @@ TUM_GRAY_20 = "#CCCCCC"
 
 # Configuration
 GENDER_COLUMN = "What is your gender?"
-DATA_FILE = 'experiment_results_with_metrics.xlsx'
-OUTPUT_FOLDER = 'gender_plots'
+DATA_FILE = '../data/experiment_results_with_metrics.xlsx'
+OUTPUT_FOLDER = '../plots/demographic_analyses/gender_plots'
 
 
 def add_gender_to_long(long_df, df_wide, gender_col):

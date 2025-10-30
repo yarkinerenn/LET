@@ -1,15 +1,9 @@
 """
-Education Level Analysis Script
-================================
+Age Analysis Script
+===================
 
-Analyzes the relationship between participants' education level and key performance metrics
+Analyzes the relationship between participants' age and key performance metrics
 using rigorous statistical methods.
-
-Education Levels (ordinal):
-- High school diploma (1)
-- Bachelor's degree (2)
-- Master's degree (3)
-- PhD or equivalent (4)
 
 Metrics analyzed:
 - RAIR (Reliance on AI when AI is right)
@@ -27,11 +21,10 @@ Statistical Methods:
    - Same methodology as h_tests.py
 
 Visualizations:
-- Box plots with overlaid individual data points
+- Scatter plots with age on x-axis
+- Box plots by age groups
 - Violin plots showing full distribution shapes
-- Mean and median lines clearly marked
-- Sample sizes for each education level
-- AOR scatter plot (RAIR vs RSR)
+- AOR scatter plot (RAIR vs RSR) by age groups
 
 Always uses unfiltered data (all participants regardless of job filter).
 """
@@ -59,36 +52,33 @@ TUM_GRAY_50 = "#808080"
 TUM_GRAY_20 = "#CCCCCC"
 
 # Configuration
-EDU_COLUMN = "What is your highest achieved level of education?"
-DATA_FILE = 'experiment_results_with_metrics.xlsx'
-OUTPUT_FOLDER = 'education_level_plots'
+AGE_COLUMN = "What is your age?"
+DATA_FILE = '../data/experiment_results_with_metrics.xlsx'
+OUTPUT_FOLDER = '../plots/demographic_analyses/age_plots'
 
-# Map education levels to ordinal numbers
-EDU_MAPPING = {
-    "High school diploma": 1,
-    "Bachelor's degree": 2,
-    "Master's degree": 3,
-    "PhD or equivalent": 4,
-    "Phd or equivalent": 4  # Handle possible case variation
-}
-
-# Reverse mapping for labels
-EDU_LABELS = {
-    1: "High School",
-    2: "Bachelor's",
-    3: "Master's",
-    4: "PhD"
+# Age group mapping to ordinal numbers for regression
+AGE_GROUP_MAPPING = {
+    "18-24": 1,
+    "25-34": 2,
+    "35-44": 3,
+    "45-54": 4,
+    "55+": 5,
+    "55-64": 5,
+    "65+": 6
 }
 
 
-def add_education_to_long(long_df, df_wide, edu_col):
+def add_age_to_long(long_df, df_wide, age_col):
     """
-    Add participant-level education level to long format DataFrame.
-    Convert categorical education to ordinal numbers.
+    Add participant-level age group to long format DataFrame.
+    Age is stored as categorical groups, convert to ordinal for analysis.
     """
-    # Create mapping from participant index to education
-    edu_map = df_wide[edu_col].map(EDU_MAPPING).to_dict()
-    long_df['education_level'] = long_df['participant'].map(edu_map)
+    # Create mapping from participant index to age group
+    age_group_map = df_wide[age_col].to_dict()
+    long_df['age_group'] = long_df['participant'].map(age_group_map)
+    
+    # Convert to ordinal for regression
+    long_df['age_ordinal'] = long_df['age_group'].map(AGE_GROUP_MAPPING)
     return long_df
 
 
@@ -100,7 +90,8 @@ def compute_participant_level_metrics(long_df, df_wide):
     participant_agg = long_df.groupby('participant').agg({
         'plaus': 'mean',
         'delta_conf': 'mean',
-        'education_level': 'first'
+        'age_group': 'first',
+        'age_ordinal': 'first'
     }).reset_index()
     
     # Rename for clarity
@@ -122,15 +113,15 @@ def compute_participant_level_metrics(long_df, df_wide):
     return participant_metrics
 
 
-def spearman_correlations(participant_df, edu_col, metrics):
+def spearman_correlations(participant_df, age_col, metrics):
     """
-    Compute Spearman rank correlations between education level and all metrics.
+    Compute Spearman rank correlations between age and all metrics.
     """
     results = []
     
     for metric in metrics:
         # Remove NaN values for this pair
-        valid_data = participant_df[[edu_col, metric]].dropna()
+        valid_data = participant_df[[age_col, metric]].dropna()
         
         if len(valid_data) < 3:
             results.append({
@@ -144,7 +135,7 @@ def spearman_correlations(participant_df, edu_col, metrics):
             continue
         
         # Compute Spearman correlation
-        rho, p_value = stats.spearmanr(valid_data[edu_col], valid_data[metric])
+        rho, p_value = stats.spearmanr(valid_data[age_col], valid_data[metric])
         
         # Determine significance
         if p_value < 0.001:
@@ -179,9 +170,9 @@ def spearman_correlations(participant_df, edu_col, metrics):
     return pd.DataFrame(results)
 
 
-def plot_boxplot_by_education(df, x_col, y_col, title, output_path):
+def plot_scatter_by_age(df, x_col, y_col, title, output_path):
     """
-    Create box plot with overlaid points showing distribution by education level.
+    Create scatter plot with age group (ordinal) on x-axis and trend line.
     """
     # Remove NaN values
     plot_data = df[[x_col, y_col]].dropna()
@@ -193,11 +184,61 @@ def plot_boxplot_by_education(df, x_col, y_col, title, output_path):
     # Create plot
     fig, ax = plt.subplots(figsize=(10, 6))
     
-    # Create box plot
-    positions = sorted(plot_data[x_col].unique())
-    box_data = [plot_data[plot_data[x_col] == pos][y_col].values for pos in positions]
+    # Scatter plot
+    ax.scatter(plot_data[x_col], plot_data[y_col], alpha=0.5, s=60, color=TUM_BLUE, edgecolors=TUM_BLUE_DARK, linewidth=0.5)
     
-    bp = ax.boxplot(box_data, positions=positions, widths=0.4, patch_artist=True,
+    # Add regression line
+    if len(plot_data) >= 3:
+        z = np.polyfit(plot_data[x_col], plot_data[y_col], 1)
+        p = np.poly1d(z)
+        x_line = np.linspace(plot_data[x_col].min(), plot_data[x_col].max(), 100)
+        ax.plot(x_line, p(x_line), color=TUM_ORANGE, linewidth=2.5, linestyle='-', label='Trend line')
+    
+    # Compute correlation for annotation
+    rho, p_value = stats.spearmanr(plot_data[x_col], plot_data[y_col])
+    sig = '***' if p_value < 0.001 else '**' if p_value < 0.01 else '*' if p_value < 0.05 else 'ns'
+    
+    # Add correlation annotation
+    ax.text(0.98, 0.02, f'Spearman ρ = {rho:.3f} {sig}\np = {p_value:.4f}\nn = {len(plot_data)}',
+            transform=ax.transAxes, fontsize=11, verticalalignment='bottom', horizontalalignment='right',
+            bbox=dict(boxstyle='round', facecolor='white', alpha=0.9, edgecolor=TUM_GRAY_50))
+    
+    ax.set_xlabel('Age Group (1=18-24, 2=25-34, 3=35-44, 4=45-54, 5=55+)', fontsize=11, fontweight='bold')
+    ax.set_ylabel(y_col.replace('_', ' '), fontsize=13, fontweight='bold')
+    ax.set_title(title, fontsize=15, fontweight='bold', pad=20)
+    ax.grid(True, alpha=0.2, linestyle='--')
+    if len(plot_data) >= 3:
+        ax.legend(loc='upper left', fontsize=10)
+    
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f"Saved: {output_path}")
+
+
+def plot_boxplot_by_age_group(df, y_col, title, output_path):
+    """
+    Create box plot with age groups on x-axis.
+    """
+    # Remove NaN values
+    plot_data = df[['age_group', y_col]].dropna()
+    
+    if len(plot_data) == 0:
+        print(f"Warning: No valid data for {title}")
+        return
+    
+    # Create plot
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Define age group order
+    age_order = ["18-24", "25-34", "35-44", "45-54", "55+"]
+    available_groups = [g for g in age_order if g in plot_data['age_group'].unique()]
+    
+    # Create box plot
+    box_data = [plot_data[plot_data['age_group'] == group][y_col].values for group in available_groups]
+    positions = list(range(len(available_groups)))
+    
+    bp = ax.boxplot(box_data, positions=positions, widths=0.5, patch_artist=True,
                      boxprops=dict(facecolor=TUM_LIGHT_BLUE, alpha=0.7, edgecolor=TUM_BLUE_DARK),
                      whiskerprops=dict(color=TUM_BLUE_DARK, linewidth=1.5),
                      capprops=dict(color=TUM_BLUE_DARK, linewidth=1.5),
@@ -205,37 +246,27 @@ def plot_boxplot_by_education(df, x_col, y_col, title, output_path):
                      flierprops=dict(marker='o', markerfacecolor=TUM_GRAY_50, markersize=6, alpha=0.5))
     
     # Overlay individual points with jitter
-    for pos in positions:
-        pos_data = plot_data[plot_data[x_col] == pos][y_col].values
-        jitter = np.random.normal(0, 0.06, len(pos_data))
-        ax.scatter(pos + jitter, pos_data, alpha=0.4, s=40, color=TUM_BLUE, edgecolors='none')
+    for i, group in enumerate(available_groups):
+        group_data = plot_data[plot_data['age_group'] == group][y_col].values
+        jitter = np.random.normal(0, 0.08, len(group_data))
+        ax.scatter([i]*len(group_data) + jitter, group_data, alpha=0.4, s=40, color=TUM_BLUE, edgecolors='none')
     
     # Add mean line
-    means = [plot_data[plot_data[x_col] == pos][y_col].mean() for pos in positions]
+    means = [plot_data[plot_data['age_group'] == group][y_col].mean() for group in available_groups]
     ax.plot(positions, means, color=TUM_GREEN, linewidth=2.5, marker='D', markersize=8, 
             label='Mean', linestyle='--', zorder=10)
     
     # Add sample size annotations
-    for pos in positions:
-        n = len(plot_data[plot_data[x_col] == pos])
-        ax.text(pos, ax.get_ylim()[1] * 0.98, f'n={n}', 
+    for i, group in enumerate(available_groups):
+        n = len(plot_data[plot_data['age_group'] == group])
+        ax.text(i, ax.get_ylim()[1] * 0.98, f'n={n}', 
                 ha='center', va='top', fontsize=9, color=TUM_GRAY_80)
     
-    # Compute correlation for annotation
-    rho, p_value = stats.spearmanr(plot_data[x_col], plot_data[y_col])
-    sig = '***' if p_value < 0.001 else '**' if p_value < 0.01 else '*' if p_value < 0.05 else 'ns'
-    
-    # Add correlation annotation
-    ax.text(0.98, 0.02, f'Spearman ρ = {rho:.3f} {sig}\np = {p_value:.4f}\nTotal n = {len(plot_data)}',
-            transform=ax.transAxes, fontsize=11, verticalalignment='bottom', horizontalalignment='right',
-            bbox=dict(boxstyle='round', facecolor='white', alpha=0.9, edgecolor=TUM_GRAY_50))
-    
-    ax.set_xlabel('Education Level', fontsize=13, fontweight='bold')
+    ax.set_xlabel('Age Group', fontsize=13, fontweight='bold')
     ax.set_ylabel(y_col.replace('_', ' '), fontsize=13, fontweight='bold')
     ax.set_title(title, fontsize=15, fontweight='bold', pad=20)
-    ax.set_xlim(0.5, 4.5)
-    ax.set_xticks([1, 2, 3, 4])
-    ax.set_xticklabels([EDU_LABELS[i] for i in [1, 2, 3, 4]])
+    ax.set_xticks(positions)
+    ax.set_xticklabels(available_groups)
     ax.grid(True, alpha=0.2, linestyle='--', axis='y')
     ax.legend(loc='upper left', fontsize=10)
     
@@ -245,9 +276,9 @@ def plot_boxplot_by_education(df, x_col, y_col, title, output_path):
     print(f"Saved: {output_path}")
 
 
-def plot_metrics_by_education(participant_df, output_path):
+def plot_metrics_by_age(participant_df, output_path):
     """
-    Create separate subplots for each metric showing clear distributions by education level.
+    Create separate subplots for each metric showing distributions by age group (scatter plots).
     """
     metrics = ['RAIR_user', 'RSR_user', 'Mean_Plausibility', 'Mean_Conf_Delta', 'Final_Accuracy_User']
     metric_labels = ['RAIR', 'RSR', 'Mean Plausibility', 'Mean Confidence Change', 'Final Accuracy']
@@ -259,44 +290,24 @@ def plot_metrics_by_education(participant_df, output_path):
     
     for idx, (metric, label, color) in enumerate(zip(metrics, metric_labels, colors)):
         ax = axes[idx]
-        plot_data = participant_df[['education_level', metric]].dropna()
+        plot_data = participant_df[['age_ordinal', metric]].dropna()
         
         if len(plot_data) == 0:
             ax.text(0.5, 0.5, 'No data', ha='center', va='center', transform=ax.transAxes)
             continue
         
-        # Create violin plot
-        positions = sorted(plot_data['education_level'].unique())
-        violin_data = [plot_data[plot_data['education_level'] == pos][metric].values for pos in positions]
-        
-        parts = ax.violinplot(violin_data, positions=positions, widths=0.5, 
-                              showmeans=True, showmedians=True, showextrema=True)
-        
-        # Style violin plots
-        for pc in parts['bodies']:
-            pc.set_facecolor(color)
-            pc.set_alpha(0.6)
-            pc.set_edgecolor(TUM_BLUE_DARK)
-        
-        parts['cmeans'].set_color(TUM_GREEN)
-        parts['cmeans'].set_linewidth(2)
-        parts['cmedians'].set_color(TUM_ORANGE)
-        parts['cmedians'].set_linewidth(2)
-        
-        # Overlay individual points
-        for pos in positions:
-            pos_data = plot_data[plot_data['education_level'] == pos][metric].values
-            jitter = np.random.normal(0, 0.05, len(pos_data))
-            ax.scatter(pos + jitter, pos_data, alpha=0.3, s=25, color='black', edgecolors='none')
+        # Scatter plot
+        ax.scatter(plot_data['age_ordinal'], plot_data[metric], alpha=0.5, s=50, color=color, edgecolors='black', linewidth=0.5)
         
         # Add trend line
-        z = np.polyfit(plot_data['education_level'], plot_data[metric], 1)
-        p = np.poly1d(z)
-        x_line = np.linspace(1, 4, 100)
-        ax.plot(x_line, p(x_line), color='red', linewidth=2, linestyle='--', alpha=0.7, label='Trend')
+        if len(plot_data) >= 3:
+            z = np.polyfit(plot_data['age_ordinal'], plot_data[metric], 1)
+            p = np.poly1d(z)
+            x_line = np.linspace(plot_data['age_ordinal'].min(), plot_data['age_ordinal'].max(), 100)
+            ax.plot(x_line, p(x_line), color='red', linewidth=2, linestyle='--', alpha=0.7, label='Trend')
         
         # Compute correlation
-        rho, p_value = stats.spearmanr(plot_data['education_level'], plot_data[metric])
+        rho, p_value = stats.spearmanr(plot_data['age_ordinal'], plot_data[metric])
         sig = '***' if p_value < 0.001 else '**' if p_value < 0.01 else '*' if p_value < 0.05 else 'ns'
         
         # Add stats annotation
@@ -304,44 +315,42 @@ def plot_metrics_by_education(participant_df, output_path):
                 fontsize=10, verticalalignment='top', 
                 bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
         
-        ax.set_xlabel('Education Level', fontsize=11, fontweight='bold')
+        ax.set_xlabel('Age Group', fontsize=11, fontweight='bold')
         ax.set_ylabel(label, fontsize=11, fontweight='bold')
         ax.set_title(label, fontsize=13, fontweight='bold')
-        ax.set_xlim(0.5, 4.5)
-        ax.set_xticks([1, 2, 3, 4])
-        ax.set_xticklabels([EDU_LABELS[i] for i in [1, 2, 3, 4]], fontsize=9)
-        ax.grid(True, alpha=0.2, linestyle='--', axis='y')
+        ax.grid(True, alpha=0.2, linestyle='--')
     
     # Remove the 6th subplot
     fig.delaxes(axes[5])
     
-    plt.suptitle('Performance Metrics by Education Level', fontsize=16, fontweight='bold', y=1.00)
+    plt.suptitle('Performance Metrics by Age Group', fontsize=16, fontweight='bold', y=1.00)
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
     print(f"Saved: {output_path}")
 
 
-def plot_aor_scatter_by_education(long_df, output_path):
+def plot_aor_scatter_by_age_group(long_df, output_path):
     """
-    Plot AOR scatter: RAIR (x-axis) vs RSR (y-axis) with one point per education level.
+    Plot AOR scatter: RAIR (x-axis) vs RSR (y-axis) with one point per age group.
     AOR (Appropriateness of Reliance) = (RAIR + RSR) / 2
     """
+    # age_group already exists in long_df
+    
     # RAIR-eligible: AI correct & human initially wrong
     df_rair = long_df[(long_df["ai_correct"]==1) & (long_df["human_pre_correct"]==0)].copy()
     df_rair["rair"] = df_rair["changed_to_correct"].astype(float)
-    rair_by_edu = df_rair.groupby("education_level")["rair"].mean().rename("RAIR")
+    rair_by_age = df_rair.groupby("age_group")["rair"].mean().rename("RAIR")
     
     # RSR-eligible: AI wrong & human initially correct
     df_rsr = long_df[(long_df["ai_correct"]==0) & (long_df["human_pre_correct"]==1)].copy()
     df_rsr["rsr"] = df_rsr["stayed_correct"].astype(float)
-    rsr_by_edu = df_rsr.groupby("education_level")["rsr"].mean().rename("RSR")
+    rsr_by_age = df_rsr.groupby("age_group")["rsr"].mean().rename("RSR")
     
     # Combine
-    summary = pd.concat([rair_by_edu, rsr_by_edu], axis=1).reset_index()
-    summary = summary.dropna()  # Remove any education levels with missing data
+    summary = pd.concat([rair_by_age, rsr_by_age], axis=1).reset_index()
+    summary = summary.dropna()  # Remove any age groups with missing data
     summary["AOR"] = (summary["RAIR"] + summary["RSR"]) / 2.0
-    summary["edu_label"] = summary["education_level"].map(EDU_LABELS)
     
     if len(summary) == 0:
         print("Warning: No valid data for AOR plot")
@@ -350,45 +359,34 @@ def plot_aor_scatter_by_education(long_df, output_path):
     # Create plot
     fig, ax = plt.subplots(figsize=(8, 8))
     
-    # Color gradient for education levels
-    colors = [TUM_BLUE_DARKER, TUM_BLUE_DARK, TUM_MED_BLUE, TUM_LIGHT_BLUE]
-    edu_levels = sorted(summary["education_level"].unique())
-    color_map = {level: colors[int(level)-1] for level in edu_levels}
-    point_colors = [color_map[edu] for edu in summary["education_level"]]
+    # Define age group order and colors
+    age_order = ["18-24", "25-34", "35-44", "45-54", "55+"]
+    colors = [TUM_BLUE_DARKER, TUM_BLUE_DARK, TUM_BLUE, TUM_MED_BLUE, TUM_LIGHT_BLUE]
+    
+    # Filter to available groups and maintain order
+    summary['age_group'] = pd.Categorical(summary['age_group'], categories=age_order, ordered=True)
+    summary = summary.sort_values('age_group').dropna(subset=['age_group'])  # Remove NaN age groups
+    
+    color_map = {group: colors[age_order.index(group)] for group in summary['age_group'] if group in age_order}
+    point_colors = [color_map[group] for group in summary['age_group']]
     
     # Scatter plot
     scatter = ax.scatter(summary["RAIR"], summary["RSR"], s=300, c=point_colors, 
                         edgecolor="black", linewidth=2, zorder=10, alpha=0.8)
     
-    # Annotate each point with level and AOR
+    # Annotate each point with age group and AOR
     for _, row in summary.iterrows():
-        level = int(row["education_level"])
-        label = f"{row['edu_label']}\nAOR={row['AOR']:.3f}"
+        label = f"{row['age_group']}\nAOR={row['AOR']:.3f}"
         
         # Position labels to avoid overlap
-        if level == 1:
-            xytext = (10, -15)
-            va = 'top'
-            ha = 'left'
-        elif level == 2:
-            xytext = (-15, -15)
-            va = 'top'
-            ha = 'right'
-        elif level == 3:
-            xytext = (10, 10)
-            va = 'bottom'
-            ha = 'left'
-        else:  # PhD
-            xytext = (-15, 10)
-            va = 'bottom'
-            ha = 'right'
+        xytext = (10, 10)
         
         ax.annotate(label, (row["RAIR"], row["RSR"]), 
                    xytext=xytext, textcoords="offset points",
-                   ha=ha, va=va,
+                   ha="left", va="bottom",
                    fontsize=10, fontweight='bold',
                    bbox=dict(boxstyle="round,pad=0.5", facecolor="white", 
-                            edgecolor=color_map[row["education_level"]], alpha=0.95, linewidth=2))
+                            edgecolor=color_map[row["age_group"]], alpha=0.95, linewidth=2))
     
     # Add diagonal line for reference
     ax.plot([0, 1], [0, 1], 'k--', alpha=0.3, linewidth=1.5, label='RAIR = RSR')
@@ -396,7 +394,7 @@ def plot_aor_scatter_by_education(long_df, output_path):
     # Formatting
     ax.set_xlabel('RAIR (Reliance on AI when Right)', fontsize=13, fontweight='bold')
     ax.set_ylabel('RSR (Resistance to wrong AI)', fontsize=13, fontweight='bold')
-    ax.set_title('Appropriateness of Reliance (AOR) by Education Level\nRAIR vs RSR', 
+    ax.set_title('Appropriateness of Reliance (AOR) by Age Group\nRAIR vs RSR', 
                 fontsize=15, fontweight='bold', pad=20)
     ax.set_xlim(-0.05, 1.05)
     ax.set_ylim(-0.05, 1.05)
@@ -412,11 +410,11 @@ def plot_aor_scatter_by_education(long_df, output_path):
     # Legend
     from matplotlib.lines import Line2D
     legend_elements = [Line2D([0], [0], marker='o', color='w', 
-                             label=EDU_LABELS[int(level)],
-                             markerfacecolor=color_map[level], 
+                             label=group,
+                             markerfacecolor=color_map[group], 
                              markeredgecolor='black', markersize=10)
-                      for level in edu_levels]
-    ax.legend(handles=legend_elements, loc='lower right', title='Education Level', 
+                      for group in summary['age_group']]
+    ax.legend(handles=legend_elements, loc='lower right', title='Age Group', 
              framealpha=0.95, edgecolor='black')
     
     plt.tight_layout()
@@ -425,27 +423,27 @@ def plot_aor_scatter_by_education(long_df, output_path):
     
     # Print summary
     print("\n" + "="*80)
-    print("AOR (Appropriateness of Reliance) by Education Level")
+    print("AOR (Appropriateness of Reliance) by Age Group")
     print("="*80)
-    print(f"{'Level':<15} {'RAIR':<10} {'RSR':<10} {'AOR':<10}")
+    print(f"{'Age Group':<15} {'RAIR':<10} {'RSR':<10} {'AOR':<10}")
     print("-"*80)
     for _, row in summary.iterrows():
-        print(f"{row['edu_label']:<15} {row['RAIR']:<10.3f} {row['RSR']:<10.3f} {row['AOR']:<10.3f}")
+        print(f"{row['age_group']:<15} {row['RAIR']:<10.3f} {row['RSR']:<10.3f} {row['AOR']:<10.3f}")
     print("="*80)
     
     print(f"\nSaved AOR plot to: {output_path}")
 
 
-def regression_analysis_clustered(long_df, edu_col='education_level'):
+def regression_analysis_clustered(long_df, age_col='age'):
     """
     Perform regression analyses with cluster-robust standard errors.
     Uses the same methodology as h_tests.py to account for repeated measures.
     """
     results = {}
     
-    # Prepare data - ensure education_level is numeric
+    # Prepare data - ensure age is numeric
     analysis_df = long_df.copy()
-    analysis_df[edu_col] = pd.to_numeric(analysis_df[edu_col], errors='coerce')
+    analysis_df[age_col] = pd.to_numeric(analysis_df[age_col], errors='coerce')
     
     print("\n" + "="*80)
     print("REGRESSION ANALYSES WITH CLUSTER-ROBUST STANDARD ERRORS")
@@ -455,17 +453,17 @@ def regression_analysis_clustered(long_df, edu_col='education_level'):
     
     # 1. Plausibility (continuous) - OLS with cluster-robust SEs
     print("\n" + "-"*80)
-    print("1. PLAUSIBILITY ~ Education_Level (OLS with cluster-robust SEs)")
+    print("1. PLAUSIBILITY ~ Age (OLS with cluster-robust SEs)")
     print("-"*80)
     try:
-        model_plaus = ols_clustered(f'plaus ~ {edu_col}', data=analysis_df, cluster_var='participant')
+        model_plaus = ols_clustered(f'plaus ~ {age_col}', data=analysis_df, cluster_var='participant')
         results['plausibility'] = model_plaus
         print(model_plaus.summary())
-        coef = model_plaus.params[edu_col]
-        pval = model_plaus.pvalues[edu_col]
+        coef = model_plaus.params[age_col]
+        pval = model_plaus.pvalues[age_col]
         sig = '***' if pval < 0.001 else '**' if pval < 0.01 else '*' if pval < 0.05 else ''
         print(f"\nCoefficient: {coef:.4f} {sig}")
-        print(f"Interpretation: Each 1-level increase in education is associated with")
+        print(f"Interpretation: Each 1-level increase in age group is associated with")
         print(f"               {abs(coef):.4f} {'increase' if coef > 0 else 'decrease'} in plausibility rating")
     except Exception as e:
         print(f"Error: {e}")
@@ -473,17 +471,17 @@ def regression_analysis_clustered(long_df, edu_col='education_level'):
     
     # 2. Confidence change (continuous) - OLS with cluster-robust SEs
     print("\n" + "-"*80)
-    print("2. CONFIDENCE_CHANGE ~ Education_Level (OLS with cluster-robust SEs)")
+    print("2. CONFIDENCE_CHANGE ~ Age (OLS with cluster-robust SEs)")
     print("-"*80)
     try:
-        model_conf = ols_clustered(f'delta_conf ~ {edu_col}', data=analysis_df, cluster_var='participant')
+        model_conf = ols_clustered(f'delta_conf ~ {age_col}', data=analysis_df, cluster_var='participant')
         results['confidence_change'] = model_conf
         print(model_conf.summary())
-        coef = model_conf.params[edu_col]
-        pval = model_conf.pvalues[edu_col]
+        coef = model_conf.params[age_col]
+        pval = model_conf.pvalues[age_col]
         sig = '***' if pval < 0.001 else '**' if pval < 0.01 else '*' if pval < 0.05 else ''
         print(f"\nCoefficient: {coef:.4f} {sig}")
-        print(f"Interpretation: Each 1-level increase in education is associated with")
+        print(f"Interpretation: Each 1-level increase in age group is associated with")
         print(f"               {abs(coef):.4f} {'increase' if coef > 0 else 'decrease'} in confidence change")
     except Exception as e:
         print(f"Error: {e}")
@@ -491,20 +489,20 @@ def regression_analysis_clustered(long_df, edu_col='education_level'):
     
     # 3. Human final accuracy (binary) - Logistic regression with cluster-robust SEs
     print("\n" + "-"*80)
-    print("3. FINAL_ACCURACY (post==gt) ~ Education_Level (Logistic with cluster-robust SEs)")
+    print("3. FINAL_ACCURACY (post==gt) ~ Age (Logistic with cluster-robust SEs)")
     print("-"*80)
     try:
         analysis_df['final_correct'] = (analysis_df['post'] == analysis_df['gt']).astype(int)
-        model_acc = logit_clustered(f'final_correct ~ {edu_col}', data=analysis_df, cluster_var='participant')
+        model_acc = logit_clustered(f'final_correct ~ {age_col}', data=analysis_df, cluster_var='participant')
         results['final_accuracy'] = model_acc
         print(model_acc.summary())
-        coef = model_acc.params[edu_col]
-        pval = model_acc.pvalues[edu_col]
+        coef = model_acc.params[age_col]
+        pval = model_acc.pvalues[age_col]
         sig = '***' if pval < 0.001 else '**' if pval < 0.01 else '*' if pval < 0.05 else ''
         odds_ratio = np.exp(coef)
         print(f"\nLog-odds coefficient: {coef:.4f} {sig}")
         print(f"Odds ratio: {odds_ratio:.4f}")
-        print(f"Interpretation: Each 1-level increase in education multiplies the odds")
+        print(f"Interpretation: Each 1-level increase in age group multiplies the odds")
         print(f"               of being correct by {odds_ratio:.4f}")
     except Exception as e:
         print(f"Error: {e}")
@@ -519,16 +517,16 @@ def regression_analysis_clustered(long_df, edu_col='education_level'):
         rair_df = analysis_df[(analysis_df['ai_correct']==1) & (analysis_df['human_pre_correct']==0)].copy()
         print(f"RAIR-eligible trials: {len(rair_df)}")
         if len(rair_df) >= 10:
-            model_rair = logit_clustered(f'changed_to_correct ~ {edu_col}', data=rair_df, cluster_var='participant')
+            model_rair = logit_clustered(f'changed_to_correct ~ {age_col}', data=rair_df, cluster_var='participant')
             results['rair'] = model_rair
             print(model_rair.summary())
-            coef = model_rair.params[edu_col]
-            pval = model_rair.pvalues[edu_col]
+            coef = model_rair.params[age_col]
+            pval = model_rair.pvalues[age_col]
             sig = '***' if pval < 0.001 else '**' if pval < 0.01 else '*' if pval < 0.05 else ''
             odds_ratio = np.exp(coef)
             print(f"\nLog-odds coefficient: {coef:.4f} {sig}")
             print(f"Odds ratio: {odds_ratio:.4f}")
-            print(f"Interpretation: Each 1-level increase in education multiplies the odds")
+            print(f"Interpretation: Each 1-level increase in age group multiplies the odds")
             print(f"               of accepting AI's correct suggestion by {odds_ratio:.4f}")
         else:
             print("Insufficient RAIR-eligible observations for regression")
@@ -546,16 +544,16 @@ def regression_analysis_clustered(long_df, edu_col='education_level'):
         rsr_df = analysis_df[(analysis_df['ai_correct']==0) & (analysis_df['human_pre_correct']==1)].copy()
         print(f"RSR-eligible trials: {len(rsr_df)}")
         if len(rsr_df) >= 10:
-            model_rsr = logit_clustered(f'stayed_correct ~ {edu_col}', data=rsr_df, cluster_var='participant')
+            model_rsr = logit_clustered(f'stayed_correct ~ {age_col}', data=rsr_df, cluster_var='participant')
             results['rsr'] = model_rsr
             print(model_rsr.summary())
-            coef = model_rsr.params[edu_col]
-            pval = model_rsr.pvalues[edu_col]
+            coef = model_rsr.params[age_col]
+            pval = model_rsr.pvalues[age_col]
             sig = '***' if pval < 0.001 else '**' if pval < 0.01 else '*' if pval < 0.05 else ''
             odds_ratio = np.exp(coef)
             print(f"\nLog-odds coefficient: {coef:.4f} {sig}")
             print(f"Odds ratio: {odds_ratio:.4f}")
-            print(f"Interpretation: Each 1-level increase in education multiplies the odds")
+            print(f"Interpretation: Each 1-level increase in age group multiplies the odds")
             print(f"               of resisting AI's wrong suggestion by {odds_ratio:.4f}")
         else:
             print("Insufficient RSR-eligible observations for regression")
@@ -578,7 +576,7 @@ def save_correlation_summary(results_df, output_path):
 def print_correlation_summary(results_df):
     """Print formatted correlation summary to console."""
     print("\n" + "="*80)
-    print("EDUCATION LEVEL CORRELATION ANALYSIS")
+    print("AGE CORRELATION ANALYSIS")
     print("="*80)
     print("\nSpearman Rank Correlations (Non-parametric)")
     print("Significance: * p<.05, ** p<.01, *** p<.001")
@@ -598,7 +596,7 @@ def print_correlation_summary(results_df):
 def main():
     """Main analysis function."""
     print("="*80)
-    print("EDUCATION LEVEL ANALYSIS")
+    print("AGE ANALYSIS")
     print("="*80)
     print(f"\nLoading data from: {DATA_FILE}")
     print("Note: Always uses unfiltered data (all participants)\n")
@@ -618,11 +616,11 @@ def main():
         print(f"Error: {DATA_FILE} not found. Please run script.py first.")
         return
     
-    # Check if education column exists
-    if EDU_COLUMN not in df_wide.columns:
-        print(f"\nError: Column '{EDU_COLUMN}' not found in data.")
-        print("Available columns containing 'education':")
-        relevant_cols = [c for c in df_wide.columns if 'education' in c.lower()]
+    # Check if age column exists
+    if AGE_COLUMN not in df_wide.columns:
+        print(f"\nError: Column '{AGE_COLUMN}' not found in data.")
+        print("Available columns containing 'age':")
+        relevant_cols = [c for c in df_wide.columns if 'age' in c.lower()]
         for col in relevant_cols:
             print(f"  - {col}")
         return
@@ -632,20 +630,19 @@ def main():
     long_df = make_long(df_wide, n_trials=16)
     print(f"Created {len(long_df)} trial observations")
     
-    # Add education level to long format
-    long_df = add_education_to_long(long_df, df_wide, EDU_COLUMN)
+    # Add age to long format
+    long_df = add_age_to_long(long_df, df_wide, AGE_COLUMN)
     
     # Compute participant-level metrics
     print("\nComputing participant-level metrics...")
     participant_metrics = compute_participant_level_metrics(long_df, df_wide)
     print(f"Aggregated data for {len(participant_metrics)} participants")
     
-    # Check education level distribution
-    edu_dist = participant_metrics['education_level'].value_counts().sort_index()
-    print("\nEducation Level Distribution:")
-    for level, count in edu_dist.items():
-        if not np.isnan(level):
-            print(f"  {EDU_LABELS.get(int(level), 'Unknown')}: {count} participants")
+    # Check age distribution
+    age_group_dist = participant_metrics['age_group'].value_counts().sort_index()
+    print("\nAge Group Distribution:")
+    for group, count in age_group_dist.items():
+        print(f"  {group}: {count} participants")
     
     # Define metrics to analyze
     metrics = ['RAIR_user', 'RSR_user', 'Mean_Plausibility', 'Mean_Conf_Delta', 'Final_Accuracy_User']
@@ -655,13 +652,14 @@ def main():
     print("PART 1: SPEARMAN CORRELATIONS (Exploratory)")
     print("="*80)
     print("Performing Spearman rank correlations on participant-level aggregates...")
-    correlation_results = spearman_correlations(participant_metrics, 'education_level', metrics)
+    print("Using age_ordinal (1-5) for correlation analysis")
+    correlation_results = spearman_correlations(participant_metrics, 'age_ordinal', metrics)
     
     # Print summary
     print_correlation_summary(correlation_results)
     
     # Save correlation summary
-    csv_path = os.path.join(OUTPUT_FOLDER, 'education_correlations.csv')
+    csv_path = os.path.join(OUTPUT_FOLDER, 'age_correlations.csv')
     save_correlation_summary(correlation_results, csv_path)
     
     # Perform regression analyses with cluster-robust SEs (main analysis)
@@ -669,32 +667,46 @@ def main():
     print("PART 2: REGRESSION ANALYSES (Main Analysis)")
     print("="*80)
     print("Using trial-level data with cluster-robust SEs (same as h_tests.py)")
-    regression_results = regression_analysis_clustered(long_df, edu_col='education_level')
+    print("Age groups treated as ordinal (1=18-24, 2=25-34, 3=35-44, 4=45-54, 5=55+)")
+    regression_results = regression_analysis_clustered(long_df, age_col='age_ordinal')
     
     # Create visualizations
     print("\nCreating visualizations...")
     
-    # Individual box plots
-    plot_configs = [
-        ('RAIR_user', 'Reliance on AI when AI is Right (RAIR) by Education Level', 'edu_vs_rair.png'),
-        ('RSR_user', 'Resistance to Wrong AI (RSR) by Education Level', 'edu_vs_rsr.png'),
-        ('Mean_Plausibility', 'Mean Plausibility Rating by Education Level', 'edu_vs_plausibility.png'),
-        ('Mean_Conf_Delta', 'Mean Confidence Change by Education Level', 'edu_vs_conf_delta.png'),
-        ('Final_Accuracy_User', 'Final Accuracy by Education Level', 'edu_vs_accuracy.png')
+    # Scatter plots (age ordinal as continuous)
+    scatter_configs = [
+        ('RAIR_user', 'Reliance on AI when AI is Right (RAIR) by Age Group', 'age_vs_rair_scatter.png'),
+        ('RSR_user', 'Resistance to Wrong AI (RSR) by Age Group', 'age_vs_rsr_scatter.png'),
+        ('Mean_Plausibility', 'Mean Plausibility Rating by Age Group', 'age_vs_plausibility_scatter.png'),
+        ('Mean_Conf_Delta', 'Mean Confidence Change by Age Group', 'age_vs_conf_delta_scatter.png'),
+        ('Final_Accuracy_User', 'Final Accuracy by Age Group', 'age_vs_accuracy_scatter.png')
     ]
     
-    for metric, title, filename in plot_configs:
+    for metric, title, filename in scatter_configs:
         plot_path = os.path.join(OUTPUT_FOLDER, filename)
-        plot_boxplot_by_education(participant_metrics, 'education_level', metric, title, plot_path)
+        plot_scatter_by_age(participant_metrics, 'age_ordinal', metric, title, plot_path)
+    
+    # Box plots by age groups
+    boxplot_configs = [
+        ('RAIR_user', 'RAIR by Age Group', 'age_group_vs_rair.png'),
+        ('RSR_user', 'RSR by Age Group', 'age_group_vs_rsr.png'),
+        ('Mean_Plausibility', 'Mean Plausibility by Age Group', 'age_group_vs_plausibility.png'),
+        ('Mean_Conf_Delta', 'Mean Confidence Change by Age Group', 'age_group_vs_conf_delta.png'),
+        ('Final_Accuracy_User', 'Final Accuracy by Age Group', 'age_group_vs_accuracy.png')
+    ]
+    
+    for metric, title, filename in boxplot_configs:
+        plot_path = os.path.join(OUTPUT_FOLDER, filename)
+        plot_boxplot_by_age_group(participant_metrics, metric, title, plot_path)
     
     # Multi-panel plot
-    grouped_plot_path = os.path.join(OUTPUT_FOLDER, 'edu_metrics_by_level.png')
-    plot_metrics_by_education(participant_metrics, grouped_plot_path)
+    grouped_plot_path = os.path.join(OUTPUT_FOLDER, 'age_metrics_scatter.png')
+    plot_metrics_by_age(participant_metrics, grouped_plot_path)
     
     # AOR scatter plot
     print("\nCreating AOR scatter plot...")
-    aor_plot_path = os.path.join(OUTPUT_FOLDER, 'edu_aor_scatter.png')
-    plot_aor_scatter_by_education(long_df, aor_plot_path)
+    aor_plot_path = os.path.join(OUTPUT_FOLDER, 'age_aor_scatter.png')
+    plot_aor_scatter_by_age_group(long_df, aor_plot_path)
     
     print("\n" + "="*80)
     print("ANALYSIS COMPLETE")
@@ -705,25 +717,20 @@ def main():
     print("  2. Regression with cluster-robust SEs (main analysis, trial-level)")
     print("     - Accounts for repeated measures within participants")
     print("     - Same methodology as h_tests.py")
-    print("\nVisualization Improvements:")
-    print("  - Box plots with individual data points")
-    print("  - Violin plots showing full distributions")
-    print("  - Mean and median lines clearly marked")
-    print("  - Sample sizes displayed for each education level")
-    print("  - Correlation coefficients with significance shown on each plot")
+    print("\nVisualization Types:")
+    print("  - Scatter plots (age as continuous variable)")
+    print("  - Box plots by age groups")
+    print("  - Multi-panel scatter plots")
+    print("  - AOR scatter plot by age groups")
     print("\nGenerated files:")
-    print(f"  - {OUTPUT_FOLDER}/education_correlations.csv (correlation summary)")
-    print(f"  - {OUTPUT_FOLDER}/edu_vs_rair.png (box plot)")
-    print(f"  - {OUTPUT_FOLDER}/edu_vs_rsr.png (box plot)")
-    print(f"  - {OUTPUT_FOLDER}/edu_vs_plausibility.png (box plot)")
-    print(f"  - {OUTPUT_FOLDER}/edu_vs_conf_delta.png (box plot)")
-    print(f"  - {OUTPUT_FOLDER}/edu_vs_accuracy.png (box plot)")
-    print(f"  - {OUTPUT_FOLDER}/edu_metrics_by_level.png (multi-panel violin plots)")
-    print(f"  - {OUTPUT_FOLDER}/edu_aor_scatter.png (AOR scatter: RAIR vs RSR)")
+    print(f"  - {OUTPUT_FOLDER}/age_correlations.csv (correlation summary)")
+    print(f"  - {OUTPUT_FOLDER}/age_vs_*_scatter.png (5 scatter plots)")
+    print(f"  - {OUTPUT_FOLDER}/age_group_vs_*.png (5 box plots by age group)")
+    print(f"  - {OUTPUT_FOLDER}/age_metrics_scatter.png (multi-panel scatter plots)")
+    print(f"  - {OUTPUT_FOLDER}/age_aor_scatter.png (AOR scatter: RAIR vs RSR)")
     print("\nRegression results are printed above (full statsmodels output)")
     print("\n")
 
 
 if __name__ == "__main__":
     main()
-

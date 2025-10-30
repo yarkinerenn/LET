@@ -57,8 +57,8 @@ TUM_GRAY_20 = "#CCCCCC"
 
 # Configuration
 JOB_COLUMN = "What is your field of work/study ?"
-DATA_FILE = 'experiment_results_with_metrics.xlsx'
-OUTPUT_FOLDER = 'cs_expertise_plots'
+DATA_FILE = '../data/experiment_results_with_metrics.xlsx'
+OUTPUT_FOLDER = '../plots/demographic_analyses/cs_expertise_plots'
 
 # Keywords to identify CS/AI experts (same as script.py)
 CS_AI_KEYWORDS = [
