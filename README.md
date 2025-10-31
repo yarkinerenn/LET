@@ -296,6 +296,33 @@ This bridges feature-based attribution with narrative reasoning.
 
 ---
 
+## Thesis Analysis Scripts
+
+The `explainable-nlp/result scripts/` directory contains analysis scripts used for the thesis user study evaluating explanation faithfulness and plausibility in deception detection tasks.
+
+### Purpose
+These scripts process experimental data from a user study where participants evaluated AI explanations from two LLM sizes (Llama 3.1 8B vs. Llama 3.3 70B) under faithful and unfaithful conditions. The analysis tests 16 hypotheses about how explanation quality affects human-AI interaction.
+
+### Key Scripts
+- **`script.py`**: Processes raw Prolific data, normalizes responses, computes RAIR (Reliance on AI when Right) and RSR (Resistance to wrong AI) metrics
+- **`h_tests.py`**: Tests all hypotheses using regression with cluster-robust standard errors to account for repeated measures
+- **`plots.py`**: Generates 24 visualizations with consistent TUM color scheme
+- **Demographic analyses** (5 scripts): Examines age, gender, CS/AI expertise, education, and NLP experience effects
+- **`demographics_table.py`**: Generates participant characteristics table
+
+### Statistical Methodology
+All analyses use **cluster-robust standard errors** with participant-level clustering to properly account for the within-subjects design (each participant experienced both faithful/unfaithful and small/large model conditions).
+
+### Outputs
+- Hypothesis summary tables (CSV)
+- 60+ visualizations in `plots/`
+- Participant-level aggregates for paired comparisons
+
+**Location**: `explainable-nlp/result scripts/`  
+**Details**: See `docs/APPENDIX_CODE_DOCUMENTATION.tex` for complete script documentation
+
+---
+
 ## Installation and Setup
 
 ### Prerequisites
