@@ -1,0 +1,147 @@
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+.transition-all {
+  transition: all 0.3s ease-in-out;
+  pointer-events: none;
+}
+
+.opacity-100 {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.opacity-0 {
+  opacity: 0;
+  transform: translateX(20px);
+}
+
+.carousel-enter {
+  opacity: 0;
+  transform: translateX(20px);
+}
+
+.carousel-enter-active {
+  opacity: 1;
+  transform: translateX(0);
+  transition: all 0.3s ease-in;
+}
+
+.carousel-exit {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.carousel-exit-active {
+  opacity: 0;
+  transform: translateX(-20px);
+  transition: all 0.3s ease-in;
+}
+.arrow-btn:hover {
+  background-color: #f0f0f0 !important;
+}
+/* Explanation Page Styles */
+.explanation-page {
+  max-width: 1800px;
+}
+
+.model-tabs .nav-link {
+  padding: 0.75rem 1rem;
+  font-weight: 500;
+}
+
+.model-tabs .nav-link.active {
+  background-color: #f8f9fa;
+  border-bottom: 3px solid #0d6efd;
+}
+
+.model-icon {
+  font-size: 1.25rem;
+}
+
+.explanation-card {
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  transition: transform 0.2s;
+}
+
+.explanation-card:hover {
+  transform: translateY(-2px);
+}
+
+.explanation-content {
+  white-space: pre-wrap;
+  line-height: 1.6;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 0.5rem;
+}
+
+.shap-visualization {
+  max-height: 300px;
+  overflow: auto;
+}
+
+.original-text {
+  background-color: #f8f9fa;
+  padding: 1rem;
+  border-radius: 0.25rem;
+  line-height: 1.6;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.rating-section {
+  padding: 0.5rem;
+  background-color: #f8f9fa;
+  border-radius: 0.25rem;
+}
+
+.rating-star {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid #dee2e6;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.rating-star.active {
+  background-color: #ffc107;
+  border-color: #ffc107;
+  color: white;
+}
+
+.rating-star:not(.disabled):hover {
+  background-color: #e9ecef;
+}
+
+.rating-star.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.submit-ratings-btn {
+  min-width: 160px;
+}
+
+@media (max-width: 992px) {
+  .explanation-card {
+    margin-bottom: 1.5rem;
+  }
+}
