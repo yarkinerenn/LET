@@ -345,6 +345,70 @@ cp .env.example .env
 python app.py
 ```
 
+### MongoDB Setup
+
+#### Local MongoDB (development)
+
+**macOS**
+1. Install MongoDB Community Edition:  
+   ```bash
+   brew tap mongodb/brew
+   brew install mongodb-community@7.0
+   ```
+2. Start the service:  
+   ```bash
+   brew services start mongodb/brew/mongodb-community
+   ```
+3. Verify it is running:  
+   ```bash
+   mongosh
+   ```
+
+**Ubuntu / Debian**
+1. Import the MongoDB public key and add the repository (example for 7.0):  
+   ```bash
+   curl -fsSL https://pgp.mongodb.com/server-7.0.asc | \
+     sudo gpg -o /usr/share/keyrings/mongodb-server-7.0.gpg --dearmor
+   echo "deb [signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg] \
+     https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | \
+     sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+   sudo apt-get update
+   sudo apt-get install -y mongodb-org
+   ```
+2. Start and enable the service:  
+   ```bash
+   sudo systemctl start mongod
+   sudo systemctl enable mongod
+   ```
+3. Check status:  
+   ```bash
+   sudo systemctl status mongod
+   ```
+
+**Windows**
+1. Download the MSI installer from <https://www.mongodb.com/try/download/community> (choose the latest stable version).
+2. Run the installer and select **Install MongoDB as a Service** (default settings are fine).
+3. After installation, open **Command Prompt** and run:  
+   ```cmd
+   mongosh
+   ```
+   If it opens the shell, the server is running. If not, start the service via **Services** → **MongoDB Server** → **Start**.
+
+**Optional seeding** (all platforms)
+- Import seed data with `mongorestore --uri "<MONGO_URI>" dump/` or execute scripts via `mongosh`.
+
+### Environment Variables
+Create or update `backend/.env` so Flask points to the correct database:
+
+```
+FLASK_SECRET_KEY=change-me
+MONGO_URI=mongodb://localhost:27017/auth_app           # local development
+SESSION_COOKIE_NAME=let_session
+UPLOAD_FOLDER=uploads
+```
+
+Flask initializes the MongoDB client through `mongo.init_app(app)` on startup, so as long as the URI is reachable the database and collections will be created automatically on first write. Make sure the MongoDB service is running before launching Flask.
+
 ### Frontend Setup
 ```bash
 cd explainable-nlp
