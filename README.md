@@ -332,17 +332,12 @@ All analyses use **cluster-robust standard errors** with participant-level clust
 
 ### Backend Setup
 ```bash
+conda env create -f environment.yml        # Run once to create the environment
+conda activate let                         # Run in every new shell before using the backend
+
 cd backend
-python -m venv xnlp
-source xnlp/bin/activate  # On Windows: xnlp\Scripts\activate
-pip install -r requirements.txt
-
-# Configure environment variables
-cp .env.example .env
+cp .env.example .env                       # On Windows use: copy .env.example .env
 # Edit .env with your MongoDB URI and other settings
-
-# Run Flask server
-python app.py
 ```
 
 ### MongoDB Setup
@@ -411,9 +406,9 @@ Flask initializes the MongoDB client through `mongo.init_app(app)` on startup, s
 
 ### Frontend Setup
 ```bash
+conda activate let
 cd explainable-nlp
 npm install
-npm start
 ```
 
 ### API Keys
@@ -433,6 +428,20 @@ ollama pull llama2  # Or any other model
 ```
 
 **Note**: Ollama is only available in local deployments, not hosted versions.
+
+### Running the App
+Make sure the Conda environment is active (`conda activate let`) and run the appropriate script from the project root:
+
+- **macOS / Linux**  
+  ```bash
+  ./start.sh
+  ```
+
+- **Windows (Anaconda Prompt / PowerShell)**  
+  ```cmd
+  start_windows.bat
+  ```
+  The script opens a new terminal window for the frontend (`npm start`) and keeps the backend (`python app.py`) in the current window. Stop the backend with `Ctrl+C` and close the frontend window when you are done.
 
 ---
 
