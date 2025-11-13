@@ -4,7 +4,6 @@ import {Container, Row, Col, Card, Alert, Spinner, Button, Badge, Form} from 're
 import axios from 'axios';
 import {useProvider} from "../modules/provider";
 import '../index.css';
-import {ckb} from "date-fns/locale";
 
 interface PredictionEntry {
     text: string;
