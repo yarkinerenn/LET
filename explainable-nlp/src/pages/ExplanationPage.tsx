@@ -9,11 +9,11 @@ interface ClassificationEntry {
     // Core fields
     text?: string;
     citing_prompt?: string;
-    prediction?: string;
+    prediction?: string | number | null;
     label?: string | number;
     confidence?: number;
     score?: number;
-    actualLabel?: string | number;
+    actualLabel?: string | number | null;
     explanation?: string;
     llm_explanation?: string;
     
@@ -138,14 +138,29 @@ const ExplanationPage = () => {
                 console.log(entryData);
                 console.log(classificationResponse.data);
                 
+                const classificationMethod = classificationResponse.data?.method || entryData.method;
+                const classificationDataType = classificationResponse.data?.data_type || entryData.data_type;
+                const predictedLabel = classificationMethod === 'explore'
+                    ? entryData.prediction ?? entryData.predicted_label ?? null
+                    : entryData.label ?? entryData.prediction ?? entryData.predicted_label ?? null;
+                const actualLabel =
+                    entryData.actualLabel ??
+                    entryData.actual_label ??
+                    entryData.true_label ??
+                    entryData.ground_truth ??
+                    (classificationMethod === 'explore' ? entryData.label : null);
+
                 // Map backend data structure to frontend expectations
                 const mappedData: ClassificationEntry = {
                     ...entryData,
+                    method: classificationMethod,
+                    data_type: classificationDataType,
                     // Map legal dataset fields
                     text: entryData.citing_prompt || entryData.text,
-                    prediction: entryData.label || entryData.prediction,
+                    prediction: predictedLabel,
                     explanation: entryData.llm_explanation || entryData.explanation,
                     confidence: entryData.score || entryData.confidence,
+                    actualLabel,
                     // Map choices to holdings for legal dataset
                     holdings: entryData.choices || entryData.holdings,
                 };
@@ -414,6 +429,41 @@ const ExplanationPage = () => {
         navigate(`/datasets/${datasetId}/classifications/${classificationId}/results/${newIndex}`);
     };
 
+    const interpretBinaryLabel = (value: string | number | null | undefined) => {
+        if (value === undefined || value === null) return null;
+        const normalized = String(value).trim().toLowerCase();
+        if (['1', 'positive', 'pos', 'true', 'yes'].includes(normalized)) {
+            return { text: 'POSITIVE', variant: 'success' as const };
+        }
+        if (['0', 'negative', 'neg', 'false', 'no'].includes(normalized)) {
+            return { text: 'NEGATIVE', variant: 'danger' as const };
+        }
+        return { text: String(value), variant: 'secondary' as const };
+    };
+
+    const normalizeLegalIndex = (value: string | number | null | undefined) => {
+        if (value === undefined || value === null) return null;
+        if (typeof value === 'number' && !isNaN(value)) return value;
+
+        const strValue = String(value).trim();
+        const match = strValue.match(/(\d+)/);
+        if (!match) return null;
+
+        const parsed = Number(match[1]);
+        if (isNaN(parsed)) return null;
+
+        // If string mentions "holding" we assume 1-based indexing and convert to 0-based
+        if (strValue.toLowerCase().includes('holding') && parsed > 0) {
+            return parsed - 1;
+        }
+        return parsed;
+    };
+
+    const predictionBadge = interpretBinaryLabel(classification?.prediction);
+    const actualBadge = interpretBinaryLabel(classification?.actualLabel);
+    const legalPredictionIndex = normalizeLegalIndex(classification?.prediction);
+    const legalActualIndex = normalizeLegalIndex(classification?.actualLabel);
+
     if (loading) {
         return (
             <Container className="py-5 text-center">
@@ -495,21 +545,21 @@ const ExplanationPage = () => {
                 {/* Prediction */}
                 <div className="text-center">
                   <div className="text-muted small">Prediction</div>
-                  <Badge
-                    pill
-                    bg={
-                      classification?.data_type === "legal"
-
-                        ? (Number(classification.prediction) === Number(classification.actualLabel) ? "success" : "danger")
-                          // @ts-ignore
-                        : (String(classification?.prediction) === "1" || classification?.prediction === "POSITIVE" ? "success" : "danger")
-                    }
-                    className="px-3 py-2 fs-6"
-                  >
-                    {classification?.data_type === "legal"
-                      ? `Holding ${(Number(classification?.prediction) || 0) + 1}`
-                      : (String(classification?.prediction) === "1" || classification?.prediction === "POSITIVE" ? "POSITIVE" : "NEGATIVE")}
-                  </Badge>
+                    <Badge
+                        pill
+                        bg={
+                            classification?.data_type === "legal"
+                                ? (legalPredictionIndex !== null && legalActualIndex !== null && legalPredictionIndex === legalActualIndex ? "success" : "danger")
+                                : predictionBadge?.variant || "secondary"
+                        }
+                        className="px-3 py-2 fs-6"
+                    >
+                        {classification?.data_type === "legal"
+                            ? (legalPredictionIndex !== null
+                                ? `Holding ${legalPredictionIndex + 1}`
+                                : (classification?.prediction ? String(classification.prediction) : "Not available"))
+                            : predictionBadge?.text || "Not available"}
+                    </Badge>
                   {/* Show holding text if legal */}
 
                 </div>
@@ -521,14 +571,15 @@ const ExplanationPage = () => {
                     bg={
                       classification?.data_type === "legal"
                         ? "primary"
-                          // @ts-ignore
-                        : (String(classification?.actualLabel) === "1" || classification?.actualLabel === "POSITIVE" ? "success" : "danger")
+                        : actualBadge?.variant || "secondary"
                     }
                     className="px-3 py-2 fs-6"
                   >
                     {classification?.data_type === "legal"
-                      ? `Holding ${(Number(classification?.actualLabel) || 0) + 1}`
-                      : (String(classification?.actualLabel) === "1" || classification?.actualLabel === "POSITIVE" ? "POSITIVE" : "NEGATIVE")}
+                      ? (legalActualIndex !== null
+                          ? `Holding ${legalActualIndex + 1}`
+                          : (classification?.actualLabel ? String(classification.actualLabel) : "Not available"))
+                      : actualBadge?.text || "Not available"}
                   </Badge>
                   {/* Show holding text if legal */}
 
@@ -543,8 +594,8 @@ const ExplanationPage = () => {
               <Col>
                 <h6>All Holdings:</h6>
                 <ol>
-                  {classification.holdings.map((h, i) => (
-                    <li key={i} className={`${i === (Number(classification.prediction) || 0) ? 'text-success fw-bold' : i === (Number(classification.actualLabel) || 0) ? 'text-primary fw-bold' : ''}`}>
+                      {classification.holdings.map((h, i) => (
+                    <li key={i} className={`${i === (legalPredictionIndex ?? -1) ? 'text-success fw-bold' : i === (legalActualIndex ?? -1) ? 'text-primary fw-bold' : ''}`}>
                       <strong>Holding {i + 1}:</strong> {h}
                       {i === (Number(classification.prediction) || 0) && <span className="ms-2 badge bg-success">Predicted</span>}
                       {i === (Number(classification.actualLabel) || 0) && <span className="ms-2 badge bg-primary">Correct</span>}
@@ -635,7 +686,7 @@ const ExplanationPage = () => {
 
     <Row className="g-4">
       {/* SHAP Analysis only for non-LLM */}
-      {classification?.method !== "llm" && (
+      {classification?.method !== "llm" && classification?.method !== "explore" && (
         <Col lg={4}>
           <Card className="h-100 explanation-card border-info d-flex flex-column">
             <Card.Header className="bg-info text-white d-flex justify-content-between align-items-center">
@@ -680,7 +731,7 @@ const ExplanationPage = () => {
       )}
 
       {/* LLM/SHAP-Enhanced Explanations */}
-      <Col lg={classification?.method === "llm" ? 12 : 8}>
+      <Col lg={classification?.method === "llm" || classification?.method === "explore" ? 12 : 8}>
         <Card className="h-100 d-flex flex-column">
           <Card.Header>
             <div className="d-flex justify-content-between align-items-center">
@@ -731,7 +782,7 @@ const ExplanationPage = () => {
                   <div className="p-4 flex-grow-1 d-flex flex-column">
                     <Row className="g-4 flex-grow-1">
                       {/* Direct Explanation always shown */}
-                      <Col md={classification?.method === 'llm' ? 12 : 6} className="d-flex flex-column">
+                      <Col md={classification?.method === 'llm' || classification?.method === 'explore' ? 12 : 6} className="d-flex flex-column">
                         <div className="explanation-section d-flex flex-column h-100">
                           <h6 className="text-primary mb-3">Direct Explanation</h6>
                           <div className="explanation-content mb-3 flex-grow-1">
@@ -766,7 +817,7 @@ const ExplanationPage = () => {
                         </div>
                       </Col>
                       {/* SHAP-Enhanced only if not LLM */}
-                      {classification?.method !== 'llm' && (
+                      {classification?.method !== 'llm' && classification?.method !== 'explore' && (
                         <Col md={6} className="d-flex flex-column">
                           <div className="explanation-section d-flex flex-column h-100">
                             <h6 className="text-success mb-3">SHAP-Enhanced Analysis</h6>

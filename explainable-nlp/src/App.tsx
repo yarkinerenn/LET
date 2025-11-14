@@ -76,6 +76,10 @@ function AppContent() {
                     element={<ExplanationPage />}
                 />
                 <Route
+                    path="/datasets/:datasetId/classifications_legal/:classificationId/results/:resultId"
+                    element={<ExplanationPage />}
+                />
+                <Route
                     path="/datasets/:datasetId/classifications_hotel/:classificationId/results/:resultId"
                     element={<ExplanationPageHotel />}
                 />

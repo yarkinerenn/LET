@@ -260,54 +260,66 @@ const ExplanationPageHotel: React.FC = () => {
     </Card.Body>
   </Card>
 
-      {/* Faithfulness Metrics (Snarks-only) */}
-      <Card className="mb-4">
-        <Card.Body>
-          <Card.Title>Faithfulness Metrics</Card.Title>
-          <Row className="mt-2 g-3">
-            <Col md={3}>
-              <div className="d-flex flex-column">
-                <span className="text-muted small">Faithfulness</span>
-                <Badge bg="secondary" className="fs-6 align-self-start mt-1">
-                  {entry?.faithfulness_score !== undefined && entry?.faithfulness_score !== null
-                    ? Number(entry.faithfulness_score).toFixed(2)
-                    : 'N/A'}
-                </Badge>
-              </div>
-            </Col>
-            <Col md={3}>
-              <div className="d-flex flex-column">
-                <span className="text-muted small">QAG</span>
-                <Badge bg="info" className="fs-6 align-self-start mt-1">
-                  {entry?.qag_score !== undefined && entry?.qag_score !== null
-                    ? Number(entry.qag_score).toFixed(2)
-                    : 'N/A'}
-                </Badge>
-              </div>
-            </Col>
-            <Col md={3}>
-              <div className="d-flex flex-column">
-                <span className="text-muted small">Counterfactual</span>
-                <Badge bg="warning" text="dark" className="fs-6 align-self-start mt-1">
-                  {entry?.counterfactual !== undefined && entry?.counterfactual !== null
-                    ? Number(entry.counterfactual).toFixed(2)
-                    : 'N/A'}
-                </Badge>
-              </div>
-            </Col>
-            <Col md={3}>
-              <div className="d-flex flex-column">
-                <span className="text-muted small">Contextual Faithfulness</span>
-                <Badge bg="primary" className="fs-6 align-self-start mt-1">
-                  {entry?.contextual_faithfulness !== undefined && entry?.contextual_faithfulness !== null
-                    ? Number(entry.contextual_faithfulness).toFixed(2)
-                    : 'N/A'}
-                </Badge>
-              </div>
-            </Col>
-          </Row>
-        </Card.Body>
-      </Card>
+      {/* Faithfulness Metrics */}
+      {(() => {
+        const hasFaithfulness = entry?.faithfulness_score !== undefined && entry?.faithfulness_score !== null;
+        const hasQAG = entry?.qag_score !== undefined && entry?.qag_score !== null;
+        const hasCounterfactual = entry?.counterfactual !== undefined && entry?.counterfactual !== null;
+        const hasContextual = entry?.contextual_faithfulness !== undefined && entry?.contextual_faithfulness !== null;
+        const showMetrics = hasFaithfulness || hasQAG || hasCounterfactual || hasContextual;
+
+        if (!showMetrics) return null;
+
+        return (
+          <Card className="mb-4">
+            <Card.Body>
+              <Card.Title>Faithfulness Metrics</Card.Title>
+              <Row className="mt-2 g-3">
+                {hasFaithfulness && (
+                  <Col md={3}>
+                    <div className="d-flex flex-column">
+                      <span className="text-muted small">Faithfulness</span>
+                      <Badge bg="secondary" className="fs-6 align-self-start mt-1">
+                        {Number(entry?.faithfulness_score).toFixed(2)}
+                      </Badge>
+                    </div>
+                  </Col>
+                )}
+                {hasQAG && (
+                  <Col md={3}>
+                    <div className="d-flex flex-column">
+                      <span className="text-muted small">QAG</span>
+                      <Badge bg="info" className="fs-6 align-self-start mt-1">
+                        {Number(entry?.qag_score).toFixed(2)}
+                      </Badge>
+                    </div>
+                  </Col>
+                )}
+                {hasCounterfactual && (
+                  <Col md={3}>
+                    <div className="d-flex flex-column">
+                      <span className="text-muted small">Counterfactual</span>
+                      <Badge bg="warning" text="dark" className="fs-6 align-self-start mt-1">
+                        {Number(entry?.counterfactual).toFixed(2)}
+                      </Badge>
+                    </div>
+                  </Col>
+                )}
+                {hasContextual && (
+                  <Col md={3}>
+                    <div className="d-flex flex-column">
+                      <span className="text-muted small">Contextual Faithfulness</span>
+                      <Badge bg="primary" className="fs-6 align-self-start mt-1">
+                        {Number(entry?.contextual_faithfulness).toFixed(2)}
+                      </Badge>
+                    </div>
+                  </Col>
+                )}
+              </Row>
+            </Card.Body>
+          </Card>
+        );
+      })()}
 
       {/* LLM Explanations */}
       <Card className="h-100">
