@@ -35,13 +35,6 @@ Each demographic variable has two scripts:
 - `education_level_analysis.py` - Education level analysis
 - `nlp_experience_analysis.py` - NLP experience analysis
 
-**Thesis Paragraph Generators** (create formatted text summaries):
-- `age_thesis_paragraph.py`
-- `gender_thesis_paragraph.py`
-- `cs_expertise_thesis_paragraph.py`
-- `education_level_thesis_paragraph.py`
-- `nlp_experience_thesis_paragraph.py`
-
 ### 4. Reporting
 - **`demographics_table.py`** - Generates LaTeX-formatted demographics table
 

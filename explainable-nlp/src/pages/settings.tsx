@@ -4,7 +4,7 @@ import {useProvider} from "../modules/provider";
 
 const Settings = () => {
     const [openaiApi, setOpenaiApi] = useState(""); // Current OpenAI API Key
-    const [grokApi, setGrokApi] = useState("");     // Current Grok API Key
+    const [groqApi, setGroqApi] = useState("");     // Current Groq API Key
     const [deepseekApi, setdeepseekApi] = useState("");
     const [openrouterApi, setopenrouterApi] = useState("");
     const [geminiApi, setGeminiApi] = useState("");
@@ -175,21 +175,21 @@ const Settings = () => {
         console.log("Submit button clicked!");
 
         // Ensure at least one API key is filled
-        if (!openaiApi && !grokApi && !deepseekApi && !openrouterApi && !geminiApi) {
+        if (!openaiApi && !groqApi && !deepseekApi && !openrouterApi && !geminiApi) {
             setError("Please enter at least one API key.");
             console.log("Error: Both API fields are empty.");
             return;
         }
 
-        console.log("API keys provided:", { openaiApi, grokApi });
+        console.log("API keys provided:", { openaiApi, groqApi });
 
         setError(""); // Clear previous errors
         setSuccess(""); // Clear previous success messages
 
         // Prepare the request payload (only include non-empty values)
-        const payload: { openai_api?: string; grok_api?: string; deepseek_api?: string; openrouter_api?: string; gemini_api?: string } = {};
+        const payload: { openai_api?: string; groq_api?: string; deepseek_api?: string; openrouter_api?: string; gemini_api?: string } = {};
         if (openaiApi) payload.openai_api = openaiApi;
-        if (grokApi) payload.grok_api = grokApi;
+        if (groqApi) payload.groq_api = groqApi;
         if (deepseekApi) payload.deepseek_api = deepseekApi;
         if (openrouterApi) payload.openrouter_api = openrouterApi;
         if (geminiApi) payload.gemini_api = geminiApi;
@@ -215,7 +215,7 @@ const Settings = () => {
                 console.log("API keys updated successfully:", result);
                 setSuccess(result.message);
                 setOpenaiApi(""); // Clear input fields on success
-                setGrokApi("");
+                setGroqApi("");
                 setGeminiApi("");
             } else {
                 console.error("Error updating API keys:", result);
@@ -239,11 +239,14 @@ const Settings = () => {
                 {/* Left Column - API Keys */}
                 <Col lg={4}>
                     <div className="h-100 p-4 rounded bg-white border shadow-sm">
-                        <h5 className="mb-4 text-primary">
+                        <h5 className="mb-2 text-primary">
                             <i className="fas fa-key me-2"></i>
                             API Keys
                         </h5>
-                        <p className="text-muted mb-4">Configure your API keys for different providers</p>
+                        <p className="text-muted mb-3">Configure your API keys for different providers</p>
+                        <Alert variant="info" className="py-2">
+                            To compute trustworthiness metrics, please enter a Groq API key.
+                        </Alert>
 
                         <Form onSubmit={handleSubmit}>
                             <Form.Group className="mb-3">
@@ -258,12 +261,12 @@ const Settings = () => {
                             </Form.Group>
 
                             <Form.Group className="mb-3">
-                                <Form.Label className="fw-semibold">Grok API Key</Form.Label>
+                                <Form.Label className="fw-semibold">Groq API Key</Form.Label>
                                 <Form.Control
                                     type="password"
-                                    placeholder="Enter your Grok API key"
-                                    value={grokApi}
-                                    onChange={(e) => setGrokApi(e.target.value)}
+                                    placeholder="Enter your Groq API key"
+                                    value={groqApi}
+                                    onChange={(e) => setGroqApi(e.target.value)}
                                     className="border-0 bg-light"
                                 />
                             </Form.Group>
