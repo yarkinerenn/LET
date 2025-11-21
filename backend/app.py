@@ -45,6 +45,16 @@ def create_app():
 
     # --- blueprints ---
     register_blueprints(app)
+    
+    # --- seed public datasets on startup ---
+    # Seed datasets after MongoDB is initialized
+    with app.app_context():
+        try:
+            from seed_datasets import seed_public_datasets
+            seed_public_datasets(app.config["UPLOAD_FOLDER"])
+        except Exception as e:
+            print(f"Warning: Could not seed public datasets: {e}")
+    
     return app
 
 if __name__ == "__main__":
