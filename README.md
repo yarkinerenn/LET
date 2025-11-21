@@ -325,7 +325,85 @@ All analyses use **cluster-robust standard errors** with participant-level clust
 
 ## Installation and Setup
 
-### Prerequisites
+### 🐳 Docker Installation (Recommended)
+
+The easiest way to run the application is using Docker Compose. This method automatically sets up MongoDB, backend, and frontend with a single command.
+
+#### Prerequisites
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
+
+#### Quick Start
+
+1. **Clone the repository** (if you haven't already):
+   ```bash
+   git clone <your-repo-url>
+   cd thesisXNLP
+   ```
+
+2. **Start all services**:
+   ```bash
+   docker compose watch
+   ```
+   
+   Or for standard mode:
+   ```bash
+   docker compose up --build
+   ```
+
+3. **Access the application**:
+   - Frontend: http://localhost:3000
+   - Backend API: http://localhost:5000
+   - MongoDB: localhost:27017
+
+4. **Stop services**:
+   ```bash
+   docker compose down
+   ```
+
+#### What Docker Sets Up
+
+- **MongoDB**: Automatically started in a container with persistent data storage
+- **Backend**: Flask application with all dependencies installed
+- **Frontend**: React development server with hot reload
+- **Public Datasets**: Automatically seeded on backend startup (casehold.csv, imdb.csv, etc.)
+
+#### Development Mode with Watch
+
+Using `docker compose watch` provides:
+- ✅ Automatic file syncing (no rebuild needed for code changes)
+- ✅ Flask auto-reload on Python file changes
+- ✅ React hot-reload on frontend changes
+- ✅ Automatic rebuilds when dependencies change
+
+#### Viewing Logs
+
+```bash
+# View all logs
+docker compose logs -f
+
+# View backend logs (Flask HTTP requests)
+docker logs -f backend
+
+# View frontend logs
+docker logs -f frontend
+```
+
+#### Environment Variables (Optional)
+
+Create a `.env` file in the project root to customize settings:
+```env
+FLASK_SECRET_KEY=your-secure-secret-key-here
+```
+
+For more Docker details, see [DOCKER.md](DOCKER.md).
+
+---
+
+### Manual Installation (Alternative)
+
+If you prefer to run services manually without Docker:
+
+#### Prerequisites
 - Python 3.10+
 - Node.js 16+
 - MongoDB 4.4+
@@ -430,7 +508,17 @@ ollama pull llama2  # Or any other model
 **Note**: Ollama is only available in local deployments, not hosted versions.
 
 ### Running the App
-Make sure the Conda environment is active (`conda activate let`) and run the appropriate script from the project root:
+
+#### Using Docker (Recommended)
+If you installed using Docker, simply run:
+```bash
+docker compose watch
+```
+
+This starts all services (MongoDB, backend, frontend) automatically. Access the app at http://localhost:3000.
+
+#### Manual Setup (Alternative)
+If you installed manually, make sure the Conda environment is active (`conda activate let`) and run the appropriate script from the project root:
 
 - **macOS / Linux**  
   ```bash
