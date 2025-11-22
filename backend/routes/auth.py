@@ -150,7 +150,8 @@ def login():
     if not user_data or not check_password_hash(user_data['password_hash'], data['password']):
         return jsonify({"error": "Invalid email or password"}), 401
 
-    login_user(User(user_data))
+    remember_me = data.get('remember_me', False)
+    login_user(User(user_data), remember=remember_me)
     return jsonify({
         "message": "Logged in successfully",
         "user": {"id": str(user_data['_id']), "username": user_data['username']}

@@ -6,6 +6,7 @@ import {ProviderContextProvider} from "../modules/provider";
 export function Login() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [rememberMe, setRememberMe] = useState(false);
     const [error, setError] = useState('');
     const { login } = useAuth();
     const navigate = useNavigate();
@@ -16,7 +17,7 @@ export function Login() {
             const response = await fetch('http://localhost:5000/api/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password }),
+                body: JSON.stringify({ email, password, remember_me: rememberMe }),
                 credentials: 'include',
             });
 
@@ -54,7 +55,7 @@ export function Login() {
                                 />
                             </Form.Group>
 
-                            <Form.Group className="mb-4">
+                            <Form.Group className="mb-3">
                                 <Form.Label>Password</Form.Label>
                                 <Form.Control
                                     type="password"
@@ -62,6 +63,15 @@ export function Login() {
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     required
+                                />
+                            </Form.Group>
+
+                            <Form.Group className="mb-3">
+                                <Form.Check
+                                    type="checkbox"
+                                    label="Remember me"
+                                    checked={rememberMe}
+                                    onChange={(e) => setRememberMe(e.target.checked)}
                                 />
                             </Form.Group>
 
