@@ -438,6 +438,128 @@ const ExplanationPagePubMedQA = () => {
         </Card.Body>
       </Card>
 
+      {/* Faithfulness Metrics */}
+      {(() => {
+        const hasFaithfulness = entry?.faithfulness_score !== undefined && entry?.faithfulness_score !== null;
+        const hasQAG = entry?.qag_score !== undefined && entry?.qag_score !== null;
+        const hasCounterfactual = entry?.counterfactual !== undefined && entry?.counterfactual !== null;
+        const hasContextual = entry?.contextual_faithfulness !== undefined && entry?.contextual_faithfulness !== null;
+        const showMetrics = hasFaithfulness || hasQAG || hasCounterfactual || hasContextual;
+
+        if (!showMetrics) return null;
+
+        return (
+          <Card className="mb-4">
+            <Card.Body>
+              <Card.Title>Faithfulness Metrics</Card.Title>
+              <Row className="mt-2 g-3">
+                {hasFaithfulness && (
+                  <Col md={3}>
+                    <div className="d-flex flex-column">
+                      <span className="text-muted small">Faithfulness</span>
+                      <Badge bg="secondary" className="fs-6 align-self-start mt-1">
+                        {Number(entry?.faithfulness_score).toFixed(2)}
+                      </Badge>
+                    </div>
+                  </Col>
+                )}
+                {hasQAG && (
+                  <Col md={3}>
+                    <div className="d-flex flex-column">
+                      <span className="text-muted small">QAG</span>
+                      <Badge bg="info" className="fs-6 align-self-start mt-1">
+                        {Number(entry?.qag_score).toFixed(2)}
+                      </Badge>
+                    </div>
+                  </Col>
+                )}
+                {hasCounterfactual && (
+                  <Col md={3}>
+                    <div className="d-flex flex-column">
+                      <span className="text-muted small">Counterfactual</span>
+                      <Badge bg="warning" text="dark" className="fs-6 align-self-start mt-1">
+                        {Number(entry?.counterfactual).toFixed(2)}
+                      </Badge>
+                    </div>
+                  </Col>
+                )}
+                {hasContextual && (
+                  <Col md={3}>
+                    <div className="d-flex flex-column">
+                      <span className="text-muted small">Contextual Faithfulness</span>
+                      <Badge bg="primary" className="fs-6 align-self-start mt-1">
+                        {Number(entry?.contextual_faithfulness).toFixed(2)}
+                      </Badge>
+                    </div>
+                  </Col>
+                )}
+              </Row>
+            </Card.Body>
+          </Card>
+        );
+      })()}
+
+      {/* Plausibility Metrics */}
+      {(() => {
+        const hasPlausibility = entry?.plausibility_score !== undefined && entry?.plausibility_score !== null;
+        const hasCorrectness = entry?.correctness !== undefined && entry?.correctness !== null;
+        const hasConsistency = entry?.consistency !== undefined && entry?.consistency !== null;
+        const hasTrustworthiness = entry?.trustworthiness_score !== undefined && entry?.trustworthiness_score !== null;
+        const showMetrics = hasPlausibility || hasCorrectness || hasConsistency || hasTrustworthiness;
+
+        if (!showMetrics) return null;
+
+        return (
+          <Card className="mb-4">
+            <Card.Body>
+              <Card.Title>Plausibility Metrics</Card.Title>
+              <Row className="mt-2 g-3">
+                {hasTrustworthiness && (
+                  <Col md={3}>
+                    <div className="d-flex flex-column">
+                      <span className="text-muted small">LExT (Trustworthiness)</span>
+                      <Badge bg="warning" text="dark" className="fs-6 align-self-start mt-1">
+                        {Number(entry?.trustworthiness_score).toFixed(2)}
+                      </Badge>
+                    </div>
+                  </Col>
+                )}
+                {hasPlausibility && (
+                  <Col md={3}>
+                    <div className="d-flex flex-column">
+                      <span className="text-muted small">Plausibility</span>
+                      <Badge bg="info" className="fs-6 align-self-start mt-1">
+                        {Number(entry?.plausibility_score).toFixed(2)}
+                      </Badge>
+                    </div>
+                  </Col>
+                )}
+                {hasCorrectness && (
+                  <Col md={3}>
+                    <div className="d-flex flex-column">
+                      <span className="text-muted small">Correctness</span>
+                      <Badge bg="success" className="fs-6 align-self-start mt-1">
+                        {Number(entry?.correctness).toFixed(2)}
+                      </Badge>
+                    </div>
+                  </Col>
+                )}
+                {hasConsistency && (
+                  <Col md={3}>
+                    <div className="d-flex flex-column">
+                      <span className="text-muted small">Consistency</span>
+                      <Badge bg="primary" className="fs-6 align-self-start mt-1">
+                        {Number(entry?.consistency).toFixed(2)}
+                      </Badge>
+                    </div>
+                  </Col>
+                )}
+              </Row>
+            </Card.Body>
+          </Card>
+        );
+      })()}
+
       <Row className="g-4">
         {/* SHAP Analysis */}
         {(entry?.method !== 'llm' && entry?.method !== 'explore') && (
@@ -520,53 +642,7 @@ const ExplanationPagePubMedQA = () => {
                                 </div>
                               )}
                             </div>
-                            {/* LExT + rating for direct */}
-                            {entry.trustworthiness_score !== undefined && entry.trustworthiness_score !== null ? (
-                              <>
-                                <div className="d-flex align-items-center gap-2 my-3 flex-wrap">
-                                  <span className="badge rounded-pill bg-warning fs-6 px-3 py-2">
-                                    LExT: {Number(entry.trustworthiness_score).toFixed(2)}
-                                  </span>
-                                  {entry.plausibility_score !== undefined && entry.plausibility_score !== null && (
-                                    <span className="badge rounded-pill bg-info fs-6 px-3 py-2">
-                                      Plausibility: {Number(entry.plausibility_score).toFixed(2)}
-                                    </span>
-                                  )}
-                                  {entry.faithfulness_score !== undefined && entry.faithfulness_score !== null && (
-                                    <span className="badge rounded-pill bg-secondary fs-6 px-3 py-2">
-                                      Faithfulness: {Number(entry.faithfulness_score).toFixed(2)}
-                                    </span>
-                                  )}
-                                </div>
-
-                                {/* Sub-metrics under Plausibility */}
-                                {(entry.correctness !== undefined || entry.consistency !== undefined) && (
-                                  <div className="mt-1 ms-1 small text-muted d-flex flex-wrap gap-3">
-                                    {entry.correctness !== undefined && entry.correctness !== null && (
-                                      <span>Correctness: {Number(entry.correctness).toFixed(2)}</span>
-                                    )}
-                                    {entry.consistency !== undefined && entry.consistency !== null && (
-                                      <span>Consistency: {Number(entry.consistency).toFixed(2)}</span>
-                                    )}
-                                  </div>
-                                )}
-
-                                {/* Sub-metrics under Faithfulness */}
-                                {(entry.qag_score !== undefined || entry.counterfactual !== undefined || entry.contextual_faithfulness !== undefined) && (
-                                  <div className="mt-1 ms-1 small text-muted d-flex flex-wrap gap-3">
-                                    {entry.qag_score !== undefined && entry.qag_score !== null && (
-                                      <span>QAG: {Number(entry.qag_score).toFixed(2)}</span>
-                                    )}
-                                    {entry.counterfactual !== undefined && entry.counterfactual !== null && (
-                                      <span>Counterfactual: {Number(entry.counterfactual).toFixed(2)}</span>
-                                    )}
-                                    {entry.contextual_faithfulness !== undefined && entry.contextual_faithfulness !== null && (
-                                      <span>Contextual: {Number(entry.contextual_faithfulness).toFixed(2)}</span>
-                                    )}
-                                  </div>
-                                )}
-                              </>
-                            ) : (
+                            {!entry.trustworthiness_score && (
                               <div className="d-flex align-items-center gap-3 my-3">
                                 <Button
                                   size="sm"

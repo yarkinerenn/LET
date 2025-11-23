@@ -611,36 +611,27 @@ const ExplanationPage = () => {
       </Card>
     )}
 
-    {/* Faithfulness Metrics - only show if metrics are defined and not all zero */}
+    {/* Faithfulness Metrics */}
     {(() => {
       const faithfulnessMetrics = classification?.metrics?.faithfulness_metrics;
-      const hasMetrics = faithfulnessMetrics?.faithfulness !== undefined || 
-                        faithfulnessMetrics?.qag_score !== undefined || 
-                        faithfulnessMetrics?.counterfactual !== undefined || 
-                        faithfulnessMetrics?.contextual_faithfulness !== undefined ||
-                        classification?.faithfulness_score !== undefined ||
-                        classification?.qag_score !== undefined ||
-                        classification?.counterfactual !== undefined ||
-                        classification?.contextual_faithfulness !== undefined;
-      
-      if (!hasMetrics) return null; // Hide if no metrics are defined
-      
-      // Check if all metrics are zero
-      const allMetricsZero = (
-        (faithfulnessMetrics?.faithfulness || classification?.faithfulness_score || 0) === 0 &&
-        (faithfulnessMetrics?.qag_score || classification?.qag_score || 0) === 0 &&
-        (faithfulnessMetrics?.counterfactual || classification?.counterfactual || 0) === 0 &&
-        (faithfulnessMetrics?.contextual_faithfulness || classification?.contextual_faithfulness || 0) === 0
-      );
-      
-      if (allMetricsZero) return null; // Hide if all metrics are zero
-      
+      const hasFaithfulness = (faithfulnessMetrics?.faithfulness !== undefined && faithfulnessMetrics?.faithfulness !== null) || 
+                              (classification?.faithfulness_score !== undefined && classification?.faithfulness_score !== null);
+      const hasQAG = (faithfulnessMetrics?.qag_score !== undefined && faithfulnessMetrics?.qag_score !== null) ||
+                     (classification?.qag_score !== undefined && classification?.qag_score !== null);
+      const hasCounterfactual = (faithfulnessMetrics?.counterfactual !== undefined && faithfulnessMetrics?.counterfactual !== null) ||
+                                (classification?.counterfactual !== undefined && classification?.counterfactual !== null);
+      const hasContextual = (faithfulnessMetrics?.contextual_faithfulness !== undefined && faithfulnessMetrics?.contextual_faithfulness !== null) ||
+                           (classification?.contextual_faithfulness !== undefined && classification?.contextual_faithfulness !== null);
+      const showMetrics = hasFaithfulness || hasQAG || hasCounterfactual || hasContextual;
+
+      if (!showMetrics) return null;
+
       return (
         <Card className="mb-4">
           <Card.Body>
             <Card.Title>Faithfulness Metrics</Card.Title>
             <Row className="mt-2 g-3">
-              {(faithfulnessMetrics?.faithfulness !== undefined || classification?.faithfulness_score !== undefined) && (
+              {hasFaithfulness && (
                 <Col md={3}>
                   <div className="d-flex flex-column">
                     <span className="text-muted small">Faithfulness</span>
@@ -650,7 +641,7 @@ const ExplanationPage = () => {
                   </div>
                 </Col>
               )}
-              {(faithfulnessMetrics?.qag_score !== undefined || classification?.qag_score !== undefined) && (
+              {hasQAG && (
                 <Col md={3}>
                   <div className="d-flex flex-column">
                     <span className="text-muted small">QAG</span>
@@ -660,7 +651,7 @@ const ExplanationPage = () => {
                   </div>
                 </Col>
               )}
-              {(faithfulnessMetrics?.counterfactual !== undefined || classification?.counterfactual !== undefined) && (
+              {hasCounterfactual && (
                 <Col md={3}>
                   <div className="d-flex flex-column">
                     <span className="text-muted small">Counterfactual</span>
@@ -670,7 +661,7 @@ const ExplanationPage = () => {
                   </div>
                 </Col>
               )}
-              {(faithfulnessMetrics?.contextual_faithfulness !== undefined || classification?.contextual_faithfulness !== undefined) && (
+              {hasContextual && (
                 <Col md={3}>
                   <div className="d-flex flex-column">
                     <span className="text-muted small">Contextual Faithfulness</span>
