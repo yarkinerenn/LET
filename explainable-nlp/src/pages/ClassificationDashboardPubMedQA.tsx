@@ -121,6 +121,13 @@ const ClassificationDashboardPubMedQA = () => {
         <Alert variant="danger">{error}</Alert>
       ) : (
         <>
+          <Button
+            variant="outline-secondary"
+            onClick={() => navigate(`/dataset/${datasetId}`)}
+            className="mb-3"
+          >
+            ← Back to datasetview
+          </Button>
           <Row className="mb-4 align-items-center justify-content-between">
             <Col md="auto">
               <h2 className="mb-2">PubMedQA Classification Report</h2>

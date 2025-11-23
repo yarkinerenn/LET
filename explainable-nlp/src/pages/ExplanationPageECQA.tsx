@@ -472,8 +472,7 @@ const ExplanationPageECQA = () => {
         const hasPlausibility = entry?.plausibility_score !== undefined && entry?.plausibility_score !== null;
         const hasCorrectness = entry?.correctness !== undefined && entry?.correctness !== null;
         const hasConsistency = entry?.consistency !== undefined && entry?.consistency !== null;
-        const hasTrustworthiness = entry?.trustworthiness_score !== undefined && entry?.trustworthiness_score !== null;
-        const showMetrics = hasPlausibility || hasCorrectness || hasConsistency || hasTrustworthiness;
+        const showMetrics = hasPlausibility || hasCorrectness || hasConsistency;
 
         if (!showMetrics) return null;
 
@@ -482,18 +481,8 @@ const ExplanationPageECQA = () => {
             <Card.Body>
               <Card.Title>Plausibility Metrics</Card.Title>
               <Row className="mt-2 g-3">
-                {hasTrustworthiness && (
-                  <Col md={3}>
-                    <div className="d-flex flex-column">
-                      <span className="text-muted small">LExT (Trustworthiness)</span>
-                      <Badge bg="warning" text="dark" className="fs-6 align-self-start mt-1">
-                        {Number(entry?.trustworthiness_score).toFixed(2)}
-                      </Badge>
-                    </div>
-                  </Col>
-                )}
                 {hasPlausibility && (
-                  <Col md={3}>
+                  <Col md={4}>
                     <div className="d-flex flex-column">
                       <span className="text-muted small">Plausibility</span>
                       <Badge bg="info" className="fs-6 align-self-start mt-1">
@@ -503,7 +492,7 @@ const ExplanationPageECQA = () => {
                   </Col>
                 )}
                 {hasCorrectness && (
-                  <Col md={3}>
+                  <Col md={4}>
                     <div className="d-flex flex-column">
                       <span className="text-muted small">Correctness</span>
                       <Badge bg="success" className="fs-6 align-self-start mt-1">
@@ -513,7 +502,7 @@ const ExplanationPageECQA = () => {
                   </Col>
                 )}
                 {hasConsistency && (
-                  <Col md={3}>
+                  <Col md={4}>
                     <div className="d-flex flex-column">
                       <span className="text-muted small">Consistency</span>
                       <Badge bg="primary" className="fs-6 align-self-start mt-1">
@@ -523,6 +512,19 @@ const ExplanationPageECQA = () => {
                   </Col>
                 )}
               </Row>
+              {/* LExT (Trustworthiness) - Compact display */}
+              {entry?.trustworthiness_score !== undefined && entry?.trustworthiness_score !== null && (
+                <Row className="mt-3 pt-3 border-top">
+                  <Col md={12}>
+                    <div className="d-flex align-items-center gap-2">
+                      <span className="text-muted small">LExT (Trustworthiness Score):</span>
+                      <Badge bg="warning" text="dark" className="fs-6">
+                        {Number(entry?.trustworthiness_score).toFixed(2)}
+                      </Badge>
+                    </div>
+                  </Col>
+                </Row>
+              )}
             </Card.Body>
           </Card>
         );

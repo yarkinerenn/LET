@@ -14,6 +14,8 @@ interface ECQAResult {
   score: number;
   actualLabel?: string;
   original_data?: any;
+  question?: string;
+  choices?: string[];
 }
 
 interface ECQAStats {
@@ -266,51 +268,100 @@ const ECQADashboard = () => {
                           return s.replace(/^answer\s*[:\-]\s*/i, '');
                         };
 
-                        const original = result.original_data || {};
-                        const choices = [
-                          original.q_op1, original.q_op2, original.q_op3, original.q_op4, original.q_op5
-                        ];
+                        // ECQA data structure: question and choices are stored directly, not in original_data
+                        const question = result.question || result.original_data?.q_text || '';
+                        const choices = result.choices || [
+                          result.original_data?.q_op1,
+                          result.original_data?.q_op2,
+                          result.original_data?.q_op3,
+                          result.original_data?.q_op4,
+                          result.original_data?.q_op5
+                        ].filter(Boolean);
 
                         const normalizedPred = normalize(result.label);
                         const resolvedActual = resolveActualLabel(result.actualLabel, choices);
                         const normalizedActual = resolvedActual !== undefined ? normalize(resolvedActual) : undefined;
                         const isMismatch = normalizedActual !== undefined && normalizedPred !== normalizedActual;
 
-                        // Debug once per row (comment out in production)
-                        // console.debug({ pred: result.label, actual: result.actualLabel, resolvedActual, normalizedPred, normalizedActual });
+                        // Find which choice index matches the predicted/actual labels
+                        const findChoiceIndex = (label: string, choices: string[]) => {
+                          const normalizedLabel = normalize(label);
+                          return choices.findIndex(choice => normalize(choice) === normalizedLabel);
+                        };
+
+                        const predChoiceIdx = findChoiceIndex(result.label, choices);
+                        const actualChoiceIdx = resolvedActual ? findChoiceIndex(resolvedActual, choices) : -1;
 
                         return (
                           <tr
                             key={index}
                             onClick={() => navigate(`/datasets/${datasetId}/classifications_ecqa/${classificationId}/results/${index}`)}
-                            className={isMismatch ? 'table-danger' : ''}
                             style={{ cursor: 'pointer' }}
                           >
-                            <td style={{ maxWidth: '400px', whiteSpace: 'normal' }}>
-                              {(expandedRow === index
-                                ? original.q_text
-                                : (original.q_text || '').slice(0, 180) + ((original.q_text || '').length > 180 ? '...' : '')
-                              )}
-                              {(original.q_text || '').length > 180 && (
-                                <Button
-                                  variant="link"
-                                  size="sm"
-                                  onClick={e => { e.stopPropagation(); setExpandedRow(expandedRow === index ? null : index); }}
-                                  style={{ padding: 0, marginLeft: 4 }}
-                                >
-                                  {expandedRow === index ? "Show Less" : "Show More"}
-                                </Button>
-                              )}
+                            <td style={{ padding: '1rem', verticalAlign: 'top', maxWidth: '400px' }}>
+                              <div className="fw-semibold mb-2" style={{ color: '#495057', fontSize: '0.9rem' }}>
+                                Question:
+                              </div>
+                              <div style={{ 
+                                fontSize: '0.95rem', 
+                                lineHeight: '1.6',
+                                color: '#212529',
+                                whiteSpace: 'normal',
+                                wordBreak: 'break-word'
+                              }}>
+                                {(expandedRow === index
+                                  ? question
+                                  : (question || '').slice(0, 200) + ((question || '').length > 200 ? '...' : '')
+                                )}
+                                {(question || '').length > 200 && (
+                                  <Button
+                                    variant="link"
+                                    size="sm"
+                                    onClick={e => { e.stopPropagation(); setExpandedRow(expandedRow === index ? null : index); }}
+                                    style={{ padding: '0 4px', marginLeft: 4, fontSize: '0.85rem' }}
+                                  >
+                                    {expandedRow === index ? "Show Less" : "Show More"}
+                                  </Button>
+                                )}
+                              </div>
                             </td>
                             <td>
                               <Badge bg="info">{result.label?.toLowerCase()}</Badge>
                             </td>
-                            <td>
-                              <ul className="mb-0">
-                                {choices.map((choice, i) =>
-                                  choice && <li key={i}><strong>{i + 1}:</strong> {choice}</li>
-                                )}
-                              </ul>
+                            <td style={{ padding: '1rem', verticalAlign: 'top' }}>
+                              <div className="mb-2 fw-semibold" style={{ color: '#495057', fontSize: '0.9rem' }}>
+                                Choices:
+                              </div>
+                              <div style={{ fontSize: '0.9rem' }}>
+                                {choices.map((choice, i) => {
+                                  const isPredicted = i === predChoiceIdx;
+                                  const isActual = i === actualChoiceIdx && actualChoiceIdx >= 0;
+                                  return choice ? (
+                                    <div
+                                      key={i}
+                                      className="mb-2 p-2 rounded"
+                                      style={{
+                                        backgroundColor: isActual && isPredicted ? '#d1e7dd' : isActual ? '#f8d7da' : isPredicted ? '#cfe2ff' : '#f8f9fa',
+                                        border: isPredicted || isActual ? '2px solid' : '1px solid #dee2e6',
+                                        borderColor: isActual && isPredicted ? '#198754' : isActual ? '#dc3545' : isPredicted ? '#0d6efd' : '#dee2e6',
+                                        transition: 'all 0.2s',
+                                        lineHeight: '1.5'
+                                      }}
+                                    >
+                                      <span className="fw-bold me-2" style={{ color: '#495057' }}>
+                                        {String.fromCharCode(65 + i)}:
+                                      </span>
+                                      <span style={{ color: '#212529' }}>{choice}</span>
+                                      {isPredicted && (
+                                        <Badge bg="info" className="ms-2" style={{ fontSize: '0.75rem' }}>Predicted</Badge>
+                                      )}
+                                      {isActual && (
+                                        <Badge bg="success" className="ms-2" style={{ fontSize: '0.75rem' }}>Actual</Badge>
+                                      )}
+                                    </div>
+                                  ) : null;
+                                })}
+                              </div>
                             </td>
                             {result.actualLabel !== undefined && (
                               <td>
