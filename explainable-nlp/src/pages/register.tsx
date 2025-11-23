@@ -9,7 +9,7 @@ const Register: React.FC = () => {
     const [error, setError] = useState('');
     const navigate = useNavigate();
     const [openaiApi, setOpenaiApi] = useState(""); // State for OpenAI API Key
-    const [grokApi, setGrokApi] = useState("");
+    const [groqApi, setGroqApi] = useState("");
     const [deepseekApi, setDeepseekApi] = useState("");
     const [openrouterApi, setOpenrouterApi] = useState("");
     const [geminiApi, setGeminiApi] = useState("");
@@ -22,7 +22,7 @@ const Register: React.FC = () => {
                 email,
                 password,
                 openai_api: openaiApi, // Send OpenAI API Key
-                grok_api: grokApi,
+                groq_api: groqApi,
                 deepseek_api: deepseekApi,
                 openrouter_api: openrouterApi,
                 gemini_api: geminiApi,
@@ -115,14 +115,14 @@ const Register: React.FC = () => {
                                     />
                                 </Form.Group>
 
-                                {/* Grok API Key Input */}
+                                {/* Groq API Key Input */}
                                 <Form.Group className="mb-3">
-                                    <Form.Label>Grok API Key</Form.Label>
+                                    <Form.Label>Groq API Key</Form.Label>
                                     <Form.Control
                                         type="password"
-                                        placeholder="Enter your Grok API key"
-                                        value={grokApi}
-                                        onChange={(e) => setGrokApi(e.target.value)}
+                                        placeholder="Enter your Groq API key"
+                                        value={groqApi}
+                                        onChange={(e) => setGroqApi(e.target.value)}
                                     />
                                 </Form.Group>
 

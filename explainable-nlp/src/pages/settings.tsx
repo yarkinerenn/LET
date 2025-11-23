@@ -12,7 +12,7 @@ const Settings = () => {
     const [success, setSuccess] = useState("");     // For success message
     const [apiKeysStatus, setApiKeysStatus] = useState({
         openai_api: false,
-        grok_api: false,
+        groq_api: false,
         deepseek_api: false,
         openrouter_api: false,
         gemini_api: false
@@ -121,7 +121,7 @@ const Settings = () => {
         { name: "gemini-2.5-pro-exp-03-25" }
     ];
 
-    // Fetch API keys status on component mount
+    // Fetch API keys status and user preferences on component mount
     useEffect(() => {
         const fetchApiKeysStatus = async () => {
             try {
@@ -137,8 +137,29 @@ const Settings = () => {
                 console.error("Failed to fetch API keys status:", error);
             }
         };
+        
+        const fetchPreferences = async () => {
+            try {
+                const response = await fetch("http://localhost:5000/api/settings/get_preferences", {
+                    method: "GET",
+                    credentials: 'include',
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    // Set provider and model from preferences
+                    if (data.preferred_provider) setProvider(data.preferred_provider);
+                    if (data.preferred_model) setModel(data.preferred_model);
+                    if (data.preferred_providerex) setProviderex(data.preferred_providerex);
+                    if (data.preferred_modelex) setModelex(data.preferred_modelex);
+                }
+            } catch (error) {
+                console.error("Failed to fetch preferences:", error);
+            }
+        };
+        
         fetchApiKeysStatus();
-    }, []);
+        fetchPreferences();
+    }, [setProvider, setModel, setProviderex, setModelex]);
     const handleExplanationSettingsUpdate = async () => {
         const payload = {
             preferred_providerex: providerex,
@@ -159,6 +180,16 @@ const Settings = () => {
 
             if (response.ok) {
                 setSuccess("Explanation preferences updated successfully!");
+                // Refresh preferences to show updated selection
+                const prefResponse = await fetch("http://localhost:5000/api/settings/get_preferences", {
+                    method: "GET",
+                    credentials: 'include',
+                });
+                if (prefResponse.ok) {
+                    const prefData = await prefResponse.json();
+                    if (prefData.preferred_providerex) setProviderex(prefData.preferred_providerex);
+                    if (prefData.preferred_modelex) setModelex(prefData.preferred_modelex);
+                }
             } else {
                 setError(result.error || "An error occurred while updating explanation settings.");
             }
@@ -187,6 +218,16 @@ const Settings = () => {
 
             if (response.ok) {
                 setSuccess("Classification preferences updated successfully!");
+                // Refresh preferences to show updated selection
+                const prefResponse = await fetch("http://localhost:5000/api/settings/get_preferences", {
+                    method: "GET",
+                    credentials: 'include',
+                });
+                if (prefResponse.ok) {
+                    const prefData = await prefResponse.json();
+                    if (prefData.preferred_provider) setProvider(prefData.preferred_provider);
+                    if (prefData.preferred_model) setModel(prefData.preferred_model);
+                }
             } else {
                 setError(result.error || "An error occurred while updating classification settings.");
             }
@@ -312,7 +353,7 @@ const Settings = () => {
                             <Form.Group className="mb-3">
                                 <Form.Label className="fw-semibold d-flex align-items-center justify-content-between">
                                     <span>Groq API Key</span>
-                                    {apiKeysStatus.grok_api && (
+                                    {apiKeysStatus.groq_api && (
                                         <Badge bg="success" className="ms-2">
                                             <i className="fas fa-check-circle me-1"></i>
                                             Set
@@ -321,7 +362,7 @@ const Settings = () => {
                                 </Form.Label>
                                 <Form.Control
                                     type="password"
-                                    placeholder={apiKeysStatus.grok_api ? "API key already set (enter new key to update)" : "Enter your Groq API key"}
+                                    placeholder={apiKeysStatus.groq_api ? "API key already set (enter new key to update)" : "Enter your Groq API key"}
                                     value={groqApi}
                                     onChange={(e) => setGroqApi(e.target.value)}
                                     className="border-0 bg-light"

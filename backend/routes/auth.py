@@ -41,7 +41,7 @@ class User(UserMixin):
         self.password_hash = user_data['password_hash']
         self.role = user_data.get('role', 'user')
         self.openai_api = user_data.get('openai_api', '')
-        self.grok_api = user_data.get('grok_api', '')
+        self.groq_api = user_data.get('groq_api', '')
         self.deepseek_api = user_data.get('deepseek_api', '')
         self.gemini_api = user_data.get('gemini_api', '')
         self.preferred_provider = user_data.get('preferred_provider', 'openai')
@@ -95,9 +95,9 @@ def get_user_api_key_deepseek_api():
 def get_user_api_key_groq():
     if not current_user.is_authenticated:
         return None
-    user_data = mongo.db.users.find_one({'_id': ObjectId(current_user.id)}, {'grok_api': 1})
-    if user_data and "grok_api" in user_data:
-        return decrypt_api_key(user_data['grok_api'])
+    user_data = mongo.db.users.find_one({'_id': ObjectId(current_user.id)}, {'groq_api': 1})
+    if user_data and "groq_api" in user_data:
+        return decrypt_api_key(user_data['groq_api'])
     return None
 
 def get_user_api_key_openrouter():
@@ -125,7 +125,7 @@ def register():
         username = data['email'].split('@')[0] if '@' in data['email'] else data['email']
 
     openai_api_key   = data.get("openai_api", "")
-    grok_api_key     = data.get("grok_api", "")
+    groq_api_key     = data.get("groq_api", "")
     deepseek_api_key = data.get("deepseek_api", "")
     openrouter_api_key = data.get("openrouter_api", "")
     gemini_api_key   = data.get("gemini_api", "")
@@ -136,7 +136,7 @@ def register():
         'password_hash': password_hash,
         'role': 'user',
         'openai_api':   encrypt_api_key(openai_api_key)   if openai_api_key   else "",
-        'grok_api':     encrypt_api_key(grok_api_key)     if grok_api_key     else "",
+        'groq_api':     encrypt_api_key(groq_api_key)     if groq_api_key     else "",
         'deepseek_api': encrypt_api_key(deepseek_api_key) if deepseek_api_key else "",
         'openrouter_api': encrypt_api_key(openrouter_api_key) if openrouter_api_key else "",
         'gemini_api':   encrypt_api_key(gemini_api_key)   if gemini_api_key   else "",
@@ -201,13 +201,32 @@ def update_preferred_explanation():
     )
     return jsonify({"message": "Explanation preferences updated successfully"}), 200
 
+@auth_bp.route('/api/settings/get_preferences', methods=['GET'])
+@login_required
+def get_preferences():
+    """Get user preferences for classification and explanation"""
+    user_data = mongo.db.users.find_one(
+        {'_id': ObjectId(current_user.id)},
+        {'preferred_provider': 1, 'preferred_model': 1, 'preferred_providerex': 1, 'preferred_modelex': 1}
+    )
+    
+    if not user_data:
+        return jsonify({"error": "User not found"}), 404
+    
+    return jsonify({
+        "preferred_provider": user_data.get('preferred_provider', 'openai'),
+        "preferred_model": user_data.get('preferred_model', 'gpt-3.5-turbo'),
+        "preferred_providerex": user_data.get('preferred_providerex', 'openai'),
+        "preferred_modelex": user_data.get('preferred_modelex', 'gpt-3.5-turbo')
+    }), 200
+
 @auth_bp.route('/api/settings/get_api_keys_status', methods=['GET'])
 @login_required
 def get_api_keys_status():
     """Get status of which API keys are stored (without decrypting them)"""
     user_data = mongo.db.users.find_one(
         {'_id': ObjectId(current_user.id)},
-        {'openai_api': 1, 'grok_api': 1, 'deepseek_api': 1, 'openrouter_api': 1, 'gemini_api': 1}
+        {'openai_api': 1, 'groq_api': 1, 'deepseek_api': 1, 'openrouter_api': 1, 'gemini_api': 1}
     )
     
     if not user_data:
@@ -215,7 +234,7 @@ def get_api_keys_status():
     
     return jsonify({
         "openai_api": bool(user_data.get('openai_api')),
-        "grok_api": bool(user_data.get('grok_api')),
+        "groq_api": bool(user_data.get('groq_api')),
         "deepseek_api": bool(user_data.get('deepseek_api')),
         "openrouter_api": bool(user_data.get('openrouter_api')),
         "gemini_api": bool(user_data.get('gemini_api'))
@@ -226,7 +245,7 @@ def get_api_keys_status():
 def update_api_keys():
     data = request.json
     openai_api_key    = data.get("openai_api")
-    grok_api_key      = data.get("grok_api")
+    groq_api_key      = data.get("groq_api")
     deepseek_api_key  = data.get("deepseek_api")
     openrouter_api_key = data.get("openrouter_api")
     gemini_api_key    = data.get("gemini_api")
@@ -234,8 +253,8 @@ def update_api_keys():
     update_fields = {}
     if openai_api_key:
         update_fields["openai_api"] = encrypt_api_key(openai_api_key)
-    if grok_api_key:
-        update_fields["grok_api"] = encrypt_api_key(grok_api_key)
+    if groq_api_key:
+        update_fields["groq_api"] = encrypt_api_key(groq_api_key)
     if deepseek_api_key:
         update_fields["deepseek_api"] = encrypt_api_key(deepseek_api_key)
     if openrouter_api_key:

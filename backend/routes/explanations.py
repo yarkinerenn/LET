@@ -230,7 +230,7 @@ Keep explanation under 3 sentences.
                 save_explanation_to_db(classificationId, current_user.id, resultId, 'shapwithllm', explanation, model)
                 return explanation
 
-            elif provider == 'grok':
+            elif provider == 'groq':
                 api = get_user_api_key_groq()
                 client = Groq(api_key=api)
                 chat_completion = client.chat.completions.create(
@@ -338,7 +338,7 @@ Keep explanation under 3 sentences.
                 save_explanation_to_db(classificationId, current_user.id, resultId, 'shapwithllm', explanation, model)
                 return explanation
 
-            elif provider == 'grok':
+            elif provider == 'groq':
                 api = get_user_api_key_groq()
                 client = Groq(api_key=api)
                 chat_completion = client.chat.completions.create(
