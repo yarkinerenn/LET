@@ -27,7 +27,7 @@ const DatasetView = () => {
     const [dataset, setDataset] = useState<{ filename: string; data: any[] } | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
-    const [classifying, setClassifying] = useState<"llm" | "bert" | null>(null);
+    const [classifying, setClassifying] = useState<"classify_only_llm" | "classify_and_explain_llm" | "bert" | null>(null);
     const navigate = useNavigate();
     const [loadingClassifications, setLoadingClassifications] = useState(false);
     const [classifications, setClassifications] = useState<ClassificationItem[]>([]);
@@ -233,7 +233,7 @@ const DatasetView = () => {
                classificationStart <= classificationEnd;
     };
     const handleClassification = async (method: "llm" | "bert") => {
-        setClassifying(method);
+        setClassifying(method === "llm" ? "classify_only_llm" : method);
         try {
             const limit = classificationStart !== null && classificationEnd !== null 
                 ? classificationEnd - classificationStart + 1 
@@ -314,7 +314,7 @@ const DatasetView = () => {
     };
     
     const handleClassificationandExplanation = async (method: "llm" | "bert") => {
-        setClassifying(method);
+        setClassifying(method === "llm" ? "classify_and_explain_llm" : method);
         try {
             const limit = classificationStart !== null && classificationEnd !== null 
                 ? classificationEnd - classificationStart + 1 
@@ -552,7 +552,7 @@ const DatasetView = () => {
                                     onClick={() => handleClassification("llm")}
                                     disabled={!dataset || !!classifying || !isClassificationRangeValid()}
                                 >
-                                    {classifying === "llm" ? (
+                                    {classifying === "classify_only_llm" ? (
                                         <>
                                             <Spinner animation="border" size="sm" /> Classifying...
                                         </>
@@ -560,19 +560,27 @@ const DatasetView = () => {
                                         "Classify with LLM"
                                     )}
                                 </Button>
-                                <Button
-                                    variant="primary"
-                                    onClick={() => handleClassificationandExplanation("llm")}
-                                    disabled={!dataset || !!classifying || !isClassificationRangeValid()}
-                                >
-                                    {classifying === "llm" ? (
-                                        <>
-                                            <Spinner animation="border" size="sm" /> Classifying...
-                                        </>
-                                    ) : (
-                                        "Classify and explain with LLM"
-                                    )}
-                                </Button>
+                                <div className="explain-button-container">
+                                    <Button
+                                        variant="primary"
+                                        onClick={() => handleClassificationandExplanation("llm")}
+                                        disabled={!dataset || !!classifying || !isClassificationRangeValid()}
+                                        className="w-100"
+                                    >
+                                        {classifying === "classify_and_explain_llm" ? (
+                                            <>
+                                                <Spinner animation="border" size="sm" /> Classifying...
+                                            </>
+                                        ) : (
+                                            "Classify and explain with LLM"
+                                        )}
+                                    </Button>
+                                    <small className="text-muted d-block mt-1 explain-info-text" style={{ opacity: 0, transition: 'opacity 0.2s', minHeight: '20px' }}>
+                                        <i className="bi bi-info-circle me-1"></i>
+                                        Also computes faithfulness metrics
+                                        {(["medical", "ecqa"].includes(dataType)) && " and plausibility metrics"}
+                                    </small>
+                                </div>
                                 {dataType === "sentiment" && (
                                     <Button
                                         variant="success"
@@ -834,6 +842,9 @@ const DatasetView = () => {
 const styles = `
 .hover-highlight:hover {
     background-color: rgba(0,0,0,0.05);
+}
+.explain-button-container:hover .explain-info-text {
+    opacity: 1 !important;
 }
 `;
 

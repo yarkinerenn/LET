@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Button, Modal, Form, Accordion } from 'react-bootstrap';
+import { Button, Modal, Form, Accordion, Badge } from 'react-bootstrap';
 
 // OpenAI models list
 const openAIModels = [
@@ -114,6 +114,7 @@ interface LLMSelectorProps {
   buttonText?: string;
   buttonVariant?: string;
   disabled?: boolean;
+  currentModels?: Array<{ provider: string; model: string }>; // Current explanation models
 }
 
 interface LLMModel {
@@ -125,11 +126,22 @@ const LLMSelector: React.FC<LLMSelectorProps> = ({
   onModelsSubmit,
   buttonText = "Choose Different LLMs",
   buttonVariant = "outline-primary",
-  disabled = false
+  disabled = false,
+  currentModels = []
 }) => {
   const [showModal, setShowModal] = useState(false);
   const [selectedModels, setSelectedModels] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Convert current models to the format used by selectedModels (provider:model)
+  // Note: model names in DB have underscores instead of dots, so we need to handle that
+  const getCurrentModelKeys = (): string[] => {
+    return currentModels.map(m => {
+      // Convert model name back from underscore to dot format for matching
+      const modelName = m.model.replace(/_/g, '.');
+      return `${m.provider}:${modelName}`;
+    });
+  };
 
   const handleSubmit = async () => {
     if (selectedModels.length === 0) {
@@ -150,6 +162,13 @@ const LLMSelector: React.FC<LLMSelectorProps> = ({
     }
   };
 
+  const handleModalOpen = () => {
+    // Initialize with current models when opening modal
+    const currentKeys = getCurrentModelKeys();
+    setSelectedModels(currentKeys);
+    setShowModal(true);
+  };
+
   const handleModalClose = () => {
     setShowModal(false);
     setSelectedModels([]);
@@ -166,7 +185,7 @@ const LLMSelector: React.FC<LLMSelectorProps> = ({
     <>
       <Button 
         variant={buttonVariant} 
-        onClick={() => setShowModal(true)}
+        onClick={handleModalOpen}
         disabled={disabled}
       >
         {buttonText}
@@ -178,6 +197,21 @@ const LLMSelector: React.FC<LLMSelectorProps> = ({
         </Modal.Header>
         <Modal.Body>
           <p className="text-muted">Select models from different providers. You can choose multiple models.</p>
+          {currentModels.length > 0 && (
+            <div className="mb-3 p-3 bg-light rounded">
+              <strong>Current Models:</strong>
+              <div className="mt-2">
+                {currentModels.map((m, idx) => {
+                  const modelName = m.model.replace(/_/g, '.'); // Convert underscores back to dots for display
+                  return (
+                    <Badge key={idx} bg="info" className="me-2 mb-1">
+                      {m.provider} / {modelName}
+                    </Badge>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <Accordion defaultActiveKey="0">
             <Accordion.Item eventKey="0">
               <Accordion.Header>

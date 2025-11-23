@@ -41,6 +41,8 @@ interface ClassificationData {
   created_at: string;
   stats: ClassificationStats;
   data_type?: string; // should be 'hotel' for this page
+  classification_type?: string; // 'classification_only', 'bert_only', or undefined (classify_and_explain)
+  explanation_models?: Array<{ provider: string; model: string }>;
 }
 
 // Normalize labels to "Deceptive" / "Truthful"
@@ -82,6 +84,11 @@ const HotelDashboard = () => {
     fetchData();
   }, [classificationId]);
 
+  // Check if this classification was created via "classify and explain"
+  // If classification_type is undefined, it means it was created via classify_and_explain
+  // In that case, we should disable adding more LLMs since explanations were already generated
+  const isClassifyAndExplain = !classification?.classification_type;
+
   const dataType = classification?.data_type || 'hotel';
   const paginatedResults = classification?.results?.slice(
     (currentPage - 1) * itemsPerPage,
@@ -103,6 +110,9 @@ const HotelDashboard = () => {
       { explanation_models },
       { withCredentials: true }
     );
+    // Refresh classification data to update current models display
+    const detailRes = await axios.get(`http://localhost:5000/api/classification/${classificationId}`, { withCredentials: true });
+    setClassification(detailRes.data);
     alert('Explanation models added successfully!');
   };
 
@@ -137,7 +147,12 @@ const HotelDashboard = () => {
               )}
             </Col>
             <Col md="auto">
-              <LLMSelector onModelsSubmit={handleModelsSubmit} />
+              <LLMSelector 
+                onModelsSubmit={handleModelsSubmit} 
+                disabled={isClassifyAndExplain}
+                buttonText={isClassifyAndExplain ? "Explanations Already Generated" : "Choose Different LLMs"}
+                currentModels={classification?.explanation_models || []}
+              />
             </Col>
           </Row>
 

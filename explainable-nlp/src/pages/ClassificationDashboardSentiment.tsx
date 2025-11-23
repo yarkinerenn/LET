@@ -39,6 +39,8 @@ interface ClassificationData {
   results: ClassificationResult[];
   created_at: string;
   stats: ClassificationStats;
+  classification_type?: string; // 'classification_only', 'bert_only', or undefined (classify_and_explain)
+  explanation_models?: Array<{ provider: string; model: string }>;
 }
 
 function toSentiment(val: string | number | undefined): "POSITIVE" | "NEGATIVE" | undefined {
@@ -76,6 +78,11 @@ const SentimentDashboard = () => {
     fetchData();
   }, [classificationId]);
 
+  // Check if this classification was created via "classify and explain"
+  // If classification_type is undefined, it means it was created via classify_and_explain
+  // In that case, we should disable adding more LLMs since explanations were already generated
+  const isClassifyAndExplain = !classification?.classification_type;
+
   const paginatedResults = classification?.results?.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
@@ -96,6 +103,9 @@ const SentimentDashboard = () => {
       { explanation_models },
       { withCredentials: true }
     );
+    // Refresh classification data to update current models display
+    const detailRes = await axios.get(`http://localhost:5000/api/classification/${classificationId}`, { withCredentials: true });
+    setClassification(detailRes.data);
     alert('Explanation models added successfully!');
   };
 
@@ -125,7 +135,12 @@ const SentimentDashboard = () => {
             </Col>
 
             <Col md="auto">
-              <LLMSelector onModelsSubmit={handleModelsSubmit} />
+              <LLMSelector 
+                onModelsSubmit={handleModelsSubmit} 
+                disabled={isClassifyAndExplain}
+                buttonText={isClassifyAndExplain ? "Explanations Already Generated" : "Choose Different LLMs"}
+                currentModels={classification?.explanation_models || []}
+              />
             </Col>
           </Row>
 
