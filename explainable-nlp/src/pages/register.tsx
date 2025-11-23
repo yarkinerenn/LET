@@ -26,6 +26,11 @@ const Register: React.FC = () => {
                 deepseek_api: deepseekApi,
                 openrouter_api: openrouterApi,
                 gemini_api: geminiApi,
+            }, {
+                withCredentials: true, // Include credentials for CORS
+                headers: {
+                    'Content-Type': 'application/json',
+                }
             });
 
             if (response.status === 201) {

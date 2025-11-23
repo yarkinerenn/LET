@@ -16,11 +16,23 @@ from dotenv import load_dotenv
 from cryptography.fernet import Fernet
 
 load_dotenv()
-_SECRET_KEY = os.getenv("SECRET_KEY")
+_SECRET_KEY = os.getenv("SECRET_KEY") or os.getenv("FLASK_SECRET_KEY")
 if not _SECRET_KEY:
     # be loud about it; otherwise decrypt/encrypt will crash later
-    raise RuntimeError("SECRET_KEY is missing in environment for Fernet encryption.")
-_cipher = Fernet(_SECRET_KEY.encode())
+    raise RuntimeError("SECRET_KEY or FLASK_SECRET_KEY is missing in environment for Fernet encryption.")
+
+# Ensure SECRET_KEY is a valid Fernet key (32 bytes base64-encoded)
+# If it's not valid, generate a key from it
+try:
+    _cipher = Fernet(_SECRET_KEY.encode())
+except ValueError:
+    # If SECRET_KEY is not a valid Fernet key, derive one from it
+    import hashlib
+    import base64
+    # Use SHA256 to hash the secret key to get 32 bytes, then base64 encode
+    key_bytes = hashlib.sha256(_SECRET_KEY.encode()).digest()
+    fernet_key = base64.urlsafe_b64encode(key_bytes)
+    _cipher = Fernet(fernet_key)
 
 def encrypt_api_key(key_str: str) -> str:
     return _cipher.encrypt(key_str.encode()).decode()
@@ -111,43 +123,73 @@ def get_user_api_key_openrouter():
 # ---------------- Auth & settings routes (converted to blueprint) ----------------
 @auth_bp.route('/api/register', methods=['POST'])
 def register():
-    data = request.json
+    try:
+        print(f"Registration request received: {request.method}")
+        print(f"Request origin: {request.headers.get('Origin')}")
+        print(f"Request headers: {dict(request.headers)}")
+        data = request.json
+        print(f"Request data keys: {list(data.keys()) if data else 'None'}")
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
 
-    if mongo.db.users.find_one({'email': data['email']}):
-        return jsonify({"error": "Email already exists"}), 400
+        # Validate required fields
+        if not data.get('email'):
+            return jsonify({"error": "Email is required"}), 400
+        if not data.get('password'):
+            return jsonify({"error": "Password is required"}), 400
 
-    password_hash = generate_password_hash(data['password'])
+        # Check if email already exists
+        if mongo.db.users.find_one({'email': data['email']}):
+            return jsonify({"error": "Email already exists"}), 400
 
-    # Auto-generate username from email if not provided
-    username = data.get('username')
-    if not username:
-        # Use the part before @ as username, or use email if no @ found
-        username = data['email'].split('@')[0] if '@' in data['email'] else data['email']
+        password_hash = generate_password_hash(data['password'])
 
-    openai_api_key   = data.get("openai_api", "")
-    groq_api_key     = data.get("groq_api", "")
-    deepseek_api_key = data.get("deepseek_api", "")
-    openrouter_api_key = data.get("openrouter_api", "")
-    gemini_api_key   = data.get("gemini_api", "")
+        # Auto-generate username from email if not provided
+        username = data.get('username')
+        if not username:
+            # Use the part before @ as username, or use email if no @ found
+            username = data['email'].split('@')[0] if '@' in data['email'] else data['email']
 
-    user_data = {
-        'username': username,
-        'email': data['email'],
-        'password_hash': password_hash,
-        'role': 'user',
-        'openai_api':   encrypt_api_key(openai_api_key)   if openai_api_key   else "",
-        'groq_api':     encrypt_api_key(groq_api_key)     if groq_api_key     else "",
-        'deepseek_api': encrypt_api_key(deepseek_api_key) if deepseek_api_key else "",
-        'openrouter_api': encrypt_api_key(openrouter_api_key) if openrouter_api_key else "",
-        'gemini_api':   encrypt_api_key(gemini_api_key)   if gemini_api_key   else "",
-        'preferred_provider':  data.get('preferred_provider', 'openai'),
-        'preferred_model':     data.get('preferred_model', 'gpt-3.5-turbo'),
-        'preferred_providerex': data.get('preferred_providerex', 'openai'),
-        'preferred_modelex':    data.get('preferred_modelex', 'gpt-3.5-turbo')
-    }
+        openai_api_key   = data.get("openai_api", "")
+        groq_api_key     = data.get("groq_api", "")
+        deepseek_api_key = data.get("deepseek_api", "")
+        openrouter_api_key = data.get("openrouter_api", "")
+        gemini_api_key   = data.get("gemini_api", "")
 
-    result = mongo.db.users.insert_one(user_data)
-    return jsonify({"message": "User created successfully", "id": str(result.inserted_id)}), 201
+        # Helper function to safely encrypt API keys
+        def safe_encrypt(key_str):
+            if key_str and key_str.strip():
+                try:
+                    return encrypt_api_key(key_str)
+                except Exception as e:
+                    print(f"Warning: Failed to encrypt API key: {e}")
+                    return ""  # Return empty string if encryption fails
+            return ""
+
+        user_data = {
+            'username': username,
+            'email': data['email'],
+            'password_hash': password_hash,
+            'role': 'user',
+            'openai_api':   safe_encrypt(openai_api_key),
+            'groq_api':     safe_encrypt(groq_api_key),
+            'deepseek_api': safe_encrypt(deepseek_api_key),
+            'openrouter_api': safe_encrypt(openrouter_api_key),
+            'gemini_api':   safe_encrypt(gemini_api_key),
+            'preferred_provider':  data.get('preferred_provider', 'openai'),
+            'preferred_model':     data.get('preferred_model', 'gpt-3.5-turbo'),
+            'preferred_providerex': data.get('preferred_providerex', 'openai'),
+            'preferred_modelex':    data.get('preferred_modelex', 'gpt-3.5-turbo')
+        }
+
+        result = mongo.db.users.insert_one(user_data)
+        return jsonify({"message": "User created successfully", "id": str(result.inserted_id)}), 201
+
+    except Exception as e:
+        import traceback
+        print(f"Registration error: {e}")
+        traceback.print_exc()
+        return jsonify({"error": f"Registration failed: {str(e)}"}), 500
 
 @auth_bp.route('/api/login', methods=['POST'])
 def login():

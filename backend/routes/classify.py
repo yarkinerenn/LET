@@ -18,12 +18,26 @@ from extensions import mongo
 from LExT.metrics.faithfulness import faithfulness
 from LExT.metrics.trustworthiness import lext
 
-tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased-finetuned-sst-2-english")
-model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased-finetuned-sst-2-english")
-classifier = pipeline(
-    "text-classification",
-    model="distilbert-base-uncased-finetuned-sst-2-english"
-)
+# Lazy-loaded DistilBERT model components (singleton pattern)
+_tokenizer = None
+_model = None
+_classifier = None
+
+def _get_distilbert_components():
+    """Lazy load DistilBERT tokenizer, model, and classifier (singleton pattern)"""
+    global _tokenizer, _model, _classifier
+    
+    if _classifier is None:
+        print("Loading DistilBERT model (first use)...")
+        _tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased-finetuned-sst-2-english")
+        _model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased-finetuned-sst-2-english")
+        _classifier = pipeline(
+            "text-classification",
+            model="distilbert-base-uncased-finetuned-sst-2-english"
+        )
+        print("DistilBERT model loaded successfully.")
+    
+    return _tokenizer, _model, _classifier
 from .auth import (
     get_user_api_key_openai,
     get_user_api_key_openrouter,
@@ -133,6 +147,7 @@ def classify_dataset(dataset_id):
                 # --- Sentiment (BERT only) ---
                 if data_type == "sentiment":
                     text = str(row[text_column])
+                    tokenizer, model, classifier = _get_distilbert_components()
                     label, score = classify_with_chunks(text, classifier, tokenizer)
                     result_data = {
                         "text": text,
@@ -330,6 +345,8 @@ def analyze_text():
         if len(text) < 3:
             return jsonify({"error": "Text must be at least 3 characters"}), 400
 
+        # Lazy load classifier on first use
+        tokenizer, model, classifier = _get_distilbert_components()
         # Classify text
         result = classifier(text)[0]
         user_id = current_user.id

@@ -17,10 +17,23 @@ from langchain_community.llms import Ollama
 from extensions import mongo
 from LExT.metrics.faithfulness import faithfulness
 from LExT.metrics.trustworthiness import lext
-classifier = pipeline(
-    "text-classification",
-    model="distilbert-base-uncased-finetuned-sst-2-english"
-)
+
+# Lazy-loaded DistilBERT classifier (singleton pattern)
+_classifier = None
+
+def _get_classifier():
+    """Lazy load DistilBERT classifier (singleton pattern)"""
+    global _classifier
+    
+    if _classifier is None:
+        print("Loading DistilBERT classifier (first use)...")
+        _classifier = pipeline(
+            "text-classification",
+            model="distilbert-base-uncased-finetuned-sst-2-english"
+        )
+        print("DistilBERT classifier loaded successfully.")
+    
+    return _classifier
 from .auth import (
     get_user_api_key_openai,
     get_user_api_key_openrouter,

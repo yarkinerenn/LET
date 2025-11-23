@@ -1,5 +1,4 @@
 import pandas as pd
-from sympy.physics.units import temperature
 from transformers import pipeline
 from groq import Groq
 import json
