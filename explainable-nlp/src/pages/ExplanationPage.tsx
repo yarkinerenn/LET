@@ -759,7 +759,7 @@ const ExplanationPage = () => {
             <Tabs
               activeKey={activeModel}
               onSelect={(k) => setActiveModel(k as string)}
-              className="model-tabs border-bottom-0 flex-grow-1 d-flex flex-column"
+              className="model-tabs border-bottom-0"
               fill
             >
               {availableModels.map(model => (
