@@ -17,15 +17,16 @@ def save_ratings():
         classification_id = data.get("classificationId")
         result_id = data.get("resultId")
         ratings = data.get("ratings")
+        shap_rating = data.get("shapRating")
         timestamp = data.get("timestamp")
 
         # user id from current_user
         user_id = ObjectId(current_user.id)
 
-        if not all([classification_id, result_id, ratings, timestamp]):
+        if not all([classification_id, result_id, ratings is not None, timestamp]):
             return jsonify({"success": False, "message": "Missing required fields"}), 400
 
-        success = save_ratings_to_db(classification_id, user_id, result_id, ratings, timestamp)
+        success = save_ratings_to_db(classification_id, user_id, result_id, ratings, timestamp, shap_rating)
 
         if success:
             return jsonify({"success": True}), 200

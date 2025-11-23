@@ -146,6 +146,7 @@ def get_classificationentry(classification_id, result_id):
             "shap_plot": result.get('shap_plot_explanation', ''),
             "shapwithllm": result.get('shapwithllm_explanation', ''),
             "ratings": result.get('ratings', {}),
+            "shap_rating": result.get('shap_rating', 0),
             "rating_timestamp": result.get('rating_timestamp', ''),
             "provider": classification.get('provider'),
             "model": classification.get('model'),

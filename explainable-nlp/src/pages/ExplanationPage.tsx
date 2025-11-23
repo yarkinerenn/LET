@@ -128,7 +128,12 @@ const ExplanationPage = () => {
         const fetchData = async () => {
             try {
                 setLoading(true);
+                // Reset all state when loading a new entry
                 setShapData({});
+                setShapRating(0);
+                setRatings({});
+                setExplanations({});
+                setFaithfulnessScores({});
                 const [entryResponse, classificationResponse] = await Promise.all([
                     axios.get(`http://localhost:5000/api/classificationentry/${classificationId}/${resultId}`, { withCredentials: true }),
                     axios.get(`http://localhost:5000/api/classification/${classificationId}`, { withCredentials: true })
@@ -169,11 +174,32 @@ const ExplanationPage = () => {
                 setTotalResults(classificationResponse.data.results?.length || 0);
                 setCurrentResultIndex(Number(resultId) || 0);
 
-                const savedModels = classificationResponse.data.explanation_models || [
-                    { provider: 'deepseek', model: 'deepseek' },
-                    { provider: 'openai', model: 'chatgpt' },
-                    { provider: 'mistral', model: 'mistral' }
-                ];
+                // When method is "explore", always use user's settings for explanation models
+                let savedModels;
+                if (classificationMethod === 'explore') {
+                    try {
+                        const preferencesResponse = await axios.get('http://localhost:5000/api/settings/get_preferences', { withCredentials: true });
+                        const preferences = preferencesResponse.data;
+                        // Convert model name dots to underscores to match database format (same as backend)
+                        const modelName = preferences.preferred_modelex?.replace(/\./g, '_') || 'gpt_3_5_turbo';
+                        savedModels = [{
+                            provider: preferences.preferred_providerex || 'openai',
+                            model: modelName
+                        }];
+                    } catch (err) {
+                        console.error('Failed to fetch user preferences, using defaults:', err);
+                        // Fallback to defaults if preferences fetch fails
+                        savedModels = [
+                            { provider: 'openai', model: 'gpt_3_5_turbo' }
+                        ];
+                    }
+                } else {
+                    savedModels = classificationResponse.data.explanation_models || [
+                        { provider: 'deepseek', model: 'deepseek' },
+                        { provider: 'openai', model: 'chatgpt' },
+                        { provider: 'mistral', model: 'mistral' }
+                    ];
+                }
 
                 const initialData: Record<string, ExplanationData> = {};
                 const initialRatings: Record<string, Record<string, number>> = {};
@@ -209,6 +235,9 @@ const ExplanationPage = () => {
                 setRatings(initialRatings);
                 setFaithfulnessScores(initialFaithfulnessScores);
                 setActiveModel(Object.keys(initialData)[0] || '');
+                
+                // Load shapRating from saved data, default to 0 if not found
+                setShapRating(entryData.shap_rating || 0);
 
                 if (entryData.shap_plot_explanation) {
                     setShapData({

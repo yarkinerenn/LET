@@ -107,10 +107,17 @@ const ExplanationPageHotel: React.FC = () => {
     fetchData();
   }, [classificationId, resultId]);
 
-  const generateLLMExplanation = async (modelId: string) => {
-    setIsExplaining(true);
+  const generateLLMExplanation = async (modelId: string, skipStateManagement = false) => {
+    if (!skipStateManagement) {
+      setIsExplaining(true);
+    }
     const model = availableModels.find(m => m.id === modelId);
-    if (!model) return setIsExplaining(false);
+    if (!model) {
+      if (!skipStateManagement) {
+        setIsExplaining(false);
+      }
+      return;
+    }
 
     try {
       const llmResponse = await axios.post('http://localhost:5000/api/explain', {
@@ -135,6 +142,21 @@ const ExplanationPageHotel: React.FC = () => {
       }));
     } catch {
       setError('Failed to generate explanation');
+    } finally {
+      if (!skipStateManagement) {
+        setIsExplaining(false);
+      }
+    }
+  };
+
+  const generateAllExplanations = async () => {
+    setIsExplaining(true);
+    try {
+      for (const model of availableModels) {
+        await generateLLMExplanation(model.id, true);
+      }
+    } catch (err) {
+      setError('Failed to generate all explanations');
     } finally {
       setIsExplaining(false);
     }
@@ -336,8 +358,16 @@ const ExplanationPageHotel: React.FC = () => {
                 onClick={() => generateLLMExplanation(activeModel)}
                 disabled={isExplaining || !activeModel}
               >
-                {isExplaining ? (<Spinner size="sm" className="me-2" />) : null}
                 Generate Current
+              </Button>
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={generateAllExplanations}
+                disabled={isExplaining}
+              >
+                {isExplaining ? (<Spinner size="sm" className="me-2" />) : null}
+                Generate All
               </Button>
             </div>
           </div>

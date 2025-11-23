@@ -87,10 +87,15 @@ def extract_context_explanation(context_pretty_str):
     if match:
         return match.group(1).strip()
     return ""
-def save_ratings_to_db(classification_id, user_id, result_id, ratings, timestamp):
+def save_ratings_to_db(classification_id, user_id, result_id, ratings, timestamp, shap_rating=None):
     update_fields = {
         f"results.{result_id}.ratings": ratings,
+        f"results.{result_id}.rating_timestamp": timestamp,
     }
+    
+    # Save shap_rating if provided
+    if shap_rating is not None:
+        update_fields[f"results.{result_id}.shap_rating"] = shap_rating
 
     result = mongo.db.classifications.update_one(
         {
