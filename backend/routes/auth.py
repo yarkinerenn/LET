@@ -118,6 +118,12 @@ def register():
 
     password_hash = generate_password_hash(data['password'])
 
+    # Auto-generate username from email if not provided
+    username = data.get('username')
+    if not username:
+        # Use the part before @ as username, or use email if no @ found
+        username = data['email'].split('@')[0] if '@' in data['email'] else data['email']
+
     openai_api_key   = data.get("openai_api", "")
     grok_api_key     = data.get("grok_api", "")
     deepseek_api_key = data.get("deepseek_api", "")
@@ -125,7 +131,7 @@ def register():
     gemini_api_key   = data.get("gemini_api", "")
 
     user_data = {
-        'username': data['username'],
+        'username': username,
         'email': data['email'],
         'password_hash': password_hash,
         'role': 'user',
@@ -194,6 +200,26 @@ def update_preferred_explanation():
         {'$set': {'preferred_providerex': preferred_providerex, 'preferred_modelex': preferred_modelex}}
     )
     return jsonify({"message": "Explanation preferences updated successfully"}), 200
+
+@auth_bp.route('/api/settings/get_api_keys_status', methods=['GET'])
+@login_required
+def get_api_keys_status():
+    """Get status of which API keys are stored (without decrypting them)"""
+    user_data = mongo.db.users.find_one(
+        {'_id': ObjectId(current_user.id)},
+        {'openai_api': 1, 'grok_api': 1, 'deepseek_api': 1, 'openrouter_api': 1, 'gemini_api': 1}
+    )
+    
+    if not user_data:
+        return jsonify({"error": "User not found"}), 404
+    
+    return jsonify({
+        "openai_api": bool(user_data.get('openai_api')),
+        "grok_api": bool(user_data.get('grok_api')),
+        "deepseek_api": bool(user_data.get('deepseek_api')),
+        "openrouter_api": bool(user_data.get('openrouter_api')),
+        "gemini_api": bool(user_data.get('gemini_api'))
+    }), 200
 
 @auth_bp.route('/api/settings/update_api_keys', methods=['POST'])
 @login_required

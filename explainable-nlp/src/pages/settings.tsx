@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import {Container, Row, Col, Form, Button, Alert, ButtonGroup, ToggleButton} from "react-bootstrap";
+import React, { useState, useEffect } from "react";
+import {Container, Row, Col, Form, Button, Alert, ButtonGroup, ToggleButton, Badge} from "react-bootstrap";
 import {useProvider} from "../modules/provider";
 
 const Settings = () => {
@@ -10,6 +10,13 @@ const Settings = () => {
     const [geminiApi, setGeminiApi] = useState("");
     const [error, setError] = useState("");         // For error messages
     const [success, setSuccess] = useState("");     // For success message
+    const [apiKeysStatus, setApiKeysStatus] = useState({
+        openai_api: false,
+        grok_api: false,
+        deepseek_api: false,
+        openrouter_api: false,
+        gemini_api: false
+    });
     const openAIModels=[
         { name: "gpt-5-2025-08-07" },
         { name: "o4-mini-2025-04-16" },
@@ -113,6 +120,25 @@ const Settings = () => {
         { name: "gemini-2.0-flash-exp" },
         { name: "gemini-2.5-pro-exp-03-25" }
     ];
+
+    // Fetch API keys status on component mount
+    useEffect(() => {
+        const fetchApiKeysStatus = async () => {
+            try {
+                const response = await fetch("http://localhost:5000/api/settings/get_api_keys_status", {
+                    method: "GET",
+                    credentials: 'include',
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    setApiKeysStatus(data);
+                }
+            } catch (error) {
+                console.error("Failed to fetch API keys status:", error);
+            }
+        };
+        fetchApiKeysStatus();
+    }, []);
     const handleExplanationSettingsUpdate = async () => {
         const payload = {
             preferred_providerex: providerex,
@@ -176,8 +202,8 @@ const Settings = () => {
 
         // Ensure at least one API key is filled
         if (!openaiApi && !groqApi && !deepseekApi && !openrouterApi && !geminiApi) {
-            setError("Please enter at least one API key.");
-            console.log("Error: Both API fields are empty.");
+            setError("Please enter at least one API key to update. Leave fields empty if you don't want to change existing keys.");
+            console.log("Error: All API fields are empty.");
             return;
         }
 
@@ -216,7 +242,18 @@ const Settings = () => {
                 setSuccess(result.message);
                 setOpenaiApi(""); // Clear input fields on success
                 setGroqApi("");
+                setdeepseekApi("");
+                setopenrouterApi("");
                 setGeminiApi("");
+                // Refresh API keys status
+                const statusResponse = await fetch("http://localhost:5000/api/settings/get_api_keys_status", {
+                    method: "GET",
+                    credentials: 'include',
+                });
+                if (statusResponse.ok) {
+                    const statusData = await statusResponse.json();
+                    setApiKeysStatus(statusData);
+                }
             } else {
                 console.error("Error updating API keys:", result);
                 setError(result.error || "An error occurred.");
@@ -244,16 +281,28 @@ const Settings = () => {
                             API Keys
                         </h5>
                         <p className="text-muted mb-3">Configure your API keys for different providers</p>
+                        <Alert variant="info" className="py-2 mb-3">
+                            <i className="fas fa-shield-alt me-2"></i>
+                            <strong>Security:</strong> All API keys are encrypted and securely stored.
+                        </Alert>
                         <Alert variant="info" className="py-2">
                             To compute trustworthiness metrics, please enter a Groq API key.
                         </Alert>
 
                         <Form onSubmit={handleSubmit}>
                             <Form.Group className="mb-3">
-                                <Form.Label className="fw-semibold">OpenAI API Key</Form.Label>
+                                <Form.Label className="fw-semibold d-flex align-items-center justify-content-between">
+                                    <span>OpenAI API Key</span>
+                                    {apiKeysStatus.openai_api && (
+                                        <Badge bg="success" className="ms-2">
+                                            <i className="fas fa-check-circle me-1"></i>
+                                            Set
+                                        </Badge>
+                                    )}
+                                </Form.Label>
                                 <Form.Control
                                     type="password"
-                                    placeholder="Enter your OpenAI API key"
+                                    placeholder={apiKeysStatus.openai_api ? "API key already set (enter new key to update)" : "Enter your OpenAI API key"}
                                     value={openaiApi}
                                     onChange={(e) => setOpenaiApi(e.target.value)}
                                     className="border-0 bg-light"
@@ -261,10 +310,18 @@ const Settings = () => {
                             </Form.Group>
 
                             <Form.Group className="mb-3">
-                                <Form.Label className="fw-semibold">Groq API Key</Form.Label>
+                                <Form.Label className="fw-semibold d-flex align-items-center justify-content-between">
+                                    <span>Groq API Key</span>
+                                    {apiKeysStatus.grok_api && (
+                                        <Badge bg="success" className="ms-2">
+                                            <i className="fas fa-check-circle me-1"></i>
+                                            Set
+                                        </Badge>
+                                    )}
+                                </Form.Label>
                                 <Form.Control
                                     type="password"
-                                    placeholder="Enter your Groq API key"
+                                    placeholder={apiKeysStatus.grok_api ? "API key already set (enter new key to update)" : "Enter your Groq API key"}
                                     value={groqApi}
                                     onChange={(e) => setGroqApi(e.target.value)}
                                     className="border-0 bg-light"
@@ -272,10 +329,18 @@ const Settings = () => {
                             </Form.Group>
 
                             <Form.Group className="mb-3">
-                                <Form.Label className="fw-semibold">DeepSeek API Key</Form.Label>
+                                <Form.Label className="fw-semibold d-flex align-items-center justify-content-between">
+                                    <span>DeepSeek API Key</span>
+                                    {apiKeysStatus.deepseek_api && (
+                                        <Badge bg="success" className="ms-2">
+                                            <i className="fas fa-check-circle me-1"></i>
+                                            Set
+                                        </Badge>
+                                    )}
+                                </Form.Label>
                                 <Form.Control
                                     type="password"
-                                    placeholder="Enter your Deepseek API key"
+                                    placeholder={apiKeysStatus.deepseek_api ? "API key already set (enter new key to update)" : "Enter your Deepseek API key"}
                                     value={deepseekApi}
                                     onChange={(e) => setdeepseekApi(e.target.value)}
                                     className="border-0 bg-light"
@@ -283,10 +348,18 @@ const Settings = () => {
                             </Form.Group>
 
                             <Form.Group className="mb-3">
-                                <Form.Label className="fw-semibold">Openrouter API Key</Form.Label>
+                                <Form.Label className="fw-semibold d-flex align-items-center justify-content-between">
+                                    <span>Openrouter API Key</span>
+                                    {apiKeysStatus.openrouter_api && (
+                                        <Badge bg="success" className="ms-2">
+                                            <i className="fas fa-check-circle me-1"></i>
+                                            Set
+                                        </Badge>
+                                    )}
+                                </Form.Label>
                                 <Form.Control
                                     type="password"
-                                    placeholder="Enter your Openrouter API key"
+                                    placeholder={apiKeysStatus.openrouter_api ? "API key already set (enter new key to update)" : "Enter your Openrouter API key"}
                                     value={openrouterApi}
                                     onChange={(e) => setopenrouterApi(e.target.value)}
                                     className="border-0 bg-light"
@@ -294,10 +367,18 @@ const Settings = () => {
                             </Form.Group>
 
                             <Form.Group className="mb-4">
-                                <Form.Label className="fw-semibold">Gemini API Key</Form.Label>
+                                <Form.Label className="fw-semibold d-flex align-items-center justify-content-between">
+                                    <span>Gemini API Key</span>
+                                    {apiKeysStatus.gemini_api && (
+                                        <Badge bg="success" className="ms-2">
+                                            <i className="fas fa-check-circle me-1"></i>
+                                            Set
+                                        </Badge>
+                                    )}
+                                </Form.Label>
                                 <Form.Control
                                     type="password"
-                                    placeholder="Enter your Gemini API key"
+                                    placeholder={apiKeysStatus.gemini_api ? "API key already set (enter new key to update)" : "Enter your Gemini API key"}
                                     value={geminiApi}
                                     onChange={(e) => setGeminiApi(e.target.value)}
                                     className="border-0 bg-light"

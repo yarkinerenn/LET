@@ -4,7 +4,6 @@ import { Form, Button, Alert, Container, Row, Col } from 'react-bootstrap';
 import axios from 'axios';
 
 const Register: React.FC = () => {
-    const [username, setUsername] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -20,7 +19,6 @@ const Register: React.FC = () => {
 
         try {
             const response = await axios.post('http://localhost:5000/api/register', {
-                username,
                 email,
                 password,
                 openai_api: openaiApi, // Send OpenAI API Key
@@ -59,17 +57,6 @@ const Register: React.FC = () => {
                                     Account Information
                                 </h5>
                                 <Form onSubmit={handleSubmit}>
-                            <Form.Group className="mb-3">
-                                <Form.Label>Username</Form.Label>
-                                <Form.Control
-                                    type="text"
-                                    placeholder="Enter username"
-                                    value={username}
-                                    onChange={(e) => setUsername(e.target.value)}
-                                    required
-                                />
-                            </Form.Group>
-
                             <Form.Group className="mb-3">
                                 <Form.Label>Email address</Form.Label>
                                 <Form.Control
@@ -113,15 +100,15 @@ const Register: React.FC = () => {
                                     <i className="fas fa-key me-2"></i>
                                     API Keys (Optional)
                                 </h5>
-                                <p className="text-muted mb-4">
+                                <Alert variant="info" className="mb-4">
                                     <i className="fas fa-info-circle me-2"></i>
-                                    To use Large Language Models for explanations and classifications, you need at least one API key available. You can add these later in your settings.
-                                </p>
+                                    <strong>Security Note:</strong> All API keys are encrypted and securely stored. To use Large Language Models for explanations and classifications, you need at least one API key available. You can add these later in your settings.
+                                </Alert>
 
                                 <Form.Group className="mb-3">
                                     <Form.Label>OpenAI API Key</Form.Label>
                                     <Form.Control
-                                        type="text"
+                                        type="password"
                                         placeholder="Enter your OpenAI API key"
                                         value={openaiApi}
                                         onChange={(e) => setOpenaiApi(e.target.value)}
@@ -132,7 +119,7 @@ const Register: React.FC = () => {
                                 <Form.Group className="mb-3">
                                     <Form.Label>Grok API Key</Form.Label>
                                     <Form.Control
-                                        type="text"
+                                        type="password"
                                         placeholder="Enter your Grok API key"
                                         value={grokApi}
                                         onChange={(e) => setGrokApi(e.target.value)}
@@ -143,7 +130,7 @@ const Register: React.FC = () => {
                                 <Form.Group className="mb-3">
                                     <Form.Label>DeepSeek API Key</Form.Label>
                                     <Form.Control
-                                        type="text"
+                                        type="password"
                                         placeholder="Enter your DeepSeek API key"
                                         value={deepseekApi}
                                         onChange={(e) => setDeepseekApi(e.target.value)}
@@ -154,7 +141,7 @@ const Register: React.FC = () => {
                                 <Form.Group className="mb-3">
                                     <Form.Label>OpenRouter API Key</Form.Label>
                                     <Form.Control
-                                        type="text"
+                                        type="password"
                                         placeholder="Enter your OpenRouter API key"
                                         value={openrouterApi}
                                         onChange={(e) => setOpenrouterApi(e.target.value)}
@@ -165,7 +152,7 @@ const Register: React.FC = () => {
                                 <Form.Group className="mb-3">
                                     <Form.Label>Gemini API Key</Form.Label>
                                     <Form.Control
-                                        type="text"
+                                        type="password"
                                         placeholder="Enter your Gemini API key"
                                         value={geminiApi}
                                         onChange={(e) => setGeminiApi(e.target.value)}
