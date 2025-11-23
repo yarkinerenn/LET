@@ -542,27 +542,29 @@ const ExplanationPage = () => {
             </Col>
             <Col md={4}>
               <div className="d-flex flex-column gap-3">
-                {/* Prediction */}
-                <div className="text-center">
-                  <div className="text-muted small">Prediction</div>
-                    <Badge
-                        pill
-                        bg={
-                            classification?.data_type === "legal"
-                                ? (legalPredictionIndex !== null && legalActualIndex !== null && legalPredictionIndex === legalActualIndex ? "success" : "danger")
-                                : predictionBadge?.variant || "secondary"
-                        }
-                        className="px-3 py-2 fs-6"
-                    >
-                        {classification?.data_type === "legal"
-                            ? (legalPredictionIndex !== null
-                                ? `Holding ${legalPredictionIndex + 1}`
-                                : (classification?.prediction ? String(classification.prediction) : "Not available"))
-                            : predictionBadge?.text || "Not available"}
-                    </Badge>
-                  {/* Show holding text if legal */}
+                {/* Prediction - Hide when method is explore */}
+                {classification?.method !== 'explore' && (
+                  <div className="text-center">
+                    <div className="text-muted small">Prediction</div>
+                      <Badge
+                          pill
+                          bg={
+                              classification?.data_type === "legal"
+                                  ? (legalPredictionIndex !== null && legalActualIndex !== null && legalPredictionIndex === legalActualIndex ? "success" : "danger")
+                                  : predictionBadge?.variant || "secondary"
+                          }
+                          className="px-3 py-2 fs-6"
+                      >
+                          {classification?.data_type === "legal"
+                              ? (legalPredictionIndex !== null
+                                  ? `Holding ${legalPredictionIndex + 1}`
+                                  : (classification?.prediction ? String(classification.prediction) : "Not available"))
+                              : predictionBadge?.text || "Not available"}
+                      </Badge>
+                    {/* Show holding text if legal */}
 
-                </div>
+                  </div>
+                )}
                 {/* Actual */}
                 <div className="text-center">
                   <div className="text-muted small">Actual Label</div>
@@ -595,9 +597,9 @@ const ExplanationPage = () => {
                 <h6>All Holdings:</h6>
                 <ol>
                       {classification.holdings.map((h, i) => (
-                    <li key={i} className={`${i === (legalPredictionIndex ?? -1) ? 'text-success fw-bold' : i === (legalActualIndex ?? -1) ? 'text-primary fw-bold' : ''}`}>
+                    <li key={i} className={`${i === (legalPredictionIndex ?? -1) && classification?.method !== 'explore' ? 'text-success fw-bold' : i === (legalActualIndex ?? -1) ? 'text-primary fw-bold' : ''}`}>
                       <strong>Holding {i + 1}:</strong> {h}
-                      {i === (Number(classification.prediction) || 0) && <span className="ms-2 badge bg-success">Predicted</span>}
+                      {classification?.method !== 'explore' && i === (Number(classification.prediction) || 0) && <span className="ms-2 badge bg-success">Predicted</span>}
                       {i === (Number(classification.actualLabel) || 0) && <span className="ms-2 badge bg-primary">Correct</span>}
                     </li>
                   ))}

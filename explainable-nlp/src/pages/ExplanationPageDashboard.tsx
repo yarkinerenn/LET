@@ -217,16 +217,18 @@ const ExplanationPageDashboard = () => {
 
                                     {/* Right: Labels */}
                                     <div className="d-flex flex-column justify-content-center align-items-center">
-                                        {/* Prediction Pill */}
-                                        <div className="mb-3 text-center">
-                                            <div className="text-muted mb-1" style={{ fontSize: '0.85rem' }}>Prediction</div>
-                                            <div
-                                                className={`d-flex justify-content-center align-items-center px-4 py-2 rounded-pill fw-semibold text-white shadow-sm ${classification.label === 'POSITIVE' ? 'bg-success' : 'bg-danger'}`}
-                                                style={{ fontSize: '0.9rem', minWidth: '120px', height: '38px' }}
-                                            >
-                                                {classification.label}
+                                        {/* Prediction Pill - Hide when method is explore */}
+                                        {classification?.model !== 'explore' && (
+                                            <div className="mb-3 text-center">
+                                                <div className="text-muted mb-1" style={{ fontSize: '0.85rem' }}>Prediction</div>
+                                                <div
+                                                    className={`d-flex justify-content-center align-items-center px-4 py-2 rounded-pill fw-semibold text-white shadow-sm ${classification.label === 'POSITIVE' ? 'bg-success' : 'bg-danger'}`}
+                                                    style={{ fontSize: '0.9rem', minWidth: '120px', height: '38px' }}
+                                                >
+                                                    {classification.label}
+                                                </div>
                                             </div>
-                                        </div>
+                                        )}
 
                                         {/* User Label Dropdown styled to match Prediction */}
                                         <div className="text-center w-100">

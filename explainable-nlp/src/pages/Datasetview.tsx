@@ -31,7 +31,8 @@ const DatasetView = () => {
     const navigate = useNavigate();
     const [loadingClassifications, setLoadingClassifications] = useState(false);
     const [classifications, setClassifications] = useState<ClassificationItem[]>([]);
-    const [classificationLimit, setClassificationLimit] = useState<number | null>(null);
+    const [classificationStart, setClassificationStart] = useState<number | null>(null);
+    const [classificationEnd, setClassificationEnd] = useState<number | null>(null);
     const { provider, model } = useProvider();
     const [dataType, setDataType] = useState<'sentiment' | 'legal'|'medical'|'ecqa'|'snarks'|'hotel'>('sentiment');
     const [exploreLoading, setExploreLoading] = useState(false);
@@ -221,12 +222,25 @@ const DatasetView = () => {
 
         return <Badge bg={variant}>{(accuracy * 100).toFixed(1)}%</Badge>;
     };
+
+    // Helper to validate classification range
+    const isClassificationRangeValid = (): boolean => {
+        if (classificationStart === null || classificationEnd === null) {
+            return true; // Allow null (classify all)
+        }
+        return classificationStart >= 1 && 
+               classificationEnd <= totalCount && 
+               classificationStart <= classificationEnd;
+    };
     const handleClassification = async (method: "llm" | "bert") => {
         setClassifying(method);
         try {
+            const limit = classificationStart !== null && classificationEnd !== null 
+                ? classificationEnd - classificationStart + 1 
+                : null;
             const response = await axios.post(
                 `http://localhost:5000/api/classify_only/${datasetId}`,
-                { method:method,provider: provider, model: model ,dataType: dataType, limit: classificationLimit, cot: cotEnabled },
+                { method:method,provider: provider, model: model ,dataType: dataType, limit: limit, start: classificationStart, end: classificationEnd, cot: cotEnabled },
                 { withCredentials: true }
             );
 
@@ -262,9 +276,12 @@ const DatasetView = () => {
     const handleClassificationBERT = async () => {
         setClassifying("bert");
         try {
+            const limit = classificationStart !== null && classificationEnd !== null 
+                ? classificationEnd - classificationStart + 1 
+                : null;
             const response = await axios.post(
                 `http://localhost:5000/api/classify/${datasetId}`,
-                { method: "bert", provider: provider, model: model, dataType: dataType, limit: classificationLimit, cot: cotEnabled },
+                { method: "bert", provider: provider, model: model, dataType: dataType, limit: limit, start: classificationStart, end: classificationEnd, cot: cotEnabled },
                 { withCredentials: true }
             );
 
@@ -299,9 +316,12 @@ const DatasetView = () => {
     const handleClassificationandExplanation = async (method: "llm" | "bert") => {
         setClassifying(method);
         try {
+            const limit = classificationStart !== null && classificationEnd !== null 
+                ? classificationEnd - classificationStart + 1 
+                : null;
             const response = await axios.post(
                 `http://localhost:5000/api/classify_and_explain/${datasetId}`,
-                { method:method,provider: provider, model: model ,dataType: dataType, limit: classificationLimit, cot: cotEnabled},
+                { method:method,provider: provider, model: model ,dataType: dataType, limit: limit, start: classificationStart, end: classificationEnd, cot: cotEnabled},
                 { withCredentials: true }
             );
 
@@ -434,17 +454,83 @@ const DatasetView = () => {
                         </div>
 
                             <Card.Title className="mb-4">Classification Methods</Card.Title>
-                            <div className="mb-3 d-flex align-items-center gap-3">
-                              <span className="fw-semibold">Entries to Classify:</span>
-                              <Form.Control
-                                type="number"
-                                min="1"
-                                max={dataset?.data?.length || 1}
-                                value={classificationLimit ?? ""}
-                                onChange={e => setClassificationLimit(e.target.value ? Number(e.target.value) : null)}
-                                placeholder='5'
-                                style={{ width: "100px" }}
-                              />
+                            <div className="mb-3">
+                              <div className="fw-semibold mb-2">Entries to Classify (Range):</div>
+                              <div className="d-flex align-items-center gap-2 flex-wrap">
+                                <div className="d-flex align-items-center gap-2">
+                                  <span className="text-muted small">Start:</span>
+                                  <Form.Control
+                                    type="number"
+                                    min="1"
+                                    max={totalCount || 1}
+                                    value={classificationStart ?? ""}
+                                    onChange={e => {
+                                      const inputVal = e.target.value;
+                                      if (!inputVal || inputVal === "") {
+                                        setClassificationStart(null);
+                                      } else {
+                                        const val = Number(inputVal);
+                                        if (!isNaN(val)) {
+                                          // Allow setting the value, validation will be checked by isInvalid
+                                          const clampedVal = Math.max(1, Math.min(val, totalCount || 1));
+                                          setClassificationStart(clampedVal);
+                                          // Auto-adjust end if start > end
+                                          if (classificationEnd !== null && clampedVal > classificationEnd) {
+                                            setClassificationEnd(Math.min(clampedVal, totalCount || 1));
+                                          }
+                                        }
+                                      }
+                                    }}
+                                    placeholder='1'
+                                    style={{ width: "80px" }}
+                                    isInvalid={classificationStart !== null && (classificationStart < 1 || classificationStart > totalCount || (classificationEnd !== null && classificationStart > classificationEnd))}
+                                  />
+                                </div>
+                                <div className="d-flex align-items-center gap-2">
+                                  <span className="text-muted small">End:</span>
+                                  <Form.Control
+                                    type="number"
+                                    min={classificationStart ?? 1}
+                                    max={totalCount || 1}
+                                    value={classificationEnd ?? ""}
+                                    onChange={e => {
+                                      const inputVal = e.target.value;
+                                      if (!inputVal || inputVal === "") {
+                                        setClassificationEnd(null);
+                                      } else {
+                                        const val = Number(inputVal);
+                                        if (!isNaN(val)) {
+                                          // Allow setting the value, validation will be checked by isInvalid
+                                          const clampedVal = Math.max(classificationStart ?? 1, Math.min(val, totalCount || 1));
+                                          setClassificationEnd(clampedVal);
+                                          // Auto-adjust start if end < start
+                                          if (classificationStart !== null && clampedVal < classificationStart) {
+                                            setClassificationStart(Math.max(1, clampedVal));
+                                          }
+                                        }
+                                      }
+                                    }}
+                                    placeholder={totalCount ? String(totalCount) : '100'}
+                                    style={{ width: "80px" }}
+                                    isInvalid={classificationEnd !== null && (classificationEnd < 1 || classificationEnd > totalCount || (classificationStart !== null && classificationEnd < classificationStart))}
+                                  />
+                                </div>
+                              </div>
+                              {totalCount > 0 && (
+                                <small className="text-muted d-block mt-2">
+                                  Dataset has {totalCount} entries. 
+                                  {classificationStart !== null && classificationEnd !== null && classificationStart <= classificationEnd && (
+                                    <span className="ms-1">Selected: {classificationEnd - classificationStart + 1} entries (indices {classificationStart}-{classificationEnd})</span>
+                                  )}
+                                </small>
+                              )}
+                              {(classificationStart !== null && classificationStart < 1) || 
+                               (classificationEnd !== null && classificationEnd > totalCount) ||
+                               (classificationStart !== null && classificationEnd !== null && classificationStart > classificationEnd) ? (
+                                <Alert variant="warning" className="mt-2 mb-0 py-2">
+                                  <small>Please ensure: Start ≥ 1, End ≤ {totalCount}, and Start ≤ End</small>
+                                </Alert>
+                              ) : null}
                             </div>
                             {dataType === "ecqa" && (
                                 <div className="mb-3">
@@ -464,7 +550,7 @@ const DatasetView = () => {
                                 <Button
                                     variant="primary"
                                     onClick={() => handleClassification("llm")}
-                                    disabled={!dataset || !!classifying}
+                                    disabled={!dataset || !!classifying || !isClassificationRangeValid()}
                                 >
                                     {classifying === "llm" ? (
                                         <>
@@ -477,7 +563,7 @@ const DatasetView = () => {
                                 <Button
                                     variant="primary"
                                     onClick={() => handleClassificationandExplanation("llm")}
-                                    disabled={!dataset || !!classifying}
+                                    disabled={!dataset || !!classifying || !isClassificationRangeValid()}
                                 >
                                     {classifying === "llm" ? (
                                         <>
@@ -491,7 +577,7 @@ const DatasetView = () => {
                                     <Button
                                         variant="success"
                                         onClick={handleClassificationBERT}
-                                        disabled={!dataset || !!classifying}
+                                        disabled={!dataset || !!classifying || !isClassificationRangeValid()}
                                     >
                                         {classifying === "bert" ? (
                                             <>

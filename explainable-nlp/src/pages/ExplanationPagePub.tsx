@@ -417,12 +417,15 @@ const ExplanationPagePubMedQA = () => {
             </Col>
             <Col md={4}>
               <div className="d-flex flex-column gap-3">
-                <div className="text-center">
-                  <div className="text-muted small">Prediction</div>
-                  <Badge pill bg={entry.prediction === "yes" ? "success" : "danger"} className="px-3 py-2 fs-6">
-                    {entry.prediction}
-                  </Badge>
-                </div>
+                {/* Prediction - Hide when method is explore */}
+                {entry?.method !== 'explore' && (
+                  <div className="text-center">
+                    <div className="text-muted small">Prediction</div>
+                    <Badge pill bg={entry.prediction === "yes" ? "success" : "danger"} className="px-3 py-2 fs-6">
+                      {entry.prediction}
+                    </Badge>
+                  </div>
+                )}
                 <div className="text-center">
                   <div className="text-muted small">Actual Label</div>
                   <Badge pill bg={entry.actualLabel === "yes" ? "success" : "danger"} className="px-3 py-2 fs-6">

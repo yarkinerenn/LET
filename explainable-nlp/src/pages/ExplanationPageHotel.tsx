@@ -242,12 +242,15 @@ const ExplanationPageHotel: React.FC = () => {
         </Col>
         <Col md={4}>
           <div className="d-flex flex-column gap-3">
-            <div className="text-center">
-              <div className="text-muted small">Prediction</div>
-              <Badge pill bg={predHotelLabel === 'Deceptive' ? 'danger' : predHotelLabel === 'Truthful' ? 'success' : 'secondary'} className="px-3 py-2 fs-6">
-                {predHotelLabel || entry.label}
-              </Badge>
-            </div>
+            {/* Prediction - Hide when method is explore */}
+            {entry?.method !== 'explore' && (
+              <div className="text-center">
+                <div className="text-muted small">Prediction</div>
+                <Badge pill bg={predHotelLabel === 'Deceptive' ? 'danger' : predHotelLabel === 'Truthful' ? 'success' : 'secondary'} className="px-3 py-2 fs-6">
+                  {predHotelLabel || entry.label}
+                </Badge>
+              </div>
+            )}
             <div className="text-center">
               <div className="text-muted small">Actual Label</div>
               <Badge pill bg={goldHotelLabel === 'Deceptive' ? 'danger' : goldHotelLabel === 'Truthful' ? 'success' : 'secondary'} className="px-3 py-2 fs-6">
