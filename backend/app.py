@@ -2,6 +2,7 @@
 from flask import Flask, jsonify
 from dotenv import load_dotenv
 from flask_cors import CORS
+from flask_apscheduler import APScheduler
 import os
 from routes import register_blueprints
 from extensions import mongo, login_manager
@@ -22,6 +23,10 @@ def create_app():
     mongo.init_app(app)
     login_manager.init_app(app)
     login_manager.login_view = "auth.login"
+    
+    # --- init scheduler ---
+    scheduler = APScheduler()
+    scheduler.init_app(app)
 
     # return 401 JSON instead of redirecting (helps with CORS + SPAs)
     @login_manager.unauthorized_handler
@@ -54,6 +59,39 @@ def create_app():
             seed_public_datasets(app.config["UPLOAD_FOLDER"])
         except Exception as e:
             print(f"Warning: Could not seed public datasets: {e}")
+        
+        # --- setup scheduled model updates ---
+        try:
+            from services.model_updater import update_all_models
+            
+            # Schedule daily model updates at 2 AM
+            def scheduled_model_update():
+                with app.app_context():
+                    try:
+                        update_all_models(use_api_keys=True)
+                        print("Scheduled model update completed successfully")
+                    except Exception as e:
+                        print(f"Error in scheduled model update: {e}")
+            
+            scheduler.add_job(
+                id='update_models',
+                func=scheduled_model_update,
+                trigger='cron',
+                hour=2,
+                minute=0
+            )
+            
+            # Run initial model update on startup (optional - can be disabled)
+            try:
+                update_all_models(use_api_keys=True)
+                print("Initial model cache update completed")
+            except Exception as e:
+                print(f"Warning: Could not perform initial model update: {e}")
+        except Exception as e:
+            print(f"Warning: Could not setup model updater scheduler: {e}")
+    
+    # Start scheduler after all jobs are added
+    scheduler.start()
     
     return app
 

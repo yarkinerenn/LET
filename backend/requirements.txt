@@ -2,6 +2,7 @@ Flask==3.1.0
 flask-cors==5.0.1
 Flask-Login==0.6.3
 Flask-PyMongo==3.0.1
+Flask-APScheduler==1.13.1
 python-dotenv==1.0.1
 cryptography==44.0.2
 pymongo==4.11.2

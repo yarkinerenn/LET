@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {Container, Row, Col, Form, Button, Alert, ButtonGroup, ToggleButton} from "react-bootstrap";
 import {useProvider} from "../modules/provider";
 
@@ -10,109 +10,53 @@ const Settings = () => {
     const [geminiApi, setGeminiApi] = useState("");
     const [error, setError] = useState("");         // For error messages
     const [success, setSuccess] = useState("");     // For success message
-    const openAIModels=[
-        { name: "gpt-5-2025-08-07" },
-        { name: "o4-mini-2025-04-16" },
-        { name: "gpt-4.1-nano-2025-04-14" },
-        {name:"gpt-3.5-turbo"},
-        {name: "gpt-4o-mini-2024-07-18"},
-        {name:"gpt-5-nano-2025-08-07"},
-        {name:"gpt-5-mini-2025-08-07"}
-
-    ];
-    // Ollama models
-    const ollamaModels = [
-        { name: "jsk/bio-mistral" },
-        {name:"phi3.5:latest"},
-        {name:"gemma:2b"},
-        {name:"llama3.1:8b"},
-        {name:"mistral:7b"},
-    ];
-    const groqModels = [
-        { name: "allam-2-7b" },
-        { name: "llama-3.3-70b-versatile" },
-        { name: "llama-3.1-8b-instant" },
-
-    ];
-    const openrouterModels = [
-        { name: "deepseek/deepseek-r1-0528-qwen3-8b:free" },
-        { name: "deepseek-r1-0528" },
-        { name: "sarvam-m" },
-        { name: "devstral-small" },
-        { name: "gemma-3n-e4b-it" },
-        { name: "google/gemma-3n-e2b-it:free" },
-        { name: "deephermes-3-mistral-24b-preview" },
-        { name: "phi-4-reasoning-plus" },
-        { name: "phi-4-reasoning" },
-        { name: "internvl3-14b" },
-        { name: "internvl3-2b" },
-        { name: "deepseek-prover-v2" },
-        { name: "qwen3-30b-a3b" },
-        { name: "qwen3-8b" },
-        { name: "qwen3-14b" },
-        { name: "qwen3-32b" },
-        { name: "qwen3-235b-a22b" },
-        { name: "deepseek-r1t-chimera" },
-        { name: "mai-ds-r1" },
-        { name: "glm-z1-32b" },
-        { name: "glm-4-32b" },
-        { name: "shisa-v2-llama3.3-70b" },
-        { name: "qwq-32b-arliai-rpr-v1" },
-        { name: "deepcoder-14b-preview" },
-        { name: "kimi-vl-a3b-thinking" },
-        { name: "llama-3.3-nemotron-super-49b-v1" },
-        { name: "llama-3.1-nemotron-ultra-253b-v1" },
-        { name: "llama-4-maverick" },
-        { name: "llama-4-scout" },
-        { name: "deepseek-v3-base" },
-        { name: "qwen2.5-vl-3b-instruct" },
-        { name: "gemini-2.5-pro-exp-03-25" },
-        { name: "qwen2.5-vl-32b-instruct" },
-        { name: "deepseek-chat-v3-0324" },
-        { name: "qwerky-72b" },
-        { name: "mistral-small-3.1-24b-instruct" },
-        { name: "olympiccoder-32b" },
-        { name: "gemma-3-1b-it" },
-        { name: "gemma-3-4b-it" },
-        { name: "gemma-3-12b-it" },
-        { name: "reka-flash-3" },
-        { name: "gemma-3-27b-it" },
-        { name: "deepseek-r1-zero" },
-        { name: "qwq-32b" },
-        { name: "moonlight-16b-a3b-instruct" },
-        { name: "deephermes-3-llama-3-8b-preview" },
-        { name: "dolphin3.0-r1-mistral-24b" },
-        { name: "dolphin3.0-mistral-24b" },
-        { name: "qwen2.5-vl-72b-instruct" },
-        { name: "mistral-small-24b-instruct-2501" },
-        { name: "deepseek-r1-distill-qwen-32b" },
-        { name: "deepseek-r1-distill-qwen-14b" },
-        { name: "deepseek-r1-distill-llama-70b" },
-        { name: "deepseek-r1" },
-        { name: "deepseek-chat" },
-        { name: "gemini-2.0-flash-exp" },
-        { name: "llama-3.3-70b-instruct" },
-        { name: "qwen-2.5-coder-32b-instruct" },
-        { name: "qwen-2.5-7b-instruct" },
-        { name: "llama-3.2-3b-instruct" },
-        { name: "llama-3.2-1b-instruct" },
-        { name: "llama-3.2-11b-vision-instruct" },
-        { name: "qwen-2.5-72b-instruct" },
-        { name: "qwen-2.5-vl-7b-instruct" },
-        { name: "llama-3.1-405b" },
-        { name: "llama-3.1-8b-instruct" },
-        { name: "mistral-nemo" },
-        { name: "gemma-2-9b-it" },
-        { name: "mistral-7b-instruct" }
-    ];
+    const [modelsLoading, setModelsLoading] = useState(true); // Loading state for models
+    
+    // Model lists fetched from backend
+    const [openAIModels, setOpenAIModels] = useState<Array<{name: string}>>([]);
+    const [ollamaModels, setOllamaModels] = useState<Array<{name: string}>>([]);
+    const [groqModels, setGroqModels] = useState<Array<{name: string}>>([]);
+    const [openrouterModels, setOpenrouterModels] = useState<Array<{name: string}>>([]);
+    const [geminiModels, setGeminiModels] = useState<Array<{name: string}>>([]);
+    const [deepseekModels, setDeepseekModels] = useState<Array<{name: string}>>([]);
+    
     const{ provider, setProvider,providerex, setProviderex, model, setModel, modelex, setModelex } = useProvider();
 
-    const geminiModels = [
-        { name: "models/gemini-1.5-flash-8b" },
-        { name: "gemini-1.5-flash" },
-        { name: "gemini-2.0-flash-exp" },
-        { name: "gemini-2.5-pro-exp-03-25" }
-    ];
+    // Fetch models from backend on component mount
+    useEffect(() => {
+        const fetchModels = async () => {
+            try {
+                setModelsLoading(true);
+                const response = await fetch("http://localhost:5000/api/settings/models", {
+                    method: "GET",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    credentials: 'include',
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    setOpenAIModels(data.openai || []);
+                    setGroqModels(data.groq || []);
+                    setOpenrouterModels(data.openrouter || []);
+                    setGeminiModels(data.gemini || []);
+                    setDeepseekModels(data.deepseek || []);
+                    setOllamaModels(data.ollama || []);
+                } else {
+                    console.error("Failed to fetch models:", response.statusText);
+                    // Use empty arrays on error - user can still proceed
+                }
+            } catch (error) {
+                console.error("Error fetching models:", error);
+                // Use empty arrays on error - user can still proceed
+            } finally {
+                setModelsLoading(false);
+            }
+        };
+
+        fetchModels();
+    }, []);
     const handleExplanationSettingsUpdate = async () => {
         const payload = {
             preferred_providerex: providerex,
@@ -408,7 +352,7 @@ const Settings = () => {
                                 </div>
 
                                 {/* Model Selection */}
-                                {(provider === 'gemini' || provider === 'groq' || provider === 'openai' || provider === 'openrouter' || provider === 'ollama') && (
+                                {(provider === 'gemini' || provider === 'groq' || provider === 'openai' || provider === 'openrouter' || provider === 'ollama' || provider === 'deepseek') && (
                                     <div className="mb-4">
                                         <h6 className="mb-3">Model Selection</h6>
                                         <Form.Select 
@@ -438,6 +382,11 @@ const Settings = () => {
                                                 </option>
                                             ))}
                                             {provider === 'ollama' && ollamaModels.map((m) => (
+                                                <option key={m.name} value={m.name}>
+                                                    {m.name}
+                                                </option>
+                                            ))}
+                                            {provider === 'deepseek' && deepseekModels.map((m) => (
                                                 <option key={m.name} value={m.name}>
                                                     {m.name}
                                                 </option>
@@ -545,7 +494,7 @@ const Settings = () => {
                                 </div>
 
                                 {/* Model Selection */}
-                                {(providerex === 'gemini' || providerex === 'groq' || providerex === 'openai' || providerex === 'openrouter' || providerex === 'ollama') && (
+                                {(providerex === 'gemini' || providerex === 'groq' || providerex === 'openai' || providerex === 'openrouter' || providerex === 'ollama' || providerex === 'deepseek') && (
                                     <div className="mb-4">
                                         <h6 className="mb-3">Model Selection</h6>
                                         <Form.Select 
@@ -575,6 +524,11 @@ const Settings = () => {
                                                 </option>
                                             ))}
                                             {providerex === 'ollama' && ollamaModels.map((m) => (
+                                                <option key={m.name} value={m.name}>
+                                                    {m.name}
+                                                </option>
+                                            ))}
+                                            {providerex === 'deepseek' && deepseekModels.map((m) => (
                                                 <option key={m.name} value={m.name}>
                                                     {m.name}
                                                 </option>

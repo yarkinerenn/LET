@@ -221,3 +221,20 @@ def update_api_keys():
         mongo.db.users.update_one({"_id": ObjectId(current_user.id)}, {"$set": update_fields})
 
     return jsonify({"message": "API keys updated successfully"})
+
+@auth_bp.route('/api/settings/models', methods=['GET'])
+def get_models():
+    """Get available models for all providers from cache."""
+    try:
+        from services.model_updater import get_all_models
+        
+        # Check if force refresh is requested
+        force_refresh = request.args.get('refresh', 'false').lower() == 'true'
+        
+        models = get_all_models(force_refresh=force_refresh)
+        return jsonify(models), 200
+    except Exception as e:
+        # Fallback to static models if there's an error
+        from services.model_fetcher import get_static_models
+        models = get_static_models()
+        return jsonify(models), 200
