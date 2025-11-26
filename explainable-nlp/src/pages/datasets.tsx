@@ -15,7 +15,7 @@ const Datasets = () => {
     const handleDeleteDataset = async (datasetId: string) => {
         try {
             await axios.delete(
-                `http://localhost:5000/api/delete_dataset/${datasetId}`,
+                `/api/delete_dataset/${datasetId}`,
                 { withCredentials: true }
             );
             fetchDatasets(); // Refresh the list
@@ -35,7 +35,7 @@ const Datasets = () => {
         setIsImporting(true);
         try {
             const response = await axios.post(
-                "http://localhost:5000/api/import_hf_dataset",
+                "/api/import_hf_dataset",
                 { dataset_name: hfDatasetName },
                 { withCredentials: true }
             );
@@ -71,7 +71,7 @@ const Datasets = () => {
         formData.append("file", file);
 
         try {
-            const response = await axios.post("http://localhost:5000/api/upload_dataset", formData, {
+            const response = await axios.post("/api/upload_dataset", formData, {
                 headers: { "Content-Type": "multipart/form-data" },
                 withCredentials: true,
             });
@@ -88,7 +88,7 @@ const Datasets = () => {
     // Fetch uploaded datasets from backend
     const fetchDatasets = async () => {
         try {
-            const response = await axios.get("http://localhost:5000/api/datasets", {
+            const response = await axios.get("/api/datasets", {
                 withCredentials: true,
             });
             setDatasets(response.data.datasets);

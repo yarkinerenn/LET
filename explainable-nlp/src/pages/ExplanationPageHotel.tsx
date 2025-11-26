@@ -64,8 +64,8 @@ const ExplanationPageHotel: React.FC = () => {
       setError(null);
       try {
         const [entryRes, classRes] = await Promise.all([
-          axios.get(`http://localhost:5000/api/classificationentry/${classificationId}/${resultId}`, { withCredentials: true }),
-          axios.get(`http://localhost:5000/api/classification/${classificationId}`, { withCredentials: true }),
+          axios.get(`/api/classificationentry/${classificationId}/${resultId}`, { withCredentials: true }),
+          axios.get(`/api/classification/${classificationId}`, { withCredentials: true }),
         ]);
         console.log(classRes.data,'classRes.data');
 
@@ -120,7 +120,7 @@ const ExplanationPageHotel: React.FC = () => {
     }
 
     try {
-      const llmResponse = await axios.post('http://localhost:5000/api/explain', {
+      const llmResponse = await axios.post('/api/explain', {
         text: entry?.question,
         provider: model.provider,
         model: model.model,
@@ -176,7 +176,7 @@ const ExplanationPageHotel: React.FC = () => {
     setIsSubmittingRatings(true);
     try {
       await axios.post(
-        'http://localhost:5000/api/save_ratings',
+        '/api/save_ratings',
         { classificationId, resultId, ratings, timestamp: new Date().toISOString() },
         { withCredentials: true }
       );

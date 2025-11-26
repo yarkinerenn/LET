@@ -44,7 +44,7 @@ const ExplanationPageDashboard = () => {
             try {
                 // Fetch explanation data
                 const explanationResponse = await axios.get(
-                    `http://localhost:5000/api/predictions/${predictionId}`,
+                    `/api/predictions/${predictionId}`,
                     { withCredentials: true }
                 );
                 setClassification(explanationResponse.data.classification);
@@ -65,7 +65,7 @@ const ExplanationPageDashboard = () => {
         setIsExplaining(true);
 
         try {
-            const response = await axios.post('http://localhost:5000/api/explain', {
+            const response = await axios.post('/api/explain', {
                 predictionId: predictionId,
 
                 predictedlabel: classification?.label,
@@ -96,7 +96,7 @@ const ExplanationPageDashboard = () => {
             // Generate LLM explanation
             console.log('this is the predictionid',predictionId)
             setIsExplaining(true);
-            const llmResponse = await axios.post('http://localhost:5000/api/explain', {
+            const llmResponse = await axios.post('/api/explain', {
                 predictionId: predictionId,
                 predictedlabel: classification?.label,
                 confidence: classification?.confidence,
@@ -108,7 +108,7 @@ const ExplanationPageDashboard = () => {
             setExplanationtext(llmResponse.data.explanation);
 
             // Generate SHAP explanation
-            const shapResponse = await axios.post('http://localhost:5000/api/explain', {
+            const shapResponse = await axios.post('/api/explain', {
                 predictionId: predictionId,
                 predictedlabel: classification?.label,
                 confidence: classification?.confidence,
@@ -123,7 +123,7 @@ const ExplanationPageDashboard = () => {
             console.log(shapwords,'SHAP words');
 
             // Generate Combined explanation
-            const combinedResponse = await axios.post('http://localhost:5000/api/explain_withshap', {
+            const combinedResponse = await axios.post('/api/explain_withshap', {
                 predictionId: predictionId,
                 text: classification?.text,
                 shapwords: shapwords,
@@ -148,7 +148,7 @@ const ExplanationPageDashboard = () => {
         setIsExplaining(true);
         try {
             const response = await axios.post(
-                'http://localhost:5000/api/explain_withshap',
+                '/api/explain_withshap',
                 {
                     predictionId: predictionId,
                     text: classification?.text,
@@ -245,7 +245,7 @@ const ExplanationPageDashboard = () => {
                                                         if (userLabel && predictionId) {
                                                             try {
                                                                 await axios.post(
-                                                                    `http://localhost:5000/api/predictions/update_prediction_label/${predictionId}`,
+                                                                    `/api/predictions/update_prediction_label/${predictionId}`,
                                                                     { user_label: userLabel },
                                                                     { withCredentials: true }
                                                                 );

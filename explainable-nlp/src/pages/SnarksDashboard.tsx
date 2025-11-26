@@ -68,8 +68,8 @@ const SnarksDashboard = () => {
     const fetchData = async () => {
       try {
         const [detailRes, statsRes] = await Promise.all([
-          axios.get(`http://localhost:5000/api/classification/${classificationId}`, { withCredentials: true }),
-          axios.get(`http://localhost:5000/api/classification/stats/${classificationId}`, { withCredentials: true })
+          axios.get(`/api/classification/${classificationId}`, { withCredentials: true }),
+          axios.get(`/api/classification/stats/${classificationId}`, { withCredentials: true })
         ]);
         setClassification(detailRes.data);
         setStats(statsRes.data.stats);
@@ -104,12 +104,12 @@ const SnarksDashboard = () => {
       return { provider, model: rest.join(':') };
     });
     await axios.post(
-      `http://localhost:5000/api/classification/${classificationId}/add_explanation_models`,
+      `/api/classification/${classificationId}/add_explanation_models`,
       { explanation_models },
       { withCredentials: true }
     );
     // Refresh classification data to update current models display
-    const detailRes = await axios.get(`http://localhost:5000/api/classification/${classificationId}`, { withCredentials: true });
+    const detailRes = await axios.get(`/api/classification/${classificationId}`, { withCredentials: true });
     setClassification(detailRes.data);
     alert('Explanation models added successfully!');
   };

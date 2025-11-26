@@ -44,7 +44,7 @@ const DatasetView = () => {
         setError(null);
         try {
             const response = await axios.post(
-                `http://localhost:5000/api/classification/empty/${datasetId}`,
+                `/api/classification/empty/${datasetId}`,
                 {},
                 { withCredentials: true }
             );
@@ -200,7 +200,7 @@ const DatasetView = () => {
 
         try {
             await axios.delete(
-                `http://localhost:5000/api/delete_classification/${classificationId}`,
+                `/api/delete_classification/${classificationId}`,
                 { withCredentials: true }
             );
 
@@ -239,7 +239,7 @@ const DatasetView = () => {
                 ? classificationEnd - classificationStart + 1 
                 : null;
             const response = await axios.post(
-                `http://localhost:5000/api/classify_only/${datasetId}`,
+                `/api/classify_only/${datasetId}`,
                 { method:method,provider: provider, model: model ,dataType: dataType, limit: limit, start: classificationStart, end: classificationEnd, cot: cotEnabled },
                 { withCredentials: true }
             );
@@ -280,7 +280,7 @@ const DatasetView = () => {
                 ? classificationEnd - classificationStart + 1 
                 : null;
             const response = await axios.post(
-                `http://localhost:5000/api/classify/${datasetId}`,
+                `/api/classify/${datasetId}`,
                 { method: "bert", provider: provider, model: model, dataType: dataType, limit: limit, start: classificationStart, end: classificationEnd, cot: cotEnabled },
                 { withCredentials: true }
             );
@@ -320,7 +320,7 @@ const DatasetView = () => {
                 ? classificationEnd - classificationStart + 1 
                 : null;
             const response = await axios.post(
-                `http://localhost:5000/api/classify_and_explain/${datasetId}`,
+                `/api/classify_and_explain/${datasetId}`,
                 { method:method,provider: provider, model: model ,dataType: dataType, limit: limit, start: classificationStart, end: classificationEnd, cot: cotEnabled},
                 { withCredentials: true }
             );
@@ -357,7 +357,7 @@ const DatasetView = () => {
         setLoadingClassifications(true);
         try {
             const response = await axios.get(
-                `http://localhost:5000/api/classifications/${datasetId}`,
+                `/api/classifications/${datasetId}`,
                 { withCredentials: true }
             );
             setClassifications(response.data.classifications);
@@ -373,7 +373,7 @@ const DatasetView = () => {
         setPaginationLoading(true);
         try {
             const response = await axios.get(
-                `http://localhost:5000/api/dataset/${datasetId}?page=${page}&limit=${limit}`,
+                `/api/dataset/${datasetId}?page=${page}&limit=${limit}`,
                 { withCredentials: true }
             );
             setDataset(response.data);
@@ -389,7 +389,7 @@ const DatasetView = () => {
         const fetchDataset = async () => {
             try {
                 setLoading(true);
-                const response = await axios.get(`http://localhost:5000/api/dataset/${datasetId}`, {
+                const response = await axios.get(`/api/dataset/${datasetId}`, {
                     withCredentials: true,
                 });
                 setDataset(response.data);

@@ -18,7 +18,7 @@ const Register: React.FC = () => {
         e.preventDefault();
 
         try {
-            const response = await axios.post('http://localhost:5000/api/register', {
+            const response = await axios.post('/api/register', {
                 email,
                 password,
                 openai_api: openaiApi, // Send OpenAI API Key

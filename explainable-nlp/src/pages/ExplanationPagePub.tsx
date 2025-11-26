@@ -74,8 +74,8 @@ const ExplanationPagePubMedQA = () => {
       setShapData({});
       try {
         const [entryRes, classRes] = await Promise.all([
-          axios.get(`http://localhost:5000/api/classificationentry/${classificationId}/${resultId}`, { withCredentials: true }),
-          axios.get(`http://localhost:5000/api/classification/${classificationId}`, { withCredentials: true }),
+          axios.get(`/api/classificationentry/${classificationId}/${resultId}`, { withCredentials: true }),
+          axios.get(`/api/classification/${classificationId}`, { withCredentials: true }),
         ]);
         setEntry(entryRes.data);
         console.log(entryRes.data);
@@ -130,7 +130,7 @@ const ExplanationPagePubMedQA = () => {
   const generateShapExplanation = async () => {
     setIsExplaining(true);
     try {
-      const shapResponse = await axios.post('http://localhost:5000/api/explain', {
+      const shapResponse = await axios.post('/api/explain', {
         text: entry?.context,
         explainer_type: 'shap',
         predictedlabel: entry?.prediction,
@@ -158,7 +158,7 @@ const ExplanationPagePubMedQA = () => {
     if (!model) return setIsExplaining(false);
 
     try {
-      const llmResponse = await axios.post('http://localhost:5000/api/explain', {
+      const llmResponse = await axios.post('/api/explain', {
         text: entry?.context,
         provider: model.provider,
         model: model.model,
@@ -173,7 +173,7 @@ const ExplanationPagePubMedQA = () => {
 
       let combinedExplanation: null = null;
       if (shapWords && shapWords.length > 0) {
-        const combinedRes = await axios.post('http://localhost:5000/api/explain_withshap', {
+        const combinedRes = await axios.post('/api/explain_withshap', {
           text: entry?.context,
           shapwords: shapWords,
           provider: model.provider,
@@ -253,7 +253,7 @@ const ExplanationPagePubMedQA = () => {
         ground_context: entry?.context
       };
 
-      const response = await axios.post("http://localhost:5000/api/faithfulness", payload, { withCredentials: true });
+      const response = await axios.post("/api/faithfulness", payload, { withCredentials: true });
 
       setFaithfulnessScores(prev => ({
         ...prev,
@@ -294,7 +294,7 @@ const ExplanationPagePubMedQA = () => {
         ground_context: entry?.context
       };
 
-      const response = await axios.post("http://localhost:5000/api/trustworthiness", payload, { withCredentials: true });
+      const response = await axios.post("/api/trustworthiness", payload, { withCredentials: true });
 
       setFaithfulnessScores(prev => ({
         ...prev,
@@ -325,7 +325,7 @@ const ExplanationPagePubMedQA = () => {
     setIsSubmittingRatings(true);
     try {
       await axios.post(
-        'http://localhost:5000/api/save_ratings',
+        '/api/save_ratings',
         {
           classificationId,
           resultId,
