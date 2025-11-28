@@ -44,6 +44,13 @@ import statsmodels.api as sm
 import statsmodels.formula.api as smf
 from scipy import stats
 from scipy.stats import shapiro, mannwhitneyu, ttest_ind
+import sys
+from pathlib import Path
+
+# Add parent directories to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+import config
+sys.path.insert(0, str(Path(__file__).parent.parent / "utils"))
 from plots import (
     plot_mean_rair_rsr_by_faith,
     plot_mean_conf_change_by_faith,
@@ -566,8 +573,18 @@ def test_H14(long_df, normality_results=None):
     result['n_clusters'] = len(df['participant'].unique())
     return result
 
+# H15: Higher perceived plausibility is associated with larger confidence changes
+def test_H15(long_df, normality_results=None):
+    df = long_df.dropna(subset=['delta_conf', 'plaus']).copy()
+    m = ols_clustered("delta_conf ~ plaus", df, cluster_var='participant')
+    result = summarize(m)
+    result['test_type'] = 'OLS (Cluster-Robust SEs)'
+    result['n_clusters'] = len(df['participant'].unique())
+    if normality_results and 'delta_conf' in normality_results:
+        result['normality'] = normality_results['delta_conf']
+    return result
 
-# Bonus hypothesis: Explanations are rated as more plausible when human and AI initially agree
+# H16: Explanations are rated as more plausible when human and AI initially agree
 def test_H16(long_df, normality_results=None):
     df = long_df.dropna(subset=['plaus', 'pre', 'ai']).copy()
     # Create agreement variable: 1 if human and AI agree initially, 0 if they disagree
@@ -782,14 +799,15 @@ def run_all_hypotheses(df_trials, n_trials=16):
         "H12": test_H12(long_df, normality_results),
         "H13": test_H13(long_df, normality_results),
         "H14": test_H14(long_df, normality_results),
+        "H15": test_H15(long_df, normality_results),
         "H16": test_H16(long_df, normality_results),
     }
     return results, long_df, normality_results
 
 def main():
-    df_trials = pd.read_excel("../data/experiment_results_with_metrics.xlsx")
+    df_trials = pd.read_excel(str(config.PROCESSED_DATA_FILE))
 
-    results, long_df, normality_results = run_all_hypotheses(df_trials, n_trials=16)
+    results, long_df, normality_results = run_all_hypotheses(df_trials, n_trials=config.N_TRIALS)
     
     # Create and display summary table
     print("\n" + "="*60)
@@ -799,8 +817,8 @@ def main():
     print(summary_table.to_string(index=False))
     
     # Save summary table to CSV
-    summary_table.to_csv("../data/hypothesis_summary_table.csv", index=False)
-    print("\n✓ Summary table saved to: ../data/hypothesis_summary_table.csv")
+    summary_table.to_csv(str(config.OUTPUT_CSV_FILES["hypothesis_summary"]), index=False)
+    print(f"\n✓ Summary table saved to: {config.OUTPUT_CSV_FILES['hypothesis_summary']}")
 
     print("\n" + "="*60)
     print("DETAILED HYPOTHESIS TEST RESULTS")
@@ -880,8 +898,8 @@ def main():
     print(participant_df.describe())
     
     # Save participant aggregates
-    participant_df.to_csv("../data/participant_level_aggregates.csv", index=False)
-    print("\n✓ Participant aggregates saved to: ../data/participant_level_aggregates.csv")
+    participant_df.to_csv(str(config.OUTPUT_CSV_FILES["participant_aggregates"]), index=False)
+    print(f"\n✓ Participant aggregates saved to: {config.OUTPUT_CSV_FILES['participant_aggregates']}")
     
     # Within-subjects comparisons (repeated measures design)
     print("\n" + "="*60)
@@ -933,8 +951,8 @@ def main():
     # Export within-subjects comparisons
     if faith_comparisons:
         faith_df_export = pd.DataFrame(faith_comparisons)
-        faith_df_export.to_csv("../data/within_subjects_comparisons_faithfulness.csv", index=False)
-        print("\n✓ Faithfulness comparisons saved to: ../data/within_subjects_comparisons_faithfulness.csv")
+        faith_df_export.to_csv(str(config.OUTPUT_CSV_FILES["within_subjects_faithfulness"]), index=False)
+        print(f"\n✓ Faithfulness comparisons saved to: {config.OUTPUT_CSV_FILES['within_subjects_faithfulness']}")
     
     print("\n\n--- Comparisons by MODEL SIZE (Paired Tests) ---")
     model_size_comparisons = []
@@ -977,36 +995,37 @@ def main():
     # Export within-subjects comparisons
     if model_size_comparisons:
         model_size_df_export = pd.DataFrame(model_size_comparisons)
-        model_size_df_export.to_csv("../data/within_subjects_comparisons_modelsize.csv", index=False)
-        print("\n✓ Model size comparisons saved to: ../data/within_subjects_comparisons_modelsize.csv")
+        model_size_df_export.to_csv(str(config.OUTPUT_CSV_FILES["within_subjects_modelsize"]), index=False)
+        print(f"\n✓ Model size comparisons saved to: {config.OUTPUT_CSV_FILES['within_subjects_modelsize']}")
 
     # Plots
     print("\n" + "="*60)
     print("GENERATING VISUALIZATIONS")
     print("="*60)
-    plot_mean_rair_rsr_by_faith(long_df, out_path="../plots/general/mean_rair_rsr_by_faith.png")
-    plot_mean_conf_change_by_faith(long_df, out_path="../plots/general/mean_conf_change_by_faith.png")
-    plot_mean_final_accuracy_by_faith(long_df, out_path="../plots/general/mean_final_accuracy_by_faith.png")
-    plot_plausibility_violin_by_faith(long_df, out_path="../plots/general/plausibility_violin_by_faith.png")
-    plot_per_question_accuracy(long_df, out_path="../plots/general/per_question_accuracy.png")
-    plot_per_question_accuracy_by_modelsize(long_df, out_path="../plots/general/per_question_accuracy_by_modelsize.png")
-    plot_per_question_accuracy_by_faithfulness(long_df, out_path="../plots/general/per_question_accuracy_by_faithfulness.png")
-    plot_rair_rsr_per_question(long_df, out_path="../plots/general/rair_rsr_per_question.png")
-    plot_human_accuracy_before_after(long_df, out_path="../plots/general/human_accuracy_before_after.png")
-    plot_confidence_plausibility_distribution(df_trials, out_path="../plots/general/confidence_plausibility_distribution.png")
-    plot_aor_scatter_by_faith(long_df, out_path="../plots/general/aor_by_faith_scatter.png")
-    plot_aor_scatter_by_modelsize(long_df, out_path="../plots/general/aor_by_modelsize_scatter.png")
-    plot_plausibility_vs_accuracy(long_df, out_path="../plots/general/plausibility_vs_accuracy.png")
-    plot_plausibility_vs_conf_change(long_df, out_path="../plots/general/plausibility_vs_conf_change.png")
-    plot_plausibility_by_agreement(long_df, out_path="../plots/general/plausibility_by_agreement.png")
-    plot_conf_change_by_agreement(long_df, out_path="../plots/general/conf_change_by_agreement.png")
-    plot_conf_vs_rair_scatter(long_df, out_path="../plots/general/conf_vs_rair_scatter.png")
-    plot_conf_vs_rsr_scatter(long_df, out_path="../plots/general/conf_vs_rsr_scatter.png")
-    plot_rair_rsr_by_modelsize(long_df, out_path="../plots/general/rair_rsr_by_modelsize.png")
-    plot_conf_change_by_modelsize(long_df, out_path="../plots/general/conf_change_by_modelsize.png")
-    plot_accuracy_by_modelsize(long_df, out_path="../plots/general/accuracy_by_modelsize.png")
-    plot_plaus_vs_rair_rsr(long_df, out_path="../plots/general/plaus_vs_rair_rsr.png")
-    plot_plausibility_by_modelsize(long_df, out_path="../plots/general/plausibility_by_modelsize.png")
+    general_plots_dir = config.PLOT_DIRS["general"]
+    plot_mean_rair_rsr_by_faith(long_df, out_path=str(general_plots_dir / "mean_rair_rsr_by_faith.png"))
+    plot_mean_conf_change_by_faith(long_df, out_path=str(general_plots_dir / "mean_conf_change_by_faith.png"))
+    plot_mean_final_accuracy_by_faith(long_df, out_path=str(general_plots_dir / "mean_final_accuracy_by_faith.png"))
+    plot_plausibility_violin_by_faith(long_df, out_path=str(general_plots_dir / "plausibility_violin_by_faith.png"))
+    plot_per_question_accuracy(long_df, out_path=str(general_plots_dir / "per_question_accuracy.png"))
+    plot_per_question_accuracy_by_modelsize(long_df, out_path=str(general_plots_dir / "per_question_accuracy_by_modelsize.png"))
+    plot_per_question_accuracy_by_faithfulness(long_df, out_path=str(general_plots_dir / "per_question_accuracy_by_faithfulness.png"))
+    plot_rair_rsr_per_question(long_df, out_path=str(general_plots_dir / "rair_rsr_per_question.png"))
+    plot_human_accuracy_before_after(long_df, out_path=str(general_plots_dir / "human_accuracy_before_after.png"))
+    plot_confidence_plausibility_distribution(df_trials, out_path=str(general_plots_dir / "confidence_plausibility_distribution.png"))
+    plot_aor_scatter_by_faith(long_df, out_path=str(general_plots_dir / "aor_by_faith_scatter.png"))
+    plot_aor_scatter_by_modelsize(long_df, out_path=str(general_plots_dir / "aor_by_modelsize_scatter.png"))
+    plot_plausibility_vs_accuracy(long_df, out_path=str(general_plots_dir / "plausibility_vs_accuracy.png"))
+    plot_plausibility_vs_conf_change(long_df, out_path=str(general_plots_dir / "plausibility_vs_conf_change.png"))
+    plot_plausibility_by_agreement(long_df, out_path=str(general_plots_dir / "plausibility_by_agreement.png"))
+    plot_conf_change_by_agreement(long_df, out_path=str(general_plots_dir / "conf_change_by_agreement.png"))
+    plot_conf_vs_rair_scatter(long_df, out_path=str(general_plots_dir / "conf_vs_rair_scatter.png"))
+    plot_conf_vs_rsr_scatter(long_df, out_path=str(general_plots_dir / "conf_vs_rsr_scatter.png"))
+    plot_rair_rsr_by_modelsize(long_df, out_path=str(general_plots_dir / "rair_rsr_by_modelsize.png"))
+    plot_conf_change_by_modelsize(long_df, out_path=str(general_plots_dir / "conf_change_by_modelsize.png"))
+    plot_accuracy_by_modelsize(long_df, out_path=str(general_plots_dir / "accuracy_by_modelsize.png"))
+    plot_plaus_vs_rair_rsr(long_df, out_path=str(general_plots_dir / "plaus_vs_rair_rsr.png"))
+    plot_plausibility_by_modelsize(long_df, out_path=str(general_plots_dir / "plausibility_by_modelsize.png"))
     print("✓ All visualizations generated")
     
     # Final summary
@@ -1014,10 +1033,10 @@ def main():
     print("ANALYSIS COMPLETE - OUTPUT FILES")
     print("="*60)
     print("\nCSV Files Generated:")
-    print("  • ../data/hypothesis_summary_table.csv")
-    print("  • ../data/participant_level_aggregates.csv")
-    print("  • ../data/within_subjects_comparisons_faithfulness.csv")
-    print("  • ../data/within_subjects_comparisons_modelsize.csv")
+    print(f"  • {config.OUTPUT_CSV_FILES['hypothesis_summary']}")
+    print(f"  • {config.OUTPUT_CSV_FILES['participant_aggregates']}")
+    print(f"  • {config.OUTPUT_CSV_FILES['within_subjects_faithfulness']}")
+    print(f"  • {config.OUTPUT_CSV_FILES['within_subjects_modelsize']}")
     print("\nAll visualization plots have been saved as PNG files.")
     print("\nNote: This analysis uses WITHIN-SUBJECTS (repeated measures) tests")
     print("because each participant experienced both conditions (faithful/unfaithful).")
