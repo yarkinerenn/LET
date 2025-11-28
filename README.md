@@ -264,6 +264,26 @@ If you installed manually, make sure the Conda environment is active (`conda act
 
 ---
 
+## Result Scripts and Analysis for the User Study
+
+The `result scripts/` directory contains a comprehensive analysis pipeline for processing experimental data and generating statistical results. This includes:
+
+- **Data processing**: Combines raw data from Prolific and friends/family sources
+- **Hypothesis testing**: 16 hypotheses with cluster-robust standard errors
+- **Demographic analyses**: Age, gender, CS/AI expertise, education level, and NLP experience
+- **Visualization**: Automated generation of plots and statistical summaries
+
+**Quick Start:**
+```bash
+cd "result scripts"
+pip install -r requirements.txt
+python main.py  # Run all analyses
+```
+
+For detailed documentation, usage examples, and workflow instructions, see **[result scripts/README.md](result%20scripts/README.md)**.
+
+---
+
 ## Documentation
 
 For comprehensive technical documentation, see **[PROTOTYPE_DOCUMENTATION.md](PROTOTYPE_DOCUMENTATION.md)** which includes:
