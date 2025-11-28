@@ -18,7 +18,7 @@ const Register: React.FC = () => {
         e.preventDefault();
 
         try {
-            const response = await axios.post('http://localhost:5000/api/register', {
+            const response = await axios.post('/api/register', {
                 email,
                 password,
                 openai_api: openaiApi, // Send OpenAI API Key
@@ -26,6 +26,11 @@ const Register: React.FC = () => {
                 deepseek_api: deepseekApi,
                 openrouter_api: openrouterApi,
                 gemini_api: geminiApi,
+            }, {
+                withCredentials: true, // Include credentials for CORS
+                headers: {
+                    'Content-Type': 'application/json',
+                }
             });
 
             if (response.status === 201) {

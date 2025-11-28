@@ -6,16 +6,36 @@ from sklearn.metrics.pairwise import cosine_similarity
 from ..src.basic_functions import call_llama
 from ..src.utils import save_to_references
 
-# Initialize BERT model and tokenizer
-tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-model = BertModel.from_pretrained('bert-base-uncased')
-model.eval()
+# Lazy-loaded BERT model and tokenizer (singleton pattern)
+_tokenizer = None
+_model = None
+_logging_configured = False
 
-# Set transformers logging to error only
-loggers = [logging.getLogger(name) for name in logging.root.manager.loggerDict]
-for logger in loggers:
-    if "transformers" in logger.name.lower():
-        logger.setLevel(logging.ERROR)
+def _configure_transformers_logging():
+    """Configure transformers logging to error only (called once)"""
+    global _logging_configured
+    if _logging_configured:
+        return
+    
+    loggers = [logging.getLogger(name) for name in logging.root.manager.loggerDict]
+    for logger in loggers:
+        if "transformers" in logger.name.lower():
+            logger.setLevel(logging.ERROR)
+    _logging_configured = True
+
+def _get_bert_model():
+    """Lazy load BERT model and tokenizer (singleton pattern)"""
+    global _tokenizer, _model
+    
+    if _model is None:
+        _configure_transformers_logging()
+        print("Loading BERT model (first use)...")
+        _tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        _model = BertModel.from_pretrained('bert-base-uncased')
+        _model.eval()
+        print("BERT model loaded successfully.")
+    
+    return _tokenizer, _model
 
 
 def get_bert_embedding(text):
@@ -27,6 +47,9 @@ def get_bert_embedding(text):
     text = text.strip()
     if text == "":
         return None
+
+    # Lazy load model on first use
+    tokenizer, model = _get_bert_model()
 
     # Truncate to BERT's max sequence length to avoid position embedding mismatch (512)
     inputs = tokenizer(

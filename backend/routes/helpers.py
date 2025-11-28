@@ -14,12 +14,27 @@ from .auth import (
     get_user_api_key_openrouter,
     get_user_api_key_groq,
 )
-tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased-finetuned-sst-2-english")
-model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased-finetuned-sst-2-english")
-classifier = pipeline(
-    "text-classification",
-    model="distilbert-base-uncased-finetuned-sst-2-english"
-)
+
+# Lazy-loaded DistilBERT components (singleton pattern)
+_tokenizer = None
+_model = None
+_classifier = None
+
+def _get_distilbert_components():
+    """Lazy load DistilBERT tokenizer, model, and classifier (singleton pattern)"""
+    global _tokenizer, _model, _classifier
+    
+    if _classifier is None:
+        print("Loading DistilBERT model components (first use)...")
+        _tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased-finetuned-sst-2-english")
+        _model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased-finetuned-sst-2-english")
+        _classifier = pipeline(
+            "text-classification",
+            model="distilbert-base-uncased-finetuned-sst-2-english"
+        )
+        print("DistilBERT model components loaded successfully.")
+    
+    return _tokenizer, _model, _classifier
 
 def pretty_pubmed_qa(data):
     # If data is not a dict, convert it from Python repr to dict first (may require ast.literal_eval)
@@ -146,6 +161,9 @@ def get_top_phrases(shap_values_obj, instance_idx=0, class_idx=1, top_n=5):
 def generate_shap_explanation(input_text, label):
     """Generate an explanation using SHAP values"""
     try:
+        # Lazy load classifier on first use
+        tokenizer, model, classifier = _get_distilbert_components()
+        
         # Map label to class index, but make sure we check the prediction first
         class_index = 1 if label == 'POSITIVE' else 0
 

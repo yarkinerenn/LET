@@ -1,0 +1,116 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: mongodb-prod
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: auth_app
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --eval 'db.adminCommand(\"ping\")' --quiet"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: backend-prod
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - MONGO_URI=mongodb://mongodb:27017/auth_app
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:-your-secret-key-change-in-production}
+      - SECRET_KEY=${SECRET_KEY:-${FLASK_SECRET_KEY:-your-secret-key-change-in-production}}
+      - FLASK_DEBUG=0
+      - FLASK_ENV=production
+      - PORT=5000
+      - FRONTEND_ORIGIN=${FRONTEND_ORIGIN:-http://localhost:80}
+      - SESSION_COOKIE_NAME=let_session
+      - UPLOAD_FOLDER=uploads
+      - TRANSFORMERS_CACHE=/app/.cache/transformers
+      - HF_HOME=/app/.cache
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+    volumes:
+      # Only mount data directory, not source code (code is baked into image)
+      - ./backend/uploads:/app/uploads
+      # Optional: mount cache for model persistence across restarts
+      - transformers_cache:/app/.cache/transformers
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:5000/api/health\")' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+
+  frontend:
+    build:
+      context: ./explainable-nlp
+      dockerfile: Dockerfile.prod
+    container_name: frontend-prod
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    environment:
+      - REACT_APP_API_URL=${REACT_APP_API_URL:-/api}
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+volumes:
+  mongodb_data:
+    driver: local
+  transformers_cache:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge
+

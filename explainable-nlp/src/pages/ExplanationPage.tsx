@@ -135,8 +135,8 @@ const ExplanationPage = () => {
                 setExplanations({});
                 setFaithfulnessScores({});
                 const [entryResponse, classificationResponse] = await Promise.all([
-                    axios.get(`http://localhost:5000/api/classificationentry/${classificationId}/${resultId}`, { withCredentials: true }),
-                    axios.get(`http://localhost:5000/api/classification/${classificationId}`, { withCredentials: true })
+                    axios.get(`/api/classificationentry/${classificationId}/${resultId}`, { withCredentials: true }),
+                    axios.get(`/api/classification/${classificationId}`, { withCredentials: true })
                 ]);
 
                 const entryData = entryResponse.data;
@@ -178,7 +178,7 @@ const ExplanationPage = () => {
                 let savedModels;
                 if (classificationMethod === 'explore') {
                     try {
-                        const preferencesResponse = await axios.get('http://localhost:5000/api/settings/get_preferences', { withCredentials: true });
+                        const preferencesResponse = await axios.get('/api/settings/get_preferences', { withCredentials: true });
                         const preferences = preferencesResponse.data;
                         // Convert model name dots to underscores to match database format (same as backend)
                         const modelName = preferences.preferred_modelex?.replace(/\./g, '_') || 'gpt_3_5_turbo';
@@ -258,7 +258,7 @@ const ExplanationPage = () => {
     const generateShapExplanation = async () => {
         setIsExplaining(true);
         try {
-            const shapResponse = await axios.post('http://localhost:5000/api/explain', {
+            const shapResponse = await axios.post('/api/explain', {
                 text: classification?.text,
                 explainer_type: 'shap',
                 predictedlabel: classification?.prediction,
@@ -294,7 +294,7 @@ const ExplanationPage = () => {
         }
 
         try {
-            const llmResponse = await axios.post('http://localhost:5000/api/explain', {
+            const llmResponse = await axios.post('/api/explain', {
                 text: classification?.text,
                 provider: model.provider,
                 model: model.model,
@@ -310,7 +310,7 @@ const ExplanationPage = () => {
             let combinedExplanation: null = null;
 
             if (shapWords && shapWords.length > 0) {
-                const combinedResponse = await axios.post('http://localhost:5000/api/explain_withshap', {
+                const combinedResponse = await axios.post('/api/explain_withshap', {
                     text: classification?.text,
                     shapwords: shapWords,
                     provider: model?.provider,
@@ -392,7 +392,7 @@ const ExplanationPage = () => {
                 provider: model.provider,
             };
 
-            const response = await axios.post("http://localhost:5000/api/faithfulness", payload, { withCredentials: true });
+            const response = await axios.post("/api/faithfulness", payload, { withCredentials: true });
 
             setFaithfulnessScores(prev => ({
                 ...prev,
@@ -422,7 +422,7 @@ const ExplanationPage = () => {
         setIsSubmittingRatings(true);
         try {
             await axios.post(
-                'http://localhost:5000/api/save_ratings',
+                '/api/save_ratings',
                 {
                     classificationId,
                     resultId,

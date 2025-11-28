@@ -125,7 +125,7 @@ const Settings = () => {
     useEffect(() => {
         const fetchApiKeysStatus = async () => {
             try {
-                const response = await fetch("http://localhost:5000/api/settings/get_api_keys_status", {
+                const response = await fetch("/api/settings/get_api_keys_status", {
                     method: "GET",
                     credentials: 'include',
                 });
@@ -140,7 +140,7 @@ const Settings = () => {
         
         const fetchPreferences = async () => {
             try {
-                const response = await fetch("http://localhost:5000/api/settings/get_preferences", {
+                const response = await fetch("/api/settings/get_preferences", {
                     method: "GET",
                     credentials: 'include',
                 });
@@ -167,7 +167,7 @@ const Settings = () => {
         };
 
         try {
-            const response = await fetch("http://localhost:5000/api/settings/update_preferred_explanation", {
+            const response = await fetch("/api/settings/update_preferred_explanation", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -181,7 +181,7 @@ const Settings = () => {
             if (response.ok) {
                 setSuccess("Explanation preferences updated successfully!");
                 // Refresh preferences to show updated selection
-                const prefResponse = await fetch("http://localhost:5000/api/settings/get_preferences", {
+                const prefResponse = await fetch("/api/settings/get_preferences", {
                     method: "GET",
                     credentials: 'include',
                 });
@@ -205,7 +205,7 @@ const Settings = () => {
         };
 
         try {
-            const response = await fetch("http://localhost:5000/api/settings/update_preferred_classification", {
+            const response = await fetch("/api/settings/update_preferred_classification", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -219,7 +219,7 @@ const Settings = () => {
             if (response.ok) {
                 setSuccess("Classification preferences updated successfully!");
                 // Refresh preferences to show updated selection
-                const prefResponse = await fetch("http://localhost:5000/api/settings/get_preferences", {
+                const prefResponse = await fetch("/api/settings/get_preferences", {
                     method: "GET",
                     credentials: 'include',
                 });
@@ -265,7 +265,7 @@ const Settings = () => {
         console.log("Sending request with payload:", payload);
 
         try {
-            const response = await fetch("http://localhost:5000/api/settings/update_api_keys", {
+            const response = await fetch("/api/settings/update_api_keys", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -287,7 +287,7 @@ const Settings = () => {
                 setopenrouterApi("");
                 setGeminiApi("");
                 // Refresh API keys status
-                const statusResponse = await fetch("http://localhost:5000/api/settings/get_api_keys_status", {
+                const statusResponse = await fetch("/api/settings/get_api_keys_status", {
                     method: "GET",
                     credentials: 'include',
                 });

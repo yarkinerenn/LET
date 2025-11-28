@@ -9,7 +9,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const checkAuth = async () => {
         try {
-            const response = await fetch('http://localhost:5000/api/check_auth', {
+            const response = await fetch('/api/check_auth', {
                 credentials: 'include',
             });
             const data = await response.json();
@@ -30,7 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const login = (user: User) => setUser(user);
     const logout = async () => {
         try {
-            await fetch('http://localhost:5000/api/logout', {
+            await fetch('/api/logout', {
                 method: 'POST',
                 credentials: 'include',
             });

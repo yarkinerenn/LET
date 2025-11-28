@@ -38,7 +38,7 @@ const Dashboard = () => {
 
     const fetchDatasets = async () => {
         try {
-            const response = await axios.get("http://localhost:5000/api/datasets", {
+            const response = await axios.get("/api/datasets", {
                 withCredentials: true,
             });
             setDatasets(response.data.datasets);
@@ -55,7 +55,7 @@ const Dashboard = () => {
     // Function to fetch classifications
     const fetchClassifications = async () => {
         try {
-            const response = await fetch('http://localhost:5000/api/predictions', {
+            const response = await fetch('/api/predictions', {
                 method: 'GET',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -84,7 +84,7 @@ const Dashboard = () => {
         setError('');
         try {
             const response = await axios.post(
-                'http://localhost:5000/api/analyze',
+                '/api/analyze',
                 { text },  // Request body
                 { withCredentials: true }  // Include credentials
             );
@@ -106,7 +106,7 @@ const Dashboard = () => {
         setError('');
         try {
             const response = await axios.post(
-                'http://localhost:5000/api/analyzewithllm',
+                '/api/analyzewithllm',
                 { text:text,
                     provider: provider ,
                     model: model,},  // Request body
@@ -131,7 +131,7 @@ const Dashboard = () => {
         setExplanation('');
         try {
             console.log('shapstr',shapstring);
-            const response = await axios.post('http://localhost:5000/api/explain_withshap', {
+            const response = await axios.post('/api/explain_withshap', {
                 prediction_id: prediction?.id,
                 text: text,
                 explainer_type: explainerType,
@@ -151,7 +151,7 @@ const Dashboard = () => {
         setIsExplaining(true);
         setExplanation('');
         try {
-            const response = await axios.post('http://localhost:5000/api/explain', {
+            const response = await axios.post('/api/explain', {
                 prediction_id: prediction?.id,
                 text: text,
                 explainer_type: explainerType,
@@ -172,7 +172,7 @@ const Dashboard = () => {
     const handleDeleteClassification = async (classificationId: string) => {
         try {
             // Send delete request to the backend
-            const response = await axios.delete(`http://localhost:5000/api/delete_prediction/${classificationId}`, {
+            const response = await axios.delete(`/api/delete_prediction/${classificationId}`, {
                 withCredentials: true
             });
 
@@ -265,7 +265,7 @@ const Dashboard = () => {
                                             variant="danger"
                                             size="sm"
                                             onClick={async () => {
-                                                await axios.delete(`http://localhost:5000/api/delete_dataset/${dataset._id}`, {
+                                                await axios.delete(`/api/delete_dataset/${dataset._id}`, {
                                                     withCredentials: true,
                                                 });
                                                 fetchDatasets();
