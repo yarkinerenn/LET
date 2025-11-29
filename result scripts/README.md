@@ -113,6 +113,13 @@ The analysis uses four data files located in the `data/` directory:
 
 All four files are automatically combined during data processing to create the final dataset with computed metrics.
 
+### The orginal excel files:
+- https://docs.google.com/spreadsheets/d/1wsG2bLVdLrXmwiKRuivRkuIT2KHmxuDsONkkVcm1Zyk/edit?usp=sharing
+- https://docs.google.com/spreadsheets/d/14ofCkEJi32FVzOzTMw9ciYIcgokp5b5ImntU4YjVkb0/edit?usp=sharing
+- https://docs.google.com/spreadsheets/d/1L3nPxmtOnsDnyFAThGoK065SQbzf-ZQB0oTc6e62FrU/edit?usp=sharing
+- https://docs.google.com/spreadsheets/d/1gJ0_oEZse9qUz0TPf-SaJuTEGs-wCo6YXJ_DJMVBWto/edit?usp=sharing
+
+
 ## Configuration
 
 All paths and settings are centralized in `config.py`. Key settings:
