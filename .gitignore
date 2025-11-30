@@ -4,3 +4,10 @@ __pycache__/
 *.DS_Store
 backend/result\ scripts/plots/
 **/references.csv
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+xnlp/
