@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import {Container, Row, Col, Form, Button, Alert, ButtonGroup, ToggleButton, Badge} from "react-bootstrap";
 import {useProvider} from "../modules/provider";
+import axios from "axios";
 
 const Settings = () => {
     const [openaiApi, setOpenaiApi] = useState(""); // Current OpenAI API Key
@@ -121,6 +122,25 @@ const Settings = () => {
         { name: "gemini-2.5-pro-exp-03-25" }
     ];
 
+    // Helper function to check if provider has API key
+    const hasApiKeyForProvider = (providerName: string): boolean => {
+        // Ollama doesn't require an API key (local model)
+        if (providerName === 'ollama') {
+            return true;
+        }
+        
+        const apiKeyMap: { [key: string]: keyof typeof apiKeysStatus } = {
+            'openai': 'openai_api',
+            'groq': 'groq_api',
+            'deepseek': 'deepseek_api',
+            'openrouter': 'openrouter_api',
+            'gemini': 'gemini_api'
+        };
+        
+        const apiKeyField = apiKeyMap[providerName];
+        return apiKeyField ? apiKeysStatus[apiKeyField] : false;
+    };
+
     // Fetch API keys status and user preferences on component mount
     useEffect(() => {
         const fetchApiKeysStatus = async () => {
@@ -132,13 +152,15 @@ const Settings = () => {
                 if (response.ok) {
                     const data = await response.json();
                     setApiKeysStatus(data);
+                    return data; // Return the data for use in fetchPreferences
                 }
             } catch (error) {
                 console.error("Failed to fetch API keys status:", error);
             }
+            return null;
         };
         
-        const fetchPreferences = async () => {
+        const fetchPreferences = async (keysStatus: typeof apiKeysStatus) => {
             try {
                 const response = await fetch("/api/settings/get_preferences", {
                     method: "GET",
@@ -146,20 +168,61 @@ const Settings = () => {
                 });
                 if (response.ok) {
                     const data = await response.json();
-                    // Set provider and model from preferences
-                    if (data.preferred_provider) setProvider(data.preferred_provider);
-                    if (data.preferred_model) setModel(data.preferred_model);
-                    if (data.preferred_providerex) setProviderex(data.preferred_providerex);
-                    if (data.preferred_modelex) setModelex(data.preferred_modelex);
+                    
+                    // Helper to check API key with provided status
+                    const checkApiKey = (providerName: string): boolean => {
+                        if (providerName === 'ollama') return true;
+                        const apiKeyMap: { [key: string]: keyof typeof keysStatus } = {
+                            'openai': 'openai_api',
+                            'groq': 'groq_api',
+                            'deepseek': 'deepseek_api',
+                            'openrouter': 'openrouter_api',
+                            'gemini': 'gemini_api'
+                        };
+                        const apiKeyField = apiKeyMap[providerName];
+                        return apiKeyField ? keysStatus[apiKeyField] : false;
+                    };
+                    
+                    // Set provider and model from preferences only if API key is available
+                    if (data.preferred_provider && checkApiKey(data.preferred_provider)) {
+                        setProvider(data.preferred_provider);
+                        if (data.preferred_model) setModel(data.preferred_model);
+                    }
+                    if (data.preferred_providerex && checkApiKey(data.preferred_providerex)) {
+                        setProviderex(data.preferred_providerex);
+                        if (data.preferred_modelex) setModelex(data.preferred_modelex);
+                    }
                 }
             } catch (error) {
                 console.error("Failed to fetch preferences:", error);
             }
         };
         
-        fetchApiKeysStatus();
-        fetchPreferences();
+        // Fetch API keys status first, then preferences with the status
+        const initializeSettings = async () => {
+            const keysStatus = await fetchApiKeysStatus();
+            if (keysStatus) {
+                await fetchPreferences(keysStatus);
+            }
+        };
+        
+        initializeSettings();
     }, [setProvider, setModel, setProviderex, setModelex]);
+
+    // Reset provider selection if API key is not available
+    useEffect(() => {
+        if (provider && !hasApiKeyForProvider(provider)) {
+            setProvider('');
+            setModel('');
+        }
+    }, [apiKeysStatus, provider, setProvider, setModel]);
+
+    useEffect(() => {
+        if (providerex && !hasApiKeyForProvider(providerex)) {
+            setProviderex('');
+            setModelex('');
+        }
+    }, [apiKeysStatus, providerex, setProviderex, setModelex]);
     const handleExplanationSettingsUpdate = async () => {
         const payload = {
             preferred_providerex: providerex,
@@ -305,6 +368,68 @@ const Settings = () => {
         }
     };
 
+    const handleDeleteApiKey = async (keyType: string) => {
+        const keyTypeNames: { [key: string]: string } = {
+            'openai_api': 'OpenAI',
+            'groq_api': 'Groq',
+            'deepseek_api': 'DeepSeek',
+            'openrouter_api': 'OpenRouter',
+            'gemini_api': 'Gemini'
+        };
+        
+        const keyName = keyTypeNames[keyType] || keyType;
+        
+        if (!window.confirm(`Are you sure you want to delete your ${keyName} API key?`)) {
+            return;
+        }
+
+        try {
+            const response = await axios.post(
+                "/api/settings/delete_api_key",
+                { key_type: keyType },
+                { withCredentials: true }
+            );
+
+            if (response.status === 200) {
+                setSuccess(`${keyName} API key deleted successfully`);
+                setError("");
+                
+                // Refresh API keys status
+                const statusResponse = await fetch("/api/settings/get_api_keys_status", {
+                    method: "GET",
+                    credentials: 'include',
+                });
+                if (statusResponse.ok) {
+                    const statusData = await statusResponse.json();
+                    setApiKeysStatus(statusData);
+                }
+                
+                // Reset provider selection if the deleted key was being used
+                const providerMap: { [key: string]: string } = {
+                    'openai_api': 'openai',
+                    'groq_api': 'groq',
+                    'deepseek_api': 'deepseek',
+                    'openrouter_api': 'openrouter',
+                    'gemini_api': 'gemini'
+                };
+                const affectedProvider = providerMap[keyType];
+                if (affectedProvider && provider === affectedProvider) {
+                    setProvider('');
+                    setModel('');
+                }
+                if (affectedProvider && providerex === affectedProvider) {
+                    setProviderex('');
+                    setModelex('');
+                }
+            } else {
+                setError(response.data?.error || "Failed to delete API key");
+            }
+        } catch (error: any) {
+            console.error("Delete API key error:", error);
+            setError(error.response?.data?.error || "Failed to delete API key");
+        }
+    };
+
     return (
         <Container className="py-5">
             <h2 className="text-center mb-5">Settings</h2>
@@ -334,12 +459,25 @@ const Settings = () => {
                             <Form.Group className="mb-3">
                                 <Form.Label className="fw-semibold d-flex align-items-center justify-content-between">
                                     <span>OpenAI API Key</span>
-                                    {apiKeysStatus.openai_api && (
-                                        <Badge bg="success" className="ms-2">
-                                            <i className="fas fa-check-circle me-1"></i>
-                                            Set
-                                        </Badge>
-                                    )}
+                                    <div className="d-flex align-items-center gap-2">
+                                        {apiKeysStatus.openai_api && (
+                                            <>
+                                                <Badge bg="success" className="ms-2">
+                                                    <i className="fas fa-check-circle me-1"></i>
+                                                    Set
+                                                </Badge>
+                                                <Button
+                                                    variant="outline-danger"
+                                                    size="sm"
+                                                    onClick={() => handleDeleteApiKey('openai_api')}
+                                                    title="Delete API key"
+                                                    style={{ padding: '2px 8px', fontSize: '0.75rem' }}
+                                                >
+                                                    <i className="fas fa-trash-alt"></i>
+                                                </Button>
+                                            </>
+                                        )}
+                                    </div>
                                 </Form.Label>
                                 <Form.Control
                                     type="password"
@@ -353,12 +491,25 @@ const Settings = () => {
                             <Form.Group className="mb-3">
                                 <Form.Label className="fw-semibold d-flex align-items-center justify-content-between">
                                     <span>Groq API Key</span>
-                                    {apiKeysStatus.groq_api && (
-                                        <Badge bg="success" className="ms-2">
-                                            <i className="fas fa-check-circle me-1"></i>
-                                            Set
-                                        </Badge>
-                                    )}
+                                    <div className="d-flex align-items-center gap-2">
+                                        {apiKeysStatus.groq_api && (
+                                            <>
+                                                <Badge bg="success" className="ms-2">
+                                                    <i className="fas fa-check-circle me-1"></i>
+                                                    Set
+                                                </Badge>
+                                                <Button
+                                                    variant="outline-danger"
+                                                    size="sm"
+                                                    onClick={() => handleDeleteApiKey('groq_api')}
+                                                    title="Delete API key"
+                                                    style={{ padding: '2px 8px', fontSize: '0.75rem' }}
+                                                >
+                                                    <i className="fas fa-trash-alt"></i>
+                                                </Button>
+                                            </>
+                                        )}
+                                    </div>
                                 </Form.Label>
                                 <Form.Control
                                     type="password"
@@ -372,12 +523,25 @@ const Settings = () => {
                             <Form.Group className="mb-3">
                                 <Form.Label className="fw-semibold d-flex align-items-center justify-content-between">
                                     <span>DeepSeek API Key</span>
-                                    {apiKeysStatus.deepseek_api && (
-                                        <Badge bg="success" className="ms-2">
-                                            <i className="fas fa-check-circle me-1"></i>
-                                            Set
-                                        </Badge>
-                                    )}
+                                    <div className="d-flex align-items-center gap-2">
+                                        {apiKeysStatus.deepseek_api && (
+                                            <>
+                                                <Badge bg="success" className="ms-2">
+                                                    <i className="fas fa-check-circle me-1"></i>
+                                                    Set
+                                                </Badge>
+                                                <Button
+                                                    variant="outline-danger"
+                                                    size="sm"
+                                                    onClick={() => handleDeleteApiKey('deepseek_api')}
+                                                    title="Delete API key"
+                                                    style={{ padding: '2px 8px', fontSize: '0.75rem' }}
+                                                >
+                                                    <i className="fas fa-trash-alt"></i>
+                                                </Button>
+                                            </>
+                                        )}
+                                    </div>
                                 </Form.Label>
                                 <Form.Control
                                     type="password"
@@ -391,12 +555,25 @@ const Settings = () => {
                             <Form.Group className="mb-3">
                                 <Form.Label className="fw-semibold d-flex align-items-center justify-content-between">
                                     <span>Openrouter API Key</span>
-                                    {apiKeysStatus.openrouter_api && (
-                                        <Badge bg="success" className="ms-2">
-                                            <i className="fas fa-check-circle me-1"></i>
-                                            Set
-                                        </Badge>
-                                    )}
+                                    <div className="d-flex align-items-center gap-2">
+                                        {apiKeysStatus.openrouter_api && (
+                                            <>
+                                                <Badge bg="success" className="ms-2">
+                                                    <i className="fas fa-check-circle me-1"></i>
+                                                    Set
+                                                </Badge>
+                                                <Button
+                                                    variant="outline-danger"
+                                                    size="sm"
+                                                    onClick={() => handleDeleteApiKey('openrouter_api')}
+                                                    title="Delete API key"
+                                                    style={{ padding: '2px 8px', fontSize: '0.75rem' }}
+                                                >
+                                                    <i className="fas fa-trash-alt"></i>
+                                                </Button>
+                                            </>
+                                        )}
+                                    </div>
                                 </Form.Label>
                                 <Form.Control
                                     type="password"
@@ -410,12 +587,25 @@ const Settings = () => {
                             <Form.Group className="mb-4">
                                 <Form.Label className="fw-semibold d-flex align-items-center justify-content-between">
                                     <span>Gemini API Key</span>
-                                    {apiKeysStatus.gemini_api && (
-                                        <Badge bg="success" className="ms-2">
-                                            <i className="fas fa-check-circle me-1"></i>
-                                            Set
-                                        </Badge>
-                                    )}
+                                    <div className="d-flex align-items-center gap-2">
+                                        {apiKeysStatus.gemini_api && (
+                                            <>
+                                                <Badge bg="success" className="ms-2">
+                                                    <i className="fas fa-check-circle me-1"></i>
+                                                    Set
+                                                </Badge>
+                                                <Button
+                                                    variant="outline-danger"
+                                                    size="sm"
+                                                    onClick={() => handleDeleteApiKey('gemini_api')}
+                                                    title="Delete API key"
+                                                    style={{ padding: '2px 8px', fontSize: '0.75rem' }}
+                                                >
+                                                    <i className="fas fa-trash-alt"></i>
+                                                </Button>
+                                            </>
+                                        )}
+                                    </div>
                                 </Form.Label>
                                 <Form.Control
                                     type="password"
@@ -463,8 +653,10 @@ const Settings = () => {
                                             checked={provider === 'openai'}
                                             onChange={(e) => setProvider(e.currentTarget.value)}
                                             className="me-2 mb-2"
+                                            disabled={!hasApiKeyForProvider('openai')}
+                                            title={!hasApiKeyForProvider('openai') ? 'API key required' : ''}
                                         >
-                                            OpenAI
+                                            OpenAI {!hasApiKeyForProvider('openai') && <Badge bg="secondary" className="ms-1" style={{ fontSize: '0.65rem' }}>API Key Required</Badge>}
                                         </ToggleButton>
                                         <ToggleButton
                                             id="provider-groq"
@@ -475,8 +667,10 @@ const Settings = () => {
                                             checked={provider === 'groq'}
                                             onChange={(e) => setProvider(e.currentTarget.value)}
                                             className="me-2 mb-2"
+                                            disabled={!hasApiKeyForProvider('groq')}
+                                            title={!hasApiKeyForProvider('groq') ? 'API key required' : ''}
                                         >
-                                            Groq
+                                            Groq {!hasApiKeyForProvider('groq') && <Badge bg="secondary" className="ms-1" style={{ fontSize: '0.65rem' }}>API Key Required</Badge>}
                                         </ToggleButton>
                                         <ToggleButton
                                             id="provider-deepseek"
@@ -487,8 +681,10 @@ const Settings = () => {
                                             checked={provider === 'deepseek'}
                                             onChange={(e) => setProvider(e.currentTarget.value)}
                                             className="me-2 mb-2"
+                                            disabled={!hasApiKeyForProvider('deepseek')}
+                                            title={!hasApiKeyForProvider('deepseek') ? 'API key required' : ''}
                                         >
-                                            Deepseek
+                                            Deepseek {!hasApiKeyForProvider('deepseek') && <Badge bg="secondary" className="ms-1" style={{ fontSize: '0.65rem' }}>API Key Required</Badge>}
                                         </ToggleButton>
                                         <ToggleButton
                                             id="provider-openrouter"
@@ -499,8 +695,10 @@ const Settings = () => {
                                             checked={provider === 'openrouter'}
                                             onChange={(e) => setProvider(e.currentTarget.value)}
                                             className="me-2 mb-2"
+                                            disabled={!hasApiKeyForProvider('openrouter')}
+                                            title={!hasApiKeyForProvider('openrouter') ? 'API key required' : ''}
                                         >
-                                            Openrouter
+                                            Openrouter {!hasApiKeyForProvider('openrouter') && <Badge bg="secondary" className="ms-1" style={{ fontSize: '0.65rem' }}>API Key Required</Badge>}
                                         </ToggleButton>
                                         <ToggleButton
                                             id="provider-gemini"
@@ -511,8 +709,10 @@ const Settings = () => {
                                             checked={provider === 'gemini'}
                                             onChange={(e) => setProvider(e.currentTarget.value)}
                                             className="me-2 mb-2"
+                                            disabled={!hasApiKeyForProvider('gemini')}
+                                            title={!hasApiKeyForProvider('gemini') ? 'API key required' : ''}
                                         >
-                                            Gemini
+                                            Gemini {!hasApiKeyForProvider('gemini') && <Badge bg="secondary" className="ms-1" style={{ fontSize: '0.65rem' }}>API Key Required</Badge>}
                                         </ToggleButton>
                                         <ToggleButton
                                             id="provider-ollama"
@@ -600,8 +800,10 @@ const Settings = () => {
                                             checked={providerex === 'openai'}
                                             onChange={(e) => setProviderex(e.currentTarget.value)}
                                             className="me-2 mb-2"
+                                            disabled={!hasApiKeyForProvider('openai')}
+                                            title={!hasApiKeyForProvider('openai') ? 'API key required' : ''}
                                         >
-                                            OpenAI
+                                            OpenAI {!hasApiKeyForProvider('openai') && <Badge bg="secondary" className="ms-1" style={{ fontSize: '0.65rem' }}>API Key Required</Badge>}
                                         </ToggleButton>
                                         <ToggleButton
                                             id="providerex-groq"
@@ -612,8 +814,10 @@ const Settings = () => {
                                             checked={providerex === 'groq'}
                                             onChange={(e) => setProviderex(e.currentTarget.value)}
                                             className="me-2 mb-2"
+                                            disabled={!hasApiKeyForProvider('groq')}
+                                            title={!hasApiKeyForProvider('groq') ? 'API key required' : ''}
                                         >
-                                            Groq
+                                            Groq {!hasApiKeyForProvider('groq') && <Badge bg="secondary" className="ms-1" style={{ fontSize: '0.65rem' }}>API Key Required</Badge>}
                                         </ToggleButton>
                                         <ToggleButton
                                             id="providerex-deepseek"
@@ -624,8 +828,10 @@ const Settings = () => {
                                             checked={providerex === 'deepseek'}
                                             onChange={(e) => setProviderex(e.currentTarget.value)}
                                             className="me-2 mb-2"
+                                            disabled={!hasApiKeyForProvider('deepseek')}
+                                            title={!hasApiKeyForProvider('deepseek') ? 'API key required' : ''}
                                         >
-                                            Deepseek
+                                            Deepseek {!hasApiKeyForProvider('deepseek') && <Badge bg="secondary" className="ms-1" style={{ fontSize: '0.65rem' }}>API Key Required</Badge>}
                                         </ToggleButton>
                                         <ToggleButton
                                             id="providerex-openrouter"
@@ -636,8 +842,10 @@ const Settings = () => {
                                             checked={providerex === 'openrouter'}
                                             onChange={(e) => setProviderex(e.currentTarget.value)}
                                             className="me-2 mb-2"
+                                            disabled={!hasApiKeyForProvider('openrouter')}
+                                            title={!hasApiKeyForProvider('openrouter') ? 'API key required' : ''}
                                         >
-                                            Openrouter
+                                            Openrouter {!hasApiKeyForProvider('openrouter') && <Badge bg="secondary" className="ms-1" style={{ fontSize: '0.65rem' }}>API Key Required</Badge>}
                                         </ToggleButton>
                                         <ToggleButton
                                             id="providerex-gemini"
@@ -648,8 +856,10 @@ const Settings = () => {
                                             checked={providerex === 'gemini'}
                                             onChange={(e) => setProviderex(e.currentTarget.value)}
                                             className="me-2 mb-2"
+                                            disabled={!hasApiKeyForProvider('gemini')}
+                                            title={!hasApiKeyForProvider('gemini') ? 'API key required' : ''}
                                         >
-                                            Gemini
+                                            Gemini {!hasApiKeyForProvider('gemini') && <Badge bg="secondary" className="ms-1" style={{ fontSize: '0.65rem' }}>API Key Required</Badge>}
                                         </ToggleButton>
                                         <ToggleButton
                                             id="providerex-ollama"

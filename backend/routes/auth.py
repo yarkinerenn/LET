@@ -308,3 +308,28 @@ def update_api_keys():
         mongo.db.users.update_one({"_id": ObjectId(current_user.id)}, {"$set": update_fields})
 
     return jsonify({"message": "API keys updated successfully"})
+
+@auth_bp.route('/api/settings/delete_api_key', methods=['POST'])
+@login_required
+def delete_api_key():
+    """Delete a specific API key from user profile"""
+    data = request.json
+    key_type = data.get("key_type")  # e.g., "openai_api", "groq_api", etc.
+    
+    if not key_type:
+        return jsonify({"error": "key_type is required"}), 400
+    
+    valid_key_types = ['openai_api', 'groq_api', 'deepseek_api', 'openrouter_api', 'gemini_api']
+    if key_type not in valid_key_types:
+        return jsonify({"error": f"Invalid key_type. Must be one of: {', '.join(valid_key_types)}"}), 400
+    
+    try:
+        # Unset (delete) the API key field
+        mongo.db.users.update_one(
+            {"_id": ObjectId(current_user.id)},
+            {"$unset": {key_type: ""}}
+        )
+        
+        return jsonify({"message": f"{key_type} deleted successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": f"Failed to delete API key: {str(e)}"}), 500

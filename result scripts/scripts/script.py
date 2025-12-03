@@ -141,7 +141,6 @@ def build_full_with_deltas_and_labels():
     FILTER_MODE = "include"  # "include" = only CS/AI, "exclude" = exclude CS/AI
     
     # Keywords to match (case-insensitive, partial match)
-    # Add or modify keywords as needed
     CS_AI_KEYWORDS = [
         "computer science",
         "computer",

@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Form, Button, Alert, Container, Row, Col } from 'react-bootstrap';
 import axios from 'axios';
+import { useAuth } from '../modules/auth';
 
 const Register: React.FC = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const navigate = useNavigate();
+    const { login } = useAuth();
     const [openaiApi, setOpenaiApi] = useState(""); // State for OpenAI API Key
     const [groqApi, setGroqApi] = useState("");
     const [deepseekApi, setDeepseekApi] = useState("");
@@ -34,8 +36,30 @@ const Register: React.FC = () => {
             });
 
             if (response.status === 201) {
-                // Registration successful, redirect to login
-                navigate('/login');
+                // Registration successful, auto-login and redirect to dashboard
+                try {
+                    const loginResponse = await axios.post('/api/login', {
+                        email,
+                        password
+                    }, {
+                        withCredentials: true,
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                    });
+
+                    if (loginResponse.status === 200 && loginResponse.data.user) {
+                        login(loginResponse.data.user);
+                        navigate('/Dashboard');
+                    } else {
+                        // If auto-login fails, redirect to login page
+                        navigate('/login');
+                    }
+                } catch (loginErr) {
+                    // If auto-login fails, redirect to login page
+                    console.error('Auto-login failed:', loginErr);
+                    navigate('/login');
+                }
             }
         } catch (err: any) {
             if (err.response) {

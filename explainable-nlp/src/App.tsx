@@ -99,8 +99,9 @@ function AppContent() {
                     path="/predictions/:predictionId"
                     element={<ExplanationPageDashboard />}
                 />
-                <Route path="/" element={<PrivateRoute element={<HomePage />} />} />
+                <Route path="/" element={<HomePage />} />
                 <Route path="/Dashboard" element={<PrivateRoute element={<Dashboard />} />} />
+                <Route path="/dashboard" element={<PrivateRoute element={<Dashboard />} />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
                 <Route path="/datasets" element={<PrivateRoute element={<Datasets />} />} />

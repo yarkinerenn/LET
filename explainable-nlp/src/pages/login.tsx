@@ -24,7 +24,7 @@ export function Login() {
             if (response.ok) {
                 const data = await response.json();
                 login(data.user);
-                navigate('/');
+                navigate('/Dashboard');
             } else {
                 const errorData = await response.json();
                 setError(errorData.error);

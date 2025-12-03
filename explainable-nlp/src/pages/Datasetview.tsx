@@ -39,6 +39,46 @@ const DatasetView = () => {
     const [totalCount, setTotalCount] = useState(0);
     const [paginationLoading, setPaginationLoading] = useState(false);
     const [cotEnabled, setCotEnabled] = useState(false);
+    const [apiKeysStatus, setApiKeysStatus] = useState({
+        openai_api: false,
+        groq_api: false,
+        deepseek_api: false,
+        openrouter_api: false,
+        gemini_api: false
+    });
+    
+    // Helper function to check if provider has API key
+    const hasApiKeyForProvider = (providerName: string): boolean => {
+        // Ollama doesn't require an API key (local model)
+        if (providerName === 'ollama') {
+            return true;
+        }
+        
+        const apiKeyMap: { [key: string]: keyof typeof apiKeysStatus } = {
+            'openai': 'openai_api',
+            'groq': 'groq_api',
+            'deepseek': 'deepseek_api',
+            'openrouter': 'openrouter_api',
+            'gemini': 'gemini_api'
+        };
+        
+        const apiKeyField = apiKeyMap[providerName];
+        return apiKeyField ? apiKeysStatus[apiKeyField] : false;
+    };
+    
+    // Helper function to get provider display name
+    const getProviderDisplayName = (providerName: string): string => {
+        const displayNames: { [key: string]: string } = {
+            'openai': 'OpenAI',
+            'groq': 'Groq',
+            'deepseek': 'DeepSeek',
+            'openrouter': 'OpenRouter',
+            'gemini': 'Gemini',
+            'ollama': 'Ollama'
+        };
+        return displayNames[providerName] || providerName;
+    };
+    
     const handleExploreDataset = async (entryIndex?: number) => {
         setExploreLoading(true);
         setError(null);
@@ -233,6 +273,19 @@ const DatasetView = () => {
                classificationStart <= classificationEnd;
     };
     const handleClassification = async (method: "llm" | "bert") => {
+        // Check if API key is available for the selected provider
+        if (method === "llm") {
+            if (!provider) {
+                setError("Please select a provider in Settings before classifying.");
+                return;
+            }
+            if (!hasApiKeyForProvider(provider)) {
+                setError(`No API key found for ${getProviderDisplayName(provider)}. Please configure your API key in Settings.`);
+                return;
+            }
+        }
+        
+        setError(null); // Clear any previous errors
         setClassifying(method === "llm" ? "classify_only_llm" : method);
         try {
             const limit = classificationStart !== null && classificationEnd !== null 
@@ -314,6 +367,19 @@ const DatasetView = () => {
     };
     
     const handleClassificationandExplanation = async (method: "llm" | "bert") => {
+        // Check if API key is available for the selected provider
+        if (method === "llm") {
+            if (!provider) {
+                setError("Please select a provider in Settings before classifying.");
+                return;
+            }
+            if (!hasApiKeyForProvider(provider)) {
+                setError(`No API key found for ${getProviderDisplayName(provider)}. Please configure your API key in Settings.`);
+                return;
+            }
+        }
+        
+        setError(null); // Clear any previous errors
         setClassifying(method === "llm" ? "classify_and_explain_llm" : method);
         try {
             const limit = classificationStart !== null && classificationEnd !== null 
@@ -385,6 +451,25 @@ const DatasetView = () => {
         }
     };
 
+    // Fetch API keys status
+    useEffect(() => {
+        const fetchApiKeysStatus = async () => {
+            try {
+                const response = await axios.get(
+                    "/api/settings/get_api_keys_status",
+                    { withCredentials: true }
+                );
+                if (response.data) {
+                    setApiKeysStatus(response.data);
+                }
+            } catch (err) {
+                console.error("Failed to fetch API keys status:", err);
+            }
+        };
+        
+        fetchApiKeysStatus();
+    }, []);
+
     useEffect(() => {
         const fetchDataset = async () => {
             try {
@@ -454,6 +539,23 @@ const DatasetView = () => {
                         </div>
 
                             <Card.Title className="mb-4">Classification Methods</Card.Title>
+                            
+                            {/* API Key Error Alert - Compact */}
+                            {error && error.includes("API key") && (
+                                <Alert variant="danger" className="mb-3 py-2" dismissible onClose={() => setError(null)}>
+                                    <div className="d-flex align-items-center justify-content-between">
+                                        <small className="mb-0">{error}</small>
+                                        <Button 
+                                            variant="outline-primary" 
+                                            size="sm"
+                                            className="ms-2"
+                                            onClick={() => navigate('/settings')}
+                                        >
+                                            Settings
+                                        </Button>
+                                    </div>
+                                </Alert>
+                            )}
                             <div className="mb-3">
                               <div className="fw-semibold mb-2">Entries to Classify (Range):</div>
                               <div className="d-flex align-items-center gap-2 flex-wrap">
@@ -713,7 +815,7 @@ const DatasetView = () => {
                         <div className="text-center">
                             <Spinner animation="border" />
                         </div>
-                    ) : error ? (
+                    ) : error && !error.includes("API key") ? (
                         <Alert variant="danger">{error}</Alert>
                     ) : (
                         <>
