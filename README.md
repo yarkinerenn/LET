@@ -4,6 +4,8 @@
 
 **Please take a look at the Prototype documentation for detailed, extensive explanations on how to use and understand every function of the tool.**
 
+**All the results can be reproducible. Please take a look at the result scripts folder to view the data and the instructions to reproduce.**
+
 ---
 
 ## Overview
