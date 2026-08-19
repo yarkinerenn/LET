@@ -70,6 +70,8 @@ from plots import (
     plot_human_accuracy_before_after
 )
 
+MEAN_PLAUSIBILITY_COLUMN = "mean_plausibility"
+
 def logit(formula, data):
     model = smf.logit(formula, data=data.dropna()).fit(disp=False)
     return model
@@ -179,8 +181,8 @@ def compute_participant_aggregates(long_df):
             # Mean confidence change
             mean_delta_conf = faith_data['delta_conf'].mean()
             
-            # Mean plausibility
-            mean_plaus = faith_data['plaus'].mean()
+            # Mean plausibility across the questions in this condition.
+            mean_plaus = faith_data[MEAN_PLAUSIBILITY_COLUMN].mean()
             
             # Accuracy metrics
             human_pre_accuracy = faith_data['human_pre_correct'].mean()
@@ -219,7 +221,7 @@ def compute_participant_aggregates(long_df):
             rsr = rsr_eligible['stayed_correct'].mean() if len(rsr_eligible) > 0 else np.nan
             
             mean_delta_conf = size_data['delta_conf'].mean()
-            mean_plaus = size_data['plaus'].mean()
+            mean_plaus = size_data[MEAN_PLAUSIBILITY_COLUMN].mean()
             
             participant_stats.append({
                 'participant': participant_id,
@@ -377,6 +379,7 @@ def make_long(df_trials, n_trials=16):
     """
     Build long per-trial DataFrame with:
       participant, Q, pre, post, gt, ai, faith(F/U), plaus (numeric),
+      mean_plausibility (mean rating for Q across participants),
       delta_conf (post-pre), ai_correct, human_pre_correct,
       changed_to_correct, stayed_correct
     Assumes df_trials includes columns:
@@ -427,7 +430,9 @@ def make_long(df_trials, n_trials=16):
                 "changed_to_correct": changed_to_correct,
                 "stayed_correct": stayed_correct
             })
-    return pd.DataFrame(rows)
+    long_df = pd.DataFrame(rows)
+    long_df[MEAN_PLAUSIBILITY_COLUMN] = long_df.groupby("Q")["plaus"].transform("mean")
+    return long_df
 
 # H1: Faithfulness -> RAIR (among AI-correct & human initially wrong)
 def test_H1(long_df, normality_results=None):
@@ -474,12 +479,12 @@ def test_H4(long_df, normality_results=None):
 # H5: Faithfulness increases perceived plausibility
 def test_H5(long_df, normality_results=None):
     df = long_df.copy()
-    m = ols_clustered("plaus ~ faith", df, cluster_var='participant')
+    m = ols_clustered(f"{MEAN_PLAUSIBILITY_COLUMN} ~ faith", df, cluster_var='participant')
     result = summarize(m)
     result['test_type'] = 'OLS (Cluster-Robust SEs)'
     result['n_clusters'] = len(df['participant'].unique())
-    if normality_results and 'plaus' in normality_results:
-        result['normality'] = normality_results['plaus']
+    if normality_results and MEAN_PLAUSIBILITY_COLUMN in normality_results:
+        result['normality'] = normality_results[MEAN_PLAUSIBILITY_COLUMN]
     return result
 
 # H6: Larger confidence changes predict higher RAIR (participants more often switch from wrong to correct)
@@ -502,12 +507,12 @@ def test_H7(long_df, normality_results=None):
 
 # H8: Larger LLMs produce more plausible explanations  (model_size: 1=large, 0=small)
 def test_H8(long_df, normality_results=None):
-    m = ols_clustered("plaus ~ model_size", long_df, cluster_var='participant')
+    m = ols_clustered(f"{MEAN_PLAUSIBILITY_COLUMN} ~ model_size", long_df, cluster_var='participant')
     result = summarize(m)
     result['test_type'] = 'OLS (Cluster-Robust SEs)'
     result['n_clusters'] = len(long_df['participant'].unique())
-    if normality_results and 'plaus' in normality_results:
-        result['normality'] = normality_results['plaus']
+    if normality_results and MEAN_PLAUSIBILITY_COLUMN in normality_results:
+        result['normality'] = normality_results[MEAN_PLAUSIBILITY_COLUMN]
     return result
 
 # H9: Larger LLMs produce higher RAIR (on RAIR-eligible subset)
@@ -551,7 +556,7 @@ def test_H12(long_df, normality_results=None):
 # H13: Higher perceived plausibility is associated with higher RAIR
 def test_H13(long_df, normality_results=None):
     df = long_df[(long_df["ai_correct"]==1) & (long_df["human_pre_correct"]==0)].copy()
-    m = logit_clustered("changed_to_correct ~ plaus", df, cluster_var='participant')
+    m = logit_clustered(f"changed_to_correct ~ {MEAN_PLAUSIBILITY_COLUMN}", df, cluster_var='participant')
     result = summarize(m)
     result['test_type'] = 'Logistic Regression (Cluster-Robust SEs)'
     result['n_clusters'] = len(df['participant'].unique())
@@ -560,7 +565,7 @@ def test_H13(long_df, normality_results=None):
 # H14: Higher perceived plausibility is associated with lower RSR (people are less resistant to incorrect AI advice when it's plausible)
 def test_H14(long_df, normality_results=None):
     df = long_df[(long_df["ai_correct"]==0) & (long_df["human_pre_correct"]==1)].copy()
-    m = logit_clustered("stayed_correct ~ plaus", df, cluster_var='participant')
+    m = logit_clustered(f"stayed_correct ~ {MEAN_PLAUSIBILITY_COLUMN}", df, cluster_var='participant')
     result = summarize(m)
     result['test_type'] = 'Logistic Regression (Cluster-Robust SEs)'
     result['n_clusters'] = len(df['participant'].unique())
@@ -569,15 +574,15 @@ def test_H14(long_df, normality_results=None):
 
 # Bonus hypothesis: Explanations are rated as more plausible when human and AI initially agree
 def test_H16(long_df, normality_results=None):
-    df = long_df.dropna(subset=['plaus', 'pre', 'ai']).copy()
+    df = long_df.dropna(subset=[MEAN_PLAUSIBILITY_COLUMN, 'pre', 'ai']).copy()
     # Create agreement variable: 1 if human and AI agree initially, 0 if they disagree
     df["agreement"] = (df["pre"] == df["ai"]).astype(int)
-    m = ols_clustered("plaus ~ agreement", df, cluster_var='participant')
+    m = ols_clustered(f"{MEAN_PLAUSIBILITY_COLUMN} ~ agreement", df, cluster_var='participant')
     result = summarize(m)
     result['test_type'] = 'OLS (Cluster-Robust SEs)'
     result['n_clusters'] = len(df['participant'].unique())
-    if normality_results and 'plaus' in normality_results:
-        result['normality'] = normality_results['plaus']
+    if normality_results and MEAN_PLAUSIBILITY_COLUMN in normality_results:
+        result['normality'] = normality_results[MEAN_PLAUSIBILITY_COLUMN]
     return result
 
 def compute_rair_rsr_by_age(df_trials, long_df):
@@ -663,7 +668,7 @@ def run_normality_tests(long_df):
     normality_results = {}
     
     # Test continuous variables
-    variables_to_test = ['delta_conf', 'plaus']
+    variables_to_test = ['delta_conf', MEAN_PLAUSIBILITY_COLUMN]
     
     for var in variables_to_test:
         if var in long_df.columns:
@@ -855,14 +860,14 @@ def main():
     print("\n--- Delta Confidence by Faithfulness ---")
     print(descriptive_stats_by_group(long_df, 'delta_conf', 'faith'))
     
-    print("\n--- Plausibility by Faithfulness ---")
-    print(descriptive_stats_by_group(long_df, 'plaus', 'faith'))
+    print("\n--- Mean Plausibility by Faithfulness ---")
+    print(descriptive_stats_by_group(long_df, MEAN_PLAUSIBILITY_COLUMN, 'faith'))
     
     print("\n--- Delta Confidence by Model Size ---")
     print(descriptive_stats_by_group(long_df, 'delta_conf', 'model_size'))
     
-    print("\n--- Plausibility by Model Size ---")
-    print(descriptive_stats_by_group(long_df, 'plaus', 'model_size'))
+    print("\n--- Mean Plausibility by Model Size ---")
+    print(descriptive_stats_by_group(long_df, MEAN_PLAUSIBILITY_COLUMN, 'model_size'))
     
     print("\n=== Long DataFrame Summary ===")
     print(f"Total observations: {len(long_df)}")
