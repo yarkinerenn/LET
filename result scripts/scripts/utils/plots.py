@@ -2,40 +2,78 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+from matplotlib.lines import Line2D
 
-# TUM Color Palette
-TUM_BLUE = "#0065BD"           # Primary blue
-TUM_BLUE_DARK = "#005293"      # Secondary dark blue
-TUM_BLUE_DARKER = "#003359"    # Secondary darker blue
-TUM_ORANGE = "#E37222"         # Accent orange
-TUM_GREEN = "#A2AD00"          # Accent green
-TUM_LIGHT_BLUE = "#98C6EA"     # Accent light blue
-TUM_MED_BLUE = "#64A0C8"       # Accent medium blue
-TUM_BEIGE = "#DAD7CB"          # Accent beige
-TUM_GRAY_80 = "#333333"        # 80% black
-TUM_GRAY_50 = "#808080"        # 50% black
-TUM_GRAY_20 = "#CCCCCC"        # 20% black
-TUM_BLACK = "#000000"
-TUM_WHITE = "#FFFFFF"
+# TUM color palette (single source of truth lives in config)
+from ..config import (
+    TUM_BLUE,
+    TUM_BLUE_DARK,
+    TUM_BLUE_DARKER,
+    TUM_ORANGE,
+    TUM_GREEN,
+    TUM_LIGHT_BLUE,
+    TUM_MED_BLUE,
+    TUM_BEIGE,
+    TUM_GRAY_80,
+    TUM_GRAY_50,
+    TUM_GRAY_20,
+    TUM_BLACK,
+    TUM_WHITE,
+)
+
+# Faithfulness / model-size codes as they are labelled in every plot
+FAITH_LABELS = {1: "Faithful", 0: "Unfaithful"}
+MODEL_SIZE_LABELS = {0: "Small LLM\n(Llama 3.1 8B)", 1: "Large LLM\n(Llama 3.3 70B)"}
+
+
+def rair_eligible(long_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Trials the AI got right while the participant was initially wrong, with the
+    binary RAIR outcome (did the participant switch to the correct answer?).
+    """
+    df = long_df[(long_df["ai_correct"] == 1) & (long_df["human_pre_correct"] == 0)].copy()
+    df["rair"] = df["changed_to_correct"].astype(float)
+    return df
+
+
+def rsr_eligible(long_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Trials the AI got wrong while the participant was initially right, with the
+    binary RSR outcome (did the participant stay correct?).
+    """
+    df = long_df[(long_df["ai_correct"] == 0) & (long_df["human_pre_correct"] == 1)].copy()
+    df["rsr"] = df["stayed_correct"].astype(float)
+    return df
+
+
+def _write_figure(out_path: str) -> None:
+    """Lay out, write and close the current figure."""
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=200)
+    plt.close()
+
+
+def _save(out_path: str) -> str:
+    """Write the current figure and report where it went."""
+    _write_figure(out_path)
+    print(f"Saved plot to {out_path}")
+    return out_path
+
 
 def plot_mean_rair_rsr_by_faith(long_df: pd.DataFrame, out_path: str = "mean_rair_rsr_by_faith.png") -> str:
     """
     Compute mean RAIR (on RAIR-eligible subset) and mean RSR (on RSR-eligible subset)
     grouped by faithfulness (1=faithful, 0=unfaithful), and save a side-by-side bar plot.
     """
-    # RAIR-eligible: AI correct & human initially wrong
-    df_rair = long_df[(long_df["ai_correct"]==1) & (long_df["human_pre_correct"]==0)].copy()
-    df_rair["rair"] = df_rair["changed_to_correct"].astype(float)
+    df_rair = rair_eligible(long_df)
     mean_rair = df_rair.groupby("faith")["rair"].mean().rename("mean_rair")
 
-    # RSR-eligible: AI wrong & human initially correct
-    df_rsr = long_df[(long_df["ai_correct"]==0) & (long_df["human_pre_correct"]==1)].copy()
-    df_rsr["rsr"] = df_rsr["stayed_correct"].astype(float)
+    df_rsr = rsr_eligible(long_df)
     mean_rsr = df_rsr.groupby("faith")["rsr"].mean().rename("mean_rsr")
 
     summary = pd.concat([mean_rair, mean_rsr], axis=1)
     summary = summary.reset_index()  # columns: faith, mean_rair, mean_rsr
-    summary["faith_label"] = summary["faith"].map({1: "Faithful", 0: "Unfaithful"})
+    summary["faith_label"] = summary["faith"].map(FAITH_LABELS)
 
     # Plot
     plt.figure(figsize=(8,5))
@@ -48,11 +86,7 @@ def plot_mean_rair_rsr_by_faith(long_df: pd.DataFrame, out_path: str = "mean_rai
     plt.title("Mean RAIR and RSR by Faithfulness")
     plt.ylim(0,1)
     plt.legend()
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
-    print(f"Saved plot to {out_path}")
-    return out_path
+    return _save(out_path)
 
 def plot_mean_conf_change_by_faith(long_df: pd.DataFrame, out_path: str = "mean_conf_change_by_faith.png") -> str:
     """
@@ -61,7 +95,7 @@ def plot_mean_conf_change_by_faith(long_df: pd.DataFrame, out_path: str = "mean_
     """
     df = long_df.dropna(subset=["delta_conf"]).copy()
     summary = df.groupby("faith")["delta_conf"].mean().reset_index()
-    summary["faith_label"] = summary["faith"].map({1: "Faithful", 0: "Unfaithful"})
+    summary["faith_label"] = summary["faith"].map(FAITH_LABELS)
 
     plt.figure(figsize=(6,4))
     sns.barplot(data=summary, x="faith_label", y="delta_conf", color=TUM_BLUE)
@@ -69,11 +103,7 @@ def plot_mean_conf_change_by_faith(long_df: pd.DataFrame, out_path: str = "mean_
     plt.xlabel("")
     plt.title("Average Confidence Change by Faithfulness")
     plt.axhline(0, color="gray", linewidth=1)
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
-    print(f"Saved plot to {out_path}")
-    return out_path
+    return _save(out_path)
 
 def plot_mean_final_accuracy_by_faith(long_df: pd.DataFrame, out_path: str = "mean_final_accuracy_by_faith.png") -> str:
     """
@@ -83,7 +113,7 @@ def plot_mean_final_accuracy_by_faith(long_df: pd.DataFrame, out_path: str = "me
     df = long_df.copy()
     df["post_correct"] = (df["post"] == df["gt"]).astype(float)
     summary = df.groupby("faith")["post_correct"].mean().reset_index()
-    summary["faith_label"] = summary["faith"].map({1: "Faithful", 0: "Unfaithful"})
+    summary["faith_label"] = summary["faith"].map(FAITH_LABELS)
 
     plt.figure(figsize=(6,4))
     sns.barplot(data=summary, x="faith_label", y="post_correct", color=TUM_MED_BLUE)
@@ -91,18 +121,14 @@ def plot_mean_final_accuracy_by_faith(long_df: pd.DataFrame, out_path: str = "me
     plt.xlabel("")
     plt.title("Mean Final Task Accuracy by Faithfulness")
     plt.ylim(0,1)
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
-    print(f"Saved plot to {out_path}")
-    return out_path
+    return _save(out_path)
 
 def plot_plausibility_violin_by_faith(long_df: pd.DataFrame, out_path: str = "plausibility_violin_by_faith.png") -> str:
     """
     Violin plot of plausibility (1–5 Likert) for faithful vs unfaithful.
     """
     df = long_df.dropna(subset=["plaus"]).copy()
-    df["faith_label"] = df["faith"].map({1: "Faithful", 0: "Unfaithful"})
+    df["faith_label"] = df["faith"].map(FAITH_LABELS)
 
     plt.figure(figsize=(7,4))
     sns.violinplot(data=df, x="faith_label", y="plaus", inner="box", cut=0, palette=[TUM_BLUE, TUM_ORANGE])
@@ -110,11 +136,7 @@ def plot_plausibility_violin_by_faith(long_df: pd.DataFrame, out_path: str = "pl
     plt.ylabel("Plausibility (1–5)")
     plt.title("Plausibility by Faithfulness")
     plt.ylim(1,5)
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
-    print(f"Saved plot to {out_path}")
-    return out_path
+    return _save(out_path)
 
 def plot_per_question_accuracy(long_df: pd.DataFrame, out_path: str = "per_question_accuracy.png") -> str:
     """
@@ -155,11 +177,44 @@ def plot_per_question_accuracy(long_df: pd.DataFrame, out_path: str = "per_quest
     plt.ylim(0, 1)
     plt.legend(loc="best")
     plt.grid(axis="y", alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
-    print(f"Saved plot to {out_path}")
-    return out_path
+    return _save(out_path)
+
+
+def _plot_per_question_accuracy_split(long_df: pd.DataFrame, out_path: str, split_col: str,
+                                      groups, title: str) -> str:
+    """
+    Accuracy per question: initial accuracy next to the post-explanation
+    accuracy of each level of `split_col`.
+
+    `groups` is a list of (value, label, color) for the two levels.
+    """
+    df = long_df.copy()
+    df["pre_correct"] = (df["pre"] == df["gt"]).astype(float)
+    df["post_correct"] = (df["post"] == df["gt"]).astype(float)
+
+    questions = np.arange(1, 17)
+    initial = df.groupby("Q")["pre_correct"].mean().reindex(questions)
+
+    plt.figure(figsize=(14, 6))
+    width = 0.25
+    plt.bar(questions - width, initial.values, width, label="Initial (Before)",
+            color=TUM_GRAY_50, alpha=0.8)
+
+    for offset, (value, label, color) in zip([0, width], groups):
+        accuracy = df[df[split_col] == value].groupby("Q")["post_correct"].mean().reindex(questions)
+        plt.bar(questions + offset, accuracy.values, width, label=label, color=color, alpha=0.8)
+
+    # Add chance line at 0.5
+    plt.axhline(0.5, color="gray", linestyle="--", linewidth=1.5, label="Chance (50%)")
+
+    plt.xlabel("Question Number")
+    plt.ylabel("Accuracy (Proportion Correct)")
+    plt.title(title)
+    plt.xticks(questions)
+    plt.ylim(0, 1)
+    plt.legend(loc="best")
+    plt.grid(axis="y", alpha=0.3)
+    return _save(out_path)
 
 
 def plot_per_question_accuracy_by_modelsize(long_df: pd.DataFrame, out_path: str = "per_question_accuracy_by_modelsize.png") -> str:
@@ -169,53 +224,12 @@ def plot_per_question_accuracy_by_modelsize(long_df: pd.DataFrame, out_path: str
     2. Small LLM accuracy (after seeing small LLM explanations)
     3. Large LLM accuracy (after seeing large LLM explanations)
     """
-    df = long_df.copy()
-    df["pre_correct"] = (df["pre"] == df["gt"]).astype(float)
-    df["post_correct"] = (df["post"] == df["gt"]).astype(float)
-    
-    # Initial accuracy (same for all, averaged across all participants)
-    initial_acc = df.groupby("Q")["pre_correct"].mean().reset_index()
-    initial_acc.columns = ["Question", "Initial"]
-    
-    # Small LLM accuracy (model_size == 0)
-    small_llm = df[df["model_size"] == 0].groupby("Q")["post_correct"].mean().reset_index()
-    small_llm.columns = ["Question", "Small_LLM"]
-    
-    # Large LLM accuracy (model_size == 1)
-    large_llm = df[df["model_size"] == 1].groupby("Q")["post_correct"].mean().reset_index()
-    large_llm.columns = ["Question", "Large_LLM"]
-    
-    # Merge all together
-    accuracy_by_q = initial_acc.merge(small_llm, on="Question", how="left").merge(large_llm, on="Question", how="left")
-    
-    # Plot
-    plt.figure(figsize=(14, 6))
-    x = np.arange(1, 17)
-    width = 0.25
-    
-    initial = accuracy_by_q["Initial"].values
-    small = accuracy_by_q["Small_LLM"].values
-    large = accuracy_by_q["Large_LLM"].values
-    
-    plt.bar(x - width, initial, width, label="Initial (Before)", color=TUM_GRAY_50, alpha=0.8)
-    plt.bar(x, small, width, label="Small LLM (Llama 3.1 8B)", color=TUM_LIGHT_BLUE, alpha=0.8)
-    plt.bar(x + width, large, width, label="Large LLM (Llama 3.3 70B)", color=TUM_BLUE, alpha=0.8)
-    
-    # Add chance line at 0.5
-    plt.axhline(0.5, color="gray", linestyle="--", linewidth=1.5, label="Chance (50%)")
-    
-    plt.xlabel("Question Number")
-    plt.ylabel("Accuracy (Proportion Correct)")
-    plt.title("Accuracy per Question: Initial vs. Small vs. Large LLM")
-    plt.xticks(x)
-    plt.ylim(0, 1)
-    plt.legend(loc="best")
-    plt.grid(axis="y", alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
-    print(f"Saved plot to {out_path}")
-    return out_path
+    return _plot_per_question_accuracy_split(
+        long_df, out_path, "model_size",
+        groups=[(0, "Small LLM (Llama 3.1 8B)", TUM_LIGHT_BLUE),
+                (1, "Large LLM (Llama 3.3 70B)", TUM_BLUE)],
+        title="Accuracy per Question: Initial vs. Small vs. Large LLM",
+    )
 
 
 def plot_per_question_accuracy_by_faithfulness(long_df: pd.DataFrame, out_path: str = "per_question_accuracy_by_faithfulness.png") -> str:
@@ -225,53 +239,11 @@ def plot_per_question_accuracy_by_faithfulness(long_df: pd.DataFrame, out_path: 
     2. Faithful explanations accuracy (after seeing faithful explanations)
     3. Unfaithful explanations accuracy (after seeing unfaithful explanations)
     """
-    df = long_df.copy()
-    df["pre_correct"] = (df["pre"] == df["gt"]).astype(float)
-    df["post_correct"] = (df["post"] == df["gt"]).astype(float)
-    
-    # Initial accuracy (same for all, averaged across all participants)
-    initial_acc = df.groupby("Q")["pre_correct"].mean().reset_index()
-    initial_acc.columns = ["Question", "Initial"]
-    
-    # Faithful explanations accuracy (faith == 1)
-    faithful = df[df["faith"] == 1].groupby("Q")["post_correct"].mean().reset_index()
-    faithful.columns = ["Question", "Faithful"]
-    
-    # Unfaithful explanations accuracy (faith == 0)
-    unfaithful = df[df["faith"] == 0].groupby("Q")["post_correct"].mean().reset_index()
-    unfaithful.columns = ["Question", "Unfaithful"]
-    
-    # Merge all together
-    accuracy_by_q = initial_acc.merge(faithful, on="Question", how="left").merge(unfaithful, on="Question", how="left")
-    
-    # Plot
-    plt.figure(figsize=(14, 6))
-    x = np.arange(1, 17)
-    width = 0.25
-    
-    initial = accuracy_by_q["Initial"].values
-    faith = accuracy_by_q["Faithful"].values
-    unfaith = accuracy_by_q["Unfaithful"].values
-    
-    plt.bar(x - width, initial, width, label="Initial (Before)", color=TUM_GRAY_50, alpha=0.8)
-    plt.bar(x, faith, width, label="Faithful", color=TUM_GREEN, alpha=0.8)
-    plt.bar(x + width, unfaith, width, label="Unfaithful", color=TUM_ORANGE, alpha=0.8)
-    
-    # Add chance line at 0.5
-    plt.axhline(0.5, color="gray", linestyle="--", linewidth=1.5, label="Chance (50%)")
-    
-    plt.xlabel("Question Number")
-    plt.ylabel("Accuracy (Proportion Correct)")
-    plt.title("Accuracy per Question: Initial vs. Faithful vs. Unfaithful")
-    plt.xticks(x)
-    plt.ylim(0, 1)
-    plt.legend(loc="best")
-    plt.grid(axis="y", alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
-    print(f"Saved plot to {out_path}")
-    return out_path
+    return _plot_per_question_accuracy_split(
+        long_df, out_path, "faith",
+        groups=[(1, "Faithful", TUM_GREEN), (0, "Unfaithful", TUM_ORANGE)],
+        title="Accuracy per Question: Initial vs. Faithful vs. Unfaithful",
+    )
 
 
 def plot_rair_rsr_per_question(long_df: pd.DataFrame, out_path: str = "rair_rsr_per_question.png") -> str:
@@ -348,9 +320,7 @@ def plot_rair_rsr_per_question(long_df: pd.DataFrame, out_path: str = "rair_rsr_
             ax2.text(bar.get_x() + bar.get_width()/2., height + 0.02,
                     f'n={count}', ha='center', va='bottom', fontsize=7)
     
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
+    _write_figure(out_path)
     
     print(f"Saved plot to {out_path}")
     
@@ -363,124 +333,134 @@ def plot_rair_rsr_per_question(long_df: pd.DataFrame, out_path: str = "rair_rsr_
     return out_path
 
 
-def plot_plausibility_by_agreement(long_df: pd.DataFrame, out_path: str = "plausibility_by_agreement.png") -> str:
+AGREEMENT_LABELS = {1: "Agreement\n(Human = AI)", 0: "Disagreement\n(Human ≠ AI)"}
+
+
+def _plot_by_agreement(long_df: pd.DataFrame, out_path: str, value_col: str, ylabel: str,
+                       title: str, summary_title: str, value_label_offset: float,
+                       n_label_y: float, n_label_va: str, ylim=None, zero_line: bool = False) -> str:
     """
-    Plot plausibility ratings based on whether human and AI initially agreed or disagreed.
-    Agreement: Human's initial answer (pre) matches AI's prediction (ai)
-    Disagreement: Human's initial answer (pre) differs from AI's prediction (ai)
+    Bar plot of `value_col` for trials where the participant's initial answer
+    agreed with the AI versus trials where it did not, with 95% CI error bars,
+    value labels and cell sizes.
     """
-    df = long_df.dropna(subset=["plaus", "pre", "ai"]).copy()
-    
-    # Create agreement variable: 1 if human and AI agree initially, 0 if they disagree
+    df = long_df.dropna(subset=[value_col, "pre", "ai"]).copy()
     df["agreement"] = (df["pre"] == df["ai"]).astype(int)
-    
-    # Calculate mean plausibility by agreement
-    summary = df.groupby("agreement")["plaus"].agg(['mean', 'std', 'count']).reset_index()
-    summary["agreement_label"] = summary["agreement"].map({1: "Agreement\n(Human = AI)", 0: "Disagreement\n(Human ≠ AI)"})
-    
-    # Calculate 95% CI
-    summary['se'] = summary['std'] / np.sqrt(summary['count'])
-    summary['ci'] = 1.96 * summary['se']
-    
-    # Plot
+
+    summary = df.groupby("agreement")[value_col].agg(["mean", "std", "count"]).reset_index()
+    summary["agreement_label"] = summary["agreement"].map(AGREEMENT_LABELS)
+    summary["se"] = summary["std"] / np.sqrt(summary["count"])
+    summary["ci"] = 1.96 * summary["se"]
+
     plt.figure(figsize=(8, 6))
     x = np.arange(len(summary))
-    
-    bars = plt.bar(x, summary["mean"], color=[TUM_BLUE, TUM_ORANGE], alpha=0.8, edgecolor="black", linewidth=1.5)
-    
-    # Add error bars
-    plt.errorbar(x, summary["mean"], yerr=summary["ci"], fmt='none', ecolor='black', capsize=5, capthick=2)
-    
-    # Add value labels on bars
-    for i, (idx, row) in enumerate(summary.iterrows()):
-        plt.text(i, row["mean"] + row["ci"] + 0.05, f"{row['mean']:.3f}", 
-                ha='center', va='bottom', fontsize=10, fontweight='bold')
-    
-    # Add sample size labels
-    for i, (idx, row) in enumerate(summary.iterrows()):
-        plt.text(i, 0.3, f"n = {int(row['count'])}", 
-                ha='center', va='bottom', fontsize=9, style='italic')
-    
+    plt.bar(x, summary["mean"], color=[TUM_BLUE, TUM_ORANGE], alpha=0.8,
+            edgecolor="black", linewidth=1.5)
+    plt.errorbar(x, summary["mean"], yerr=summary["ci"], fmt="none",
+                 ecolor="black", capsize=5, capthick=2)
+
+    for i, (_, row) in enumerate(summary.iterrows()):
+        plt.text(i, row["mean"] + row["ci"] + value_label_offset, f"{row['mean']:.3f}",
+                 ha="center", va="bottom", fontsize=10, fontweight="bold")
+        plt.text(i, n_label_y, f"n = {int(row['count'])}",
+                 ha="center", va=n_label_va, fontsize=9, style="italic")
+
     plt.xticks(x, summary["agreement_label"])
-    plt.ylabel("Mean Plausibility Rating (1-5)", fontsize=11)
+    plt.ylabel(ylabel, fontsize=11)
     plt.xlabel("")
-    plt.title("Plausibility: Agreement vs. Disagreement with AI", fontsize=12, fontweight='bold')
-    plt.ylim(0, 5.5)
+    plt.title(title, fontsize=12, fontweight="bold")
+    if ylim is not None:
+        plt.ylim(*ylim)
+    if zero_line:
+        plt.axhline(0, color="gray", linestyle="--", linewidth=1.5, alpha=0.7)
     plt.grid(axis="y", alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
-    
-    # Print summary statistics
-    print(f"\nPlausibility by Agreement:")
-    print(f"  Agreement (Human = AI): M = {summary.loc[summary['agreement']==1, 'mean'].values[0]:.3f}, "
-          f"SD = {summary.loc[summary['agreement']==1, 'std'].values[0]:.3f}, "
-          f"n = {int(summary.loc[summary['agreement']==1, 'count'].values[0])}")
-    print(f"  Disagreement (Human ≠ AI): M = {summary.loc[summary['agreement']==0, 'mean'].values[0]:.3f}, "
-          f"SD = {summary.loc[summary['agreement']==0, 'std'].values[0]:.3f}, "
-          f"n = {int(summary.loc[summary['agreement']==0, 'count'].values[0])}")
-    
+    _write_figure(out_path)
+
+    print(f"\n{summary_title}:")
+    for value, label in [(1, "Agreement (Human = AI)"), (0, "Disagreement (Human ≠ AI)")]:
+        row = summary[summary["agreement"] == value].iloc[0]
+        print(f"  {label}: M = {row['mean']:.3f}, SD = {row['std']:.3f}, n = {int(row['count'])}")
+
     print(f"Saved plot to {out_path}")
     return out_path
 
 
+def plot_plausibility_by_agreement(long_df: pd.DataFrame, out_path: str = "plausibility_by_agreement.png") -> str:
+    """
+    Plot plausibility ratings based on whether human and AI initially agreed.
+    Agreement: the participant's initial answer (pre) matches the AI's prediction.
+    """
+    return _plot_by_agreement(
+        long_df, out_path, value_col="plaus",
+        ylabel="Mean Plausibility Rating (1-5)",
+        title="Plausibility: Agreement vs. Disagreement with AI",
+        summary_title="Plausibility by Agreement",
+        value_label_offset=0.05, n_label_y=0.3, n_label_va="bottom", ylim=(0, 5.5),
+    )
+
+
 def plot_conf_change_by_agreement(long_df: pd.DataFrame, out_path: str = "conf_change_by_agreement.png") -> str:
     """
-    Plot confidence change based on whether human and AI initially agreed or disagreed.
-    Agreement: Human's initial answer (pre) matches AI's prediction (ai)
-    Disagreement: Human's initial answer (pre) differs from AI's prediction (ai)
+    Plot confidence change based on whether human and AI initially agreed.
+    Agreement: the participant's initial answer (pre) matches the AI's prediction.
     """
-    df = long_df.dropna(subset=["delta_conf", "pre", "ai"]).copy()
-    
-    # Create agreement variable: 1 if human and AI agree initially, 0 if they disagree
-    df["agreement"] = (df["pre"] == df["ai"]).astype(int)
-    
-    # Calculate mean confidence change by agreement
-    summary = df.groupby("agreement")["delta_conf"].agg(['mean', 'std', 'count']).reset_index()
-    summary["agreement_label"] = summary["agreement"].map({1: "Agreement\n(Human = AI)", 0: "Disagreement\n(Human ≠ AI)"})
-    
-    # Calculate 95% CI
-    summary['se'] = summary['std'] / np.sqrt(summary['count'])
-    summary['ci'] = 1.96 * summary['se']
-    
-    # Plot
-    plt.figure(figsize=(8, 6))
-    x = np.arange(len(summary))
-    
-    bars = plt.bar(x, summary["mean"], color=[TUM_BLUE, TUM_ORANGE], alpha=0.8, edgecolor="black", linewidth=1.5)
-    
-    # Add error bars
-    plt.errorbar(x, summary["mean"], yerr=summary["ci"], fmt='none', ecolor='black', capsize=5, capthick=2)
-    
-    # Add value labels on bars
-    for i, (idx, row) in enumerate(summary.iterrows()):
-        plt.text(i, row["mean"] + row["ci"] + 0.02, f"{row['mean']:.3f}", 
-                ha='center', va='bottom', fontsize=10, fontweight='bold')
-    
-    # Add sample size labels
-    for i, (idx, row) in enumerate(summary.iterrows()):
-        plt.text(i, -0.05, f"n = {int(row['count'])}", 
-                ha='center', va='top', fontsize=9, style='italic')
-    
-    plt.xticks(x, summary["agreement_label"])
-    plt.ylabel("Mean Confidence Change (post - pre)", fontsize=11)
-    plt.xlabel("")
-    plt.title("Confidence Change: Agreement vs. Disagreement with AI", fontsize=12, fontweight='bold')
-    plt.axhline(0, color="gray", linestyle="--", linewidth=1.5, alpha=0.7)
-    plt.grid(axis="y", alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
-    
-    # Print summary statistics
-    print(f"\nConfidence Change by Agreement:")
-    print(f"  Agreement (Human = AI): M = {summary.loc[summary['agreement']==1, 'mean'].values[0]:.3f}, "
-          f"SD = {summary.loc[summary['agreement']==1, 'std'].values[0]:.3f}, "
-          f"n = {int(summary.loc[summary['agreement']==1, 'count'].values[0])}")
-    print(f"  Disagreement (Human ≠ AI): M = {summary.loc[summary['agreement']==0, 'mean'].values[0]:.3f}, "
-          f"SD = {summary.loc[summary['agreement']==0, 'std'].values[0]:.3f}, "
-          f"n = {int(summary.loc[summary['agreement']==0, 'count'].values[0])}")
-    
+    return _plot_by_agreement(
+        long_df, out_path, value_col="delta_conf",
+        ylabel="Mean Confidence Change (post - pre)",
+        title="Confidence Change: Agreement vs. Disagreement with AI",
+        summary_title="Confidence Change by Agreement",
+        value_label_offset=0.02, n_label_y=-0.05, n_label_va="top", zero_line=True,
+    )
+
+
+def _plot_aor_scatter(long_df: pd.DataFrame, out_path: str, group_col: str, labels: dict,
+                      colors: dict, label_below: int, legend_order, title: str,
+                      summary_title: str, summary_labels: dict) -> str:
+    """
+    RAIR (x) against RSR (y) as one point per level of `group_col`, annotated
+    with that group's AOR = (RAIR + RSR) / 2.
+
+    `label_below` is the level whose annotation goes under its point so the two
+    labels do not overlap.
+    """
+    rair = rair_eligible(long_df).groupby(group_col)["rair"].mean().rename("RAIR")
+    rsr = rsr_eligible(long_df).groupby(group_col)["rsr"].mean().rename("RSR")
+
+    summary = pd.concat([rair, rsr], axis=1).reset_index()
+    summary["label"] = summary[group_col].map(labels)
+    summary["AOR"] = (summary["RAIR"] + summary["RSR"]) / 2.0
+
+    plt.figure(figsize=(6, 6))
+    plt.scatter(summary["RAIR"], summary["RSR"], s=180,
+                c=summary[group_col].map(colors).values, edgecolor="black", linewidth=1.5)
+
+    for _, row in summary.iterrows():
+        below = int(row[group_col]) == label_below
+        plt.annotate(f"{row['label']}\nAOR={row['AOR']:.3f}", (row["RAIR"], row["RSR"]),
+                     xytext=(8, -12) if below else (8, 10), textcoords="offset points",
+                     ha="left", va="top" if below else "bottom",
+                     bbox=dict(boxstyle="round", facecolor="white", alpha=0.9))
+
+    plt.xlabel("RAIR (AI correct & human initially wrong -> changed to correct)")
+    plt.ylabel("RSR (AI wrong & human initially correct -> stayed correct)")
+    plt.title(title)
+    plt.xlim(0, 1)
+    plt.ylim(0, 1)
+    plt.grid(True, alpha=0.3)
+
+    plt.legend(handles=[Line2D([0], [0], marker="o", color="w", label=label,
+                               markerfacecolor=colors[value], markeredgecolor="black",
+                               markersize=10)
+                        for value, label in legend_order],
+               loc="lower right")
+
+    _write_figure(out_path)
+
+    print(f"{summary_title}:")
+    for _, row in summary.iterrows():
+        print(f"  {summary_labels[int(row[group_col])]}: RAIR={row['RAIR']:.3f}, "
+              f"RSR={row['RSR']:.3f}, AOR={row['AOR']:.3f}")
+
     print(f"Saved plot to {out_path}")
     return out_path
 
@@ -491,67 +471,13 @@ def plot_aor_scatter_by_faith(long_df: pd.DataFrame, out_path: str = "aor_by_fai
     Also annotate AOR for each group, defined as the mean of RAIR and RSR:
         AOR = (RAIR + RSR) / 2
     """
-    # RAIR-eligible: AI correct & human initially wrong
-    df_rair = long_df[(long_df["ai_correct"]==1) & (long_df["human_pre_correct"]==0)].copy()
-    df_rair["rair"] = df_rair["changed_to_correct"].astype(float)
-    rair_by_faith = df_rair.groupby("faith")["rair"].mean().rename("RAIR")
-
-    # RSR-eligible: AI wrong & human initially correct
-    df_rsr = long_df[(long_df["ai_correct"]==0) & (long_df["human_pre_correct"]==1)].copy()
-    df_rsr["rsr"] = df_rsr["stayed_correct"].astype(float)
-    rsr_by_faith = df_rsr.groupby("faith")["rsr"].mean().rename("RSR")
-
-    # Combine
-    summary = pd.concat([rair_by_faith, rsr_by_faith], axis=1).reset_index()  # columns: faith, RAIR, RSR
-    summary["faith_label"] = summary["faith"].map({1: "Faithful", 0: "Unfaithful"})
-    summary["AOR"] = (summary["RAIR"] + summary["RSR"]) / 2.0
-
-    # Plot scatter
-    plt.figure(figsize=(6, 6))
-    # Use TUM blue palette for both groups to match requested styling
-    colors = summary["faith"].map({1: TUM_BLUE, 0: TUM_LIGHT_BLUE}).values
-    plt.scatter(summary["RAIR"], summary["RSR"], s=180, c=colors, edgecolor="black", linewidth=1.5)
-
-    # Annotate each point with label and AOR
-    for _, row in summary.iterrows():
-        label = f"{row['faith_label']}\nAOR={row['AOR']:.3f}"
-        # Place Faithful label below the dot to avoid overlap; Unfaithful above
-        if int(row["faith"]) == 1:
-            plt.annotate(label, (row["RAIR"], row["RSR"]), xytext=(8, -12), textcoords="offset points",
-                         ha="left", va="top",
-                         bbox=dict(boxstyle="round", facecolor="white", alpha=0.9))
-        else:
-            plt.annotate(label, (row["RAIR"], row["RSR"]), xytext=(8, 10), textcoords="offset points",
-                         ha="left", va="bottom",
-                         bbox=dict(boxstyle="round", facecolor="white", alpha=0.9))
-
-    # Formatting
-    plt.xlabel("RAIR (AI correct & human initially wrong -> changed to correct)")
-    plt.ylabel("RSR (AI wrong & human initially correct -> stayed correct)")
-    plt.title("AOR Scatter by Faithfulness: RAIR (x) vs RSR (y)")
-    plt.xlim(0, 1)
-    plt.ylim(0, 1)
-    plt.grid(True, alpha=0.3)
-
-    # Legend handles
-    from matplotlib.lines import Line2D
-    legend_elements = [
-        Line2D([0], [0], marker='o', color='w', label='Faithful', markerfacecolor=TUM_BLUE, markeredgecolor='black', markersize=10),
-        Line2D([0], [0], marker='o', color='w', label='Unfaithful', markerfacecolor=TUM_LIGHT_BLUE, markeredgecolor='black', markersize=10)
-    ]
-    plt.legend(handles=legend_elements, loc="lower right")
-
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
-
-    # Print summary
-    print("RAIR/RSR/AOR by Faithfulness:")
-    for _, row in summary.iterrows():
-        print(f"  {row['faith_label']}: RAIR={row['RAIR']:.3f}, RSR={row['RSR']:.3f}, AOR={row['AOR']:.3f}")
-
-    print(f"Saved plot to {out_path}")
-    return out_path
+    return _plot_aor_scatter(
+        long_df, out_path, group_col="faith", labels=FAITH_LABELS,
+        colors={1: TUM_BLUE, 0: TUM_LIGHT_BLUE}, label_below=1,
+        legend_order=[(1, "Faithful"), (0, "Unfaithful")],
+        title="AOR Scatter by Faithfulness: RAIR (x) vs RSR (y)",
+        summary_title="RAIR/RSR/AOR by Faithfulness", summary_labels=FAITH_LABELS,
+    )
 
 
 def plot_aor_scatter_by_modelsize(long_df: pd.DataFrame, out_path: str = "aor_by_modelsize_scatter.png") -> str:
@@ -560,65 +486,15 @@ def plot_aor_scatter_by_modelsize(long_df: pd.DataFrame, out_path: str = "aor_by
     Annotate AOR = (RAIR + RSR)/2 for each.
     model_size: 0 = Small LLM, 1 = Large LLM
     """
-    # RAIR-eligible subset
-    df_rair = long_df[(long_df["ai_correct"]==1) & (long_df["human_pre_correct"]==0)].copy()
-    df_rair["rair"] = df_rair["changed_to_correct"].astype(float)
-    rair_by_size = df_rair.groupby("model_size")["rair"].mean().rename("RAIR")
-
-    # RSR-eligible subset
-    df_rsr = long_df[(long_df["ai_correct"]==0) & (long_df["human_pre_correct"]==1)].copy()
-    df_rsr["rsr"] = df_rsr["stayed_correct"].astype(float)
-    rsr_by_size = df_rsr.groupby("model_size")["rsr"].mean().rename("RSR")
-
-    # Combine
-    summary = pd.concat([rair_by_size, rsr_by_size], axis=1).reset_index()  # columns: model_size, RAIR, RSR
-    summary["size_label"] = summary["model_size"].map({0: "Small LLM\n(Llama 3.1 8B)", 1: "Large LLM\n(Llama 3.3 70B)"})
-    summary["AOR"] = (summary["RAIR"] + summary["RSR"]) / 2.0
-
-    # Plot scatter with TUM blues
-    plt.figure(figsize=(6, 6))
-    colors = summary["model_size"].map({1: TUM_BLUE, 0: TUM_LIGHT_BLUE}).values
-    plt.scatter(summary["RAIR"], summary["RSR"], s=180, c=colors, edgecolor="black", linewidth=1.5)
-
-    # Annotate: Large above, Small below to avoid overlap
-    for _, row in summary.iterrows():
-        label = f"{row['size_label']}\nAOR={row['AOR']:.3f}"
-        if int(row["model_size"]) == 0:
-            plt.annotate(label, (row["RAIR"], row["RSR"]), xytext=(8, -12), textcoords="offset points",
-                         ha="left", va="top",
-                         bbox=dict(boxstyle="round", facecolor="white", alpha=0.9))
-        else:
-            plt.annotate(label, (row["RAIR"], row["RSR"]), xytext=(8, 10), textcoords="offset points",
-                         ha="left", va="bottom",
-                         bbox=dict(boxstyle="round", facecolor="white", alpha=0.9))
-
-    # Axes and layout
-    plt.xlabel("RAIR (AI correct & human initially wrong -> changed to correct)")
-    plt.ylabel("RSR (AI wrong & human initially correct -> stayed correct)")
-    plt.title("AOR Scatter by Model Size: RAIR (x) vs RSR (y)")
-    plt.xlim(0, 1)
-    plt.ylim(0, 1)
-    plt.grid(True, alpha=0.3)
-
-    from matplotlib.lines import Line2D
-    legend_elements = [
-        Line2D([0], [0], marker='o', color='w', label='Large LLM', markerfacecolor=TUM_BLUE, markeredgecolor='black', markersize=10),
-        Line2D([0], [0], marker='o', color='w', label='Small LLM', markerfacecolor=TUM_LIGHT_BLUE, markeredgecolor='black', markersize=10)
-    ]
-    plt.legend(handles=legend_elements, loc="lower right")
-
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
-
-    # Print summary
-    print("RAIR/RSR/AOR by Model Size:")
-    for _, row in summary.iterrows():
-        size = "Large" if int(row["model_size"]) == 1 else "Small"
-        print(f"  {size}: RAIR={row['RAIR']:.3f}, RSR={row['RSR']:.3f}, AOR={row['AOR']:.3f}")
-
-    print(f"Saved plot to {out_path}")
-    return out_path
+    return _plot_aor_scatter(
+        long_df, out_path, group_col="model_size",
+        labels=MODEL_SIZE_LABELS,
+        colors={1: TUM_BLUE, 0: TUM_LIGHT_BLUE}, label_below=0,
+        legend_order=[(1, "Large LLM"), (0, "Small LLM")],
+        title="AOR Scatter by Model Size: RAIR (x) vs RSR (y)",
+        summary_title="RAIR/RSR/AOR by Model Size",
+        summary_labels={1: "Large", 0: "Small"},
+    )
 
 
 def plot_plausibility_vs_accuracy(long_df: pd.DataFrame, out_path: str = "plausibility_vs_accuracy.png") -> str:
@@ -673,9 +549,7 @@ def plot_plausibility_vs_accuracy(long_df: pd.DataFrame, out_path: str = "plausi
     ax.legend(loc="best")
     ax.grid(axis="y", alpha=0.3)
     
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
+    _write_figure(out_path)
     
     # Print summary
     print("\nPlausibility vs Accuracy:")
@@ -744,9 +618,7 @@ def plot_plausibility_vs_conf_change(long_df: pd.DataFrame, out_path: str = "pla
     ax.legend(loc="best")
     ax.grid(axis="y", alpha=0.3)
     
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
+    _write_figure(out_path)
     
     # Print summary
     print("\nPlausibility vs Confidence Change:")
@@ -762,93 +634,67 @@ def plot_plausibility_vs_conf_change(long_df: pd.DataFrame, out_path: str = "pla
     return out_path
 
 
+# Confidence-change bins used by the binned reliance plots
+CONF_CHANGE_BINS = [-10, -2, -1, 0, 1, 2, 10]
+CONF_CHANGE_BIN_LABELS = ["≤-2", "-1", "0", "1", "2", "≥3"]
+
+
+def _plot_reliance_by_conf_bin(eligible_df: pd.DataFrame, out_path: str, outcome: str,
+                               empty_message: str, color: str, ylabel: str, title: str) -> str:
+    """
+    Mean reliance outcome per bin of confidence change, with the cell size on
+    top of each bar.
+    """
+    if len(eligible_df) == 0:
+        print(empty_message)
+        return out_path
+
+    df = eligible_df.copy()
+    df["conf_bin"] = pd.cut(df["delta_conf"], bins=CONF_CHANGE_BINS,
+                            labels=CONF_CHANGE_BIN_LABELS, include_lowest=True)
+    binned = df.groupby("conf_bin", observed=True)[outcome].agg(["mean", "count"]).reset_index()
+
+    plt.figure(figsize=(7, 5))
+    bars = plt.bar(range(len(binned)), binned["mean"], color=color, alpha=0.8, edgecolor="black")
+
+    for bar, count in zip(bars, binned["count"]):
+        plt.text(bar.get_x() + bar.get_width() / 2., bar.get_height() + 0.02,
+                 f"n={int(count)}", ha="center", va="bottom", fontsize=8)
+
+    plt.xticks(range(len(binned)), binned["conf_bin"])
+    plt.xlabel("ΔConfidence (Post - Pre)")
+    plt.ylabel(ylabel)
+    plt.title(title)
+    plt.ylim(0, 1)
+    plt.grid(axis="y", alpha=0.3)
+    return _save(out_path)
+
+
 def plot_conf_vs_rair_scatter(long_df: pd.DataFrame, out_path: str = "conf_vs_rair_scatter.png") -> str:
     """
     Binned bar plot of confidence change (delta_conf) vs RAIR (changed_to_correct).
     Only includes RAIR-eligible trials (AI correct & human initially wrong).
     """
-    # Filter to RAIR-eligible subset
-    df = long_df[(long_df["ai_correct"]==1) & (long_df["human_pre_correct"]==0)].copy()
-    
-    if len(df) == 0:
-        print("No RAIR-eligible data for plot")
-        return out_path
-    
-    # Create bins for confidence change
-    bins = [-10, -2, -1, 0, 1, 2, 10]  # Adjusted for typical confidence changes
-    labels = ['≤-2', '-1', '0', '1', '2', '≥3']
-    df['conf_bin'] = pd.cut(df['delta_conf'], bins=bins, labels=labels, include_lowest=True)
-    
-    # Calculate mean RAIR for each bin
-    binned_rair = df.groupby('conf_bin', observed=True)['changed_to_correct'].agg(['mean', 'count']).reset_index()
-    binned_rair.columns = ['conf_bin', 'mean_rair', 'count']
-    
-    plt.figure(figsize=(7, 5))
-    
-    bars = plt.bar(range(len(binned_rair)), binned_rair['mean_rair'], 
-                   color=TUM_BLUE, alpha=0.8, edgecolor="black")
-    
-    # Add count labels on top of bars
-    for i, (bar, count) in enumerate(zip(bars, binned_rair['count'])):
-        height = bar.get_height()
-        plt.text(bar.get_x() + bar.get_width()/2., height + 0.02,
-                f'n={int(count)}', ha='center', va='bottom', fontsize=8)
-    
-    plt.xticks(range(len(binned_rair)), binned_rair['conf_bin'])
-    plt.xlabel("ΔConfidence (Post - Pre)")
-    plt.ylabel("Mean RAIR (Proportion Changed to Correct)")
-    plt.title("Confidence Change vs. RAIR (Binned)")
-    plt.ylim(0, 1)
-    plt.grid(axis="y", alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
-    print(f"Saved plot to {out_path}")
-    return out_path
+    return _plot_reliance_by_conf_bin(
+        rair_eligible(long_df), out_path, outcome="changed_to_correct",
+        empty_message="No RAIR-eligible data for plot", color=TUM_BLUE,
+        ylabel="Mean RAIR (Proportion Changed to Correct)",
+        title="Confidence Change vs. RAIR (Binned)",
+    )
+
 
 def plot_conf_vs_rsr_scatter(long_df: pd.DataFrame, out_path: str = "conf_vs_rsr_scatter.png") -> str:
     """
     Binned bar plot of confidence change (delta_conf) vs RSR (stayed_correct).
     Only includes RSR-eligible trials (AI wrong & human initially correct).
     """
-    # Filter to RSR-eligible subset
-    df = long_df[(long_df["ai_correct"]==0) & (long_df["human_pre_correct"]==1)].copy()
-    
-    if len(df) == 0:
-        print("No RSR-eligible data for plot")
-        return out_path
-    
-    # Create bins for confidence change
-    bins = [-10, -2, -1, 0, 1, 2, 10]  # Adjusted for typical confidence changes
-    labels = ['≤-2', '-1', '0', '1', '2', '≥3']
-    df['conf_bin'] = pd.cut(df['delta_conf'], bins=bins, labels=labels, include_lowest=True)
-    
-    # Calculate mean RSR for each bin
-    binned_rsr = df.groupby('conf_bin', observed=True)['stayed_correct'].agg(['mean', 'count']).reset_index()
-    binned_rsr.columns = ['conf_bin', 'mean_rsr', 'count']
-    
-    plt.figure(figsize=(7, 5))
-    
-    bars = plt.bar(range(len(binned_rsr)), binned_rsr['mean_rsr'], 
-                   color=TUM_ORANGE, alpha=0.8, edgecolor="black")
-    
-    # Add count labels on top of bars
-    for i, (bar, count) in enumerate(zip(bars, binned_rsr['count'])):
-        height = bar.get_height()
-        plt.text(bar.get_x() + bar.get_width()/2., height + 0.02,
-                f'n={int(count)}', ha='center', va='bottom', fontsize=8)
-    
-    plt.xticks(range(len(binned_rsr)), binned_rsr['conf_bin'])
-    plt.xlabel("ΔConfidence (Post - Pre)")
-    plt.ylabel("Mean RSR (Proportion Stayed Correct)")
-    plt.title("Confidence Change vs. RSR (Binned)")
-    plt.ylim(0, 1)
-    plt.grid(axis="y", alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
-    print(f"Saved plot to {out_path}")
-    return out_path
+    return _plot_reliance_by_conf_bin(
+        rsr_eligible(long_df), out_path, outcome="stayed_correct",
+        empty_message="No RSR-eligible data for plot", color=TUM_ORANGE,
+        ylabel="Mean RSR (Proportion Stayed Correct)",
+        title="Confidence Change vs. RSR (Binned)",
+    )
+
 
 def plot_rair_rsr_by_modelsize(long_df: pd.DataFrame, out_path: str = "rair_rsr_by_modelsize.png") -> str:
     """
@@ -856,21 +702,17 @@ def plot_rair_rsr_by_modelsize(long_df: pd.DataFrame, out_path: str = "rair_rsr_
     RAIR is computed on RAIR-eligible subset, RSR on RSR-eligible subset.
     0 = Small LLM (Llama 3.1 8B), 1 = Large LLM (Llama 3.3 70B)
     """
-    # RAIR-eligible: AI correct & human initially wrong
-    df_rair = long_df[(long_df["ai_correct"]==1) & (long_df["human_pre_correct"]==0)].copy()
-    df_rair["rair"] = df_rair["changed_to_correct"].astype(float)
+    df_rair = rair_eligible(long_df)
     mean_rair = df_rair.groupby("model_size")["rair"].agg(['mean', 'count']).reset_index()
     mean_rair.columns = ["model_size", "mean_rair", "count_rair"]
     
-    # RSR-eligible: AI wrong & human initially correct
-    df_rsr = long_df[(long_df["ai_correct"]==0) & (long_df["human_pre_correct"]==1)].copy()
-    df_rsr["rsr"] = df_rsr["stayed_correct"].astype(float)
+    df_rsr = rsr_eligible(long_df)
     mean_rsr = df_rsr.groupby("model_size")["rsr"].agg(['mean', 'count']).reset_index()
     mean_rsr.columns = ["model_size", "mean_rsr", "count_rsr"]
     
     # Merge
     summary = pd.merge(mean_rair, mean_rsr, on="model_size", how="outer").fillna(0)
-    summary['model_label'] = summary['model_size'].map({0: "Small LLM\n(Llama 3.1 8B)", 1: "Large LLM\n(Llama 3.3 70B)"})
+    summary['model_label'] = summary['model_size'].map(MODEL_SIZE_LABELS)
     
     # Plot
     plt.figure(figsize=(8, 5))
@@ -900,9 +742,7 @@ def plot_rair_rsr_by_modelsize(long_df: pd.DataFrame, out_path: str = "rair_rsr_
     plt.ylim(0, 1)
     plt.legend(loc="best")
     plt.grid(axis="y", alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
+    _write_figure(out_path)
     print(f"Saved plot to {out_path}")
     
     # Print statistics
@@ -923,7 +763,7 @@ def plot_conf_change_by_modelsize(long_df: pd.DataFrame, out_path: str = "conf_c
     
     # Group by model size and compute mean confidence change
     summary = df.groupby("model_size")["delta_conf"].agg(['mean', 'std', 'count']).reset_index()
-    summary['model_label'] = summary['model_size'].map({0: "Small LLM\n(Llama 3.1 8B)", 1: "Large LLM\n(Llama 3.3 70B)"})
+    summary['model_label'] = summary['model_size'].map(MODEL_SIZE_LABELS)
     
     plt.figure(figsize=(7, 5))
     
@@ -948,9 +788,7 @@ def plot_conf_change_by_modelsize(long_df: pd.DataFrame, out_path: str = "conf_c
     plt.title("Mean Change in Confidence by Model Size")
     plt.axhline(0, color='gray', linestyle='--', linewidth=1, alpha=0.5)
     plt.grid(axis="y", alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
+    _write_figure(out_path)
     print(f"Saved plot to {out_path}")
     
     # Print statistics
@@ -965,17 +803,13 @@ def plot_plaus_vs_rair_rsr(long_df: pd.DataFrame, out_path: str = "plaus_vs_rair
     Binned bar plot showing effect of plausibility on RAIR and RSR.
     Groups plausibility into bins and computes mean RAIR/RSR for each bin.
     """
-    # RAIR-eligible: AI correct & human initially wrong
-    df_rair = long_df[(long_df["ai_correct"]==1) & (long_df["human_pre_correct"]==0)].copy()
-    df_rair["rair"] = df_rair["changed_to_correct"].astype(float)
+    df_rair = rair_eligible(long_df)
     
     # Group by plausibility rating
     rair_by_plaus = df_rair.groupby("plaus")["rair"].agg(['mean', 'count']).reset_index()
     rair_by_plaus.columns = ["plaus", "mean_rair", "count_rair"]
     
-    # RSR-eligible: AI wrong & human initially correct
-    df_rsr = long_df[(long_df["ai_correct"]==0) & (long_df["human_pre_correct"]==1)].copy()
-    df_rsr["rsr"] = df_rsr["stayed_correct"].astype(float)
+    df_rsr = rsr_eligible(long_df)
     
     # Group by plausibility rating
     rsr_by_plaus = df_rsr.groupby("plaus")["rsr"].agg(['mean', 'count']).reset_index()
@@ -1013,9 +847,7 @@ def plot_plaus_vs_rair_rsr(long_df: pd.DataFrame, out_path: str = "plaus_vs_rair
     plt.ylim(0, 1.1)
     plt.legend(loc="best")
     plt.grid(axis="y", alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
+    _write_figure(out_path)
     print(f"Saved plot to {out_path}")
     
     # Print statistics
@@ -1027,6 +859,47 @@ def plot_plaus_vs_rair_rsr(long_df: pd.DataFrame, out_path: str = "plaus_vs_rair
     
     return out_path
 
+def _plot_mean_by_modelsize(df: pd.DataFrame, out_path: str, value_col: str, ylabel: str,
+                            title: str, ylim, decimals: int, label_offset: float,
+                            stat_label: str, chance_line: bool = False) -> str:
+    """
+    Bar plot of the mean of `value_col` per model size, with SD error bars and
+    mean/cell-size labels, followed by the same numbers on the console.
+    """
+    summary = df.groupby("model_size")[value_col].agg(["mean", "std", "count"]).reset_index()
+    summary["model_label"] = summary["model_size"].map(MODEL_SIZE_LABELS)
+
+    plt.figure(figsize=(7, 5))
+    bars = plt.bar(range(len(summary)), summary["mean"],
+                   color=[TUM_MED_BLUE, TUM_BLUE], alpha=0.8, edgecolor="black", width=0.6)
+    plt.errorbar(range(len(summary)), summary["mean"], yerr=summary["std"],
+                 fmt="none", ecolor="black", capsize=5, alpha=0.7)
+
+    for bar, (_, row) in zip(bars, summary.iterrows()):
+        plt.text(bar.get_x() + bar.get_width() / 2., bar.get_height() + row["std"] + label_offset,
+                 f"M={row['mean']:.{decimals}f}\nn={int(row['count'])}",
+                 ha="center", va="bottom", fontsize=9)
+
+    plt.xticks(range(len(summary)), summary["model_label"])
+    plt.ylabel(ylabel)
+    plt.xlabel("")
+    plt.title(title)
+    plt.ylim(*ylim)
+    if chance_line:
+        plt.axhline(0.5, color="gray", linestyle="--", linewidth=1, alpha=0.5, label="Chance (50%)")
+        plt.legend(loc="upper right")
+    plt.grid(axis="y", alpha=0.3)
+    _write_figure(out_path)
+    print(f"Saved plot to {out_path}")
+
+    for _, row in summary.iterrows():
+        model_name = row["model_label"].replace("\n", " ")
+        print(f"{model_name}: {stat_label}M = {row['mean']:.{decimals}f}, "
+              f"SD = {row['std']:.{decimals}f}, n = {int(row['count'])}")
+
+    return out_path
+
+
 def plot_accuracy_by_modelsize(long_df: pd.DataFrame, out_path: str = "accuracy_by_modelsize.png") -> str:
     """
     Bar plot of final accuracy (post-decision correctness) by model size.
@@ -1034,89 +907,24 @@ def plot_accuracy_by_modelsize(long_df: pd.DataFrame, out_path: str = "accuracy_
     """
     df = long_df.copy()
     df["post_correct"] = (df["post"] == df["gt"]).astype(float)
-    
-    # Group by model size and compute mean accuracy
-    summary = df.groupby("model_size")["post_correct"].agg(['mean', 'std', 'count']).reset_index()
-    summary['model_label'] = summary['model_size'].map({0: "Small LLM\n(Llama 3.1 8B)", 1: "Large LLM\n(Llama 3.3 70B)"})
-    
-    plt.figure(figsize=(7, 5))
-    
-    bars = plt.bar(range(len(summary)), summary['mean'], 
-                   color=[TUM_MED_BLUE, TUM_BLUE], alpha=0.8, edgecolor="black", width=0.6)
-    
-    # Add error bars (standard deviation)
-    plt.errorbar(range(len(summary)), summary['mean'], yerr=summary['std'], 
-                 fmt='none', ecolor='black', capsize=5, alpha=0.7)
-    
-    # Add value labels on top of bars
-    for i, (bar, mean_val, count) in enumerate(zip(bars, summary['mean'], summary['count'])):
-        height = bar.get_height()
-        plt.text(bar.get_x() + bar.get_width()/2., height + summary['std'].iloc[i] + 0.02,
-                f'M={mean_val:.3f}\nn={int(count)}', ha='center', va='bottom', fontsize=9)
-    
-    plt.xticks(range(len(summary)), summary['model_label'])
-    plt.ylabel("Final Accuracy (Proportion Correct)")
-    plt.xlabel("")
-    plt.title("Final Accuracy by Model Size")
-    plt.ylim(0, 1)
-    plt.axhline(0.5, color='gray', linestyle='--', linewidth=1, alpha=0.5, label="Chance (50%)")
-    plt.legend(loc="upper right")
-    plt.grid(axis="y", alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
-    print(f"Saved plot to {out_path}")
-    
-    # Print statistics
-    for idx, row in summary.iterrows():
-        model_name = row['model_label'].replace('\n', ' ')
-        print(f"{model_name}: Accuracy M = {row['mean']:.3f}, SD = {row['std']:.3f}, n = {int(row['count'])}")
-    
-    return out_path
+    return _plot_mean_by_modelsize(
+        df, out_path, value_col="post_correct",
+        ylabel="Final Accuracy (Proportion Correct)", title="Final Accuracy by Model Size",
+        ylim=(0, 1), decimals=3, label_offset=0.02, stat_label="Accuracy ", chance_line=True,
+    )
+
 
 def plot_plausibility_by_modelsize(long_df: pd.DataFrame, out_path: str = "plausibility_by_modelsize.png") -> str:
     """
     Bar plot of mean plausibility ratings by model size.
     0 = Small LLM (Llama 3.1 8B), 1 = Large LLM (Llama 3.3 70B)
     """
-    df = long_df.dropna(subset=["plaus", "model_size"]).copy()
-    
-    # Group by model size and compute mean plausibility
-    summary = df.groupby("model_size")["plaus"].agg(['mean', 'std', 'count']).reset_index()
-    summary['model_label'] = summary['model_size'].map({0: "Small LLM\n(Llama 3.1 8B)", 1: "Large LLM\n(Llama 3.3 70B)"})
-    
-    plt.figure(figsize=(7, 5))
-    
-    bars = plt.bar(range(len(summary)), summary['mean'], 
-                   color=[TUM_MED_BLUE, TUM_BLUE], alpha=0.8, edgecolor="black", width=0.6)
-    
-    # Add error bars (standard deviation)
-    plt.errorbar(range(len(summary)), summary['mean'], yerr=summary['std'], 
-                 fmt='none', ecolor='black', capsize=5, alpha=0.7)
-    
-    # Add value labels on top of bars
-    for i, (bar, mean_val, count) in enumerate(zip(bars, summary['mean'], summary['count'])):
-        height = bar.get_height()
-        plt.text(bar.get_x() + bar.get_width()/2., height + summary['std'].iloc[i] + 0.1,
-                f'M={mean_val:.2f}\nn={int(count)}', ha='center', va='bottom', fontsize=9)
-    
-    plt.xticks(range(len(summary)), summary['model_label'])
-    plt.ylabel("Mean Plausibility Rating (1–5)")
-    plt.xlabel("")
-    plt.title("Mean Plausibility Ratings by Model Size")
-    plt.ylim(0, 5.5)
-    plt.grid(axis="y", alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
-    print(f"Saved plot to {out_path}")
-    
-    # Print statistics
-    for idx, row in summary.iterrows():
-        model_name = row['model_label'].replace('\n', ' ')
-        print(f"{model_name}: M = {row['mean']:.2f}, SD = {row['std']:.2f}, n = {int(row['count'])}")
-    
-    return out_path
+    return _plot_mean_by_modelsize(
+        long_df.dropna(subset=["plaus", "model_size"]), out_path, value_col="plaus",
+        ylabel="Mean Plausibility Rating (1–5)", title="Mean Plausibility Ratings by Model Size",
+        ylim=(0, 5.5), decimals=2, label_offset=0.1, stat_label="",
+    )
+
 
 def plot_human_accuracy_before_after(long_df: pd.DataFrame, out_path: str = "human_accuracy_before_after.png") -> str:
     """
@@ -1176,9 +984,7 @@ def plot_human_accuracy_before_after(long_df: pd.DataFrame, out_path: str = "hum
     
     plt.legend(loc="upper right")
     plt.grid(axis="y", alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
+    _write_figure(out_path)
     
     print(f"Saved plot to {out_path}")
     print(f"Initial accuracy: M = {pre_mean:.3f}, SD = {pre_std:.3f}")
@@ -1282,9 +1088,5 @@ def plot_confidence_plausibility_distribution(df_trials: pd.DataFrame, out_path:
         ax2.text(0.5, 0.5, "Plausibility data not available", ha="center", va="center", transform=ax2.transAxes)
         ax2.set_title("Distribution of Plausibility Ratings")
     
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
-    print(f"Saved plot to {out_path}")
-    return out_path
+    return _save(out_path)
 

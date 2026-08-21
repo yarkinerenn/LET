@@ -42,16 +42,17 @@ python main.py --demographic nlp_experience
 ```
 result scripts/
 ├── main.py                    # Main entry point - runs all analyses
-├── config.py                 # Centralized configuration (paths, settings)
-├── requirements.txt          # Python dependencies
-├── README.md                 # This file
+├── requirements.txt           # Python dependencies
+├── README.md                  # This file
 ├── scripts/
+│   ├── config.py              # Centralized configuration (paths, settings)
 │   ├── data_processing/
-│   │   └── process_data.py   # Processes raw Prolific data, computes metrics
+│   │   └── process_data.py    # Processes raw Prolific data, computes metrics
 │   ├── analysis/
-│   │   ├── hypothesis_tests.py  # Main hypothesis testing (16 hypotheses)
+│   │   ├── hypothesis_tests.py   # Main hypothesis testing (16 hypotheses)
 │   │   └── demographics_table.py # Generates LaTeX demographics table
 │   ├── demographic_analysis/
+│   │   ├── common.py          # Shared statistics/plots for all demographics
 │   │   ├── age_analysis.py
 │   │   ├── gender_analysis.py
 │   │   ├── cs_expertise_analysis.py
@@ -88,6 +89,11 @@ result scripts/
 - Generates LaTeX-formatted demographics table
 - Prints to console (can be redirected to file)
 
+**`scripts/demographic_analysis/common.py`**
+- Shared code behind the five demographic analyses: data loading, participant-level
+  aggregation, Spearman correlations, the five cluster-robust regressions and the
+  box/violin/AOR plots. The individual scripts only supply columns, labels and colors.
+
 ### Demographic Analyses
 
 Each demographic analysis script:
@@ -122,14 +128,14 @@ All four files are automatically combined during data processing to create the f
 
 ## Configuration
 
-All paths and settings are centralized in `config.py`. Key settings:
+All paths and settings are centralized in `scripts/config.py`. Key settings:
 
 - **Paths**: Data and plot directories (automatically resolved relative to script location)
 - **Experiment config**: Number of trials, ground truth labels, AI predictions, faithfulness labels
 - **Job filter**: Options for filtering participants by job field
 - **Demographic columns**: Column names for demographic variables
 
-To modify settings, edit `config.py` directly.
+To modify settings, edit `scripts/config.py` directly.
 
 ## Output Locations
 
@@ -171,16 +177,18 @@ To modify settings, edit `config.py` directly.
 
 ## Running Scripts Individually
 
-Scripts can also be run individually if needed. Make sure to run from the `result scripts/` directory:
+The scripts form a Python package, so run them as modules from the `result scripts/`
+directory:
 
 ```bash
 cd "result scripts"
-python scripts/data_processing/process_data.py
-python scripts/analysis/hypothesis_tests.py
-python scripts/demographic_analysis/age_analysis.py
+python -m scripts.data_processing.process_data
+python -m scripts.analysis.hypothesis_tests
+python -m scripts.demographic_analysis.age_analysis
 ```
 
-**Note**: Scripts use absolute paths from `config.py`, so they should work regardless of where you run them from.
+**Note**: All paths come from `scripts/config.py` and are resolved relative to that
+file, so the outputs land in the same place no matter where you run from.
 
 ## Dependencies
 
@@ -196,11 +204,11 @@ See `requirements.txt` for full list. Main dependencies:
 
 **File not found errors**: Check that data files exist in `data/` directory. Run data processing first if needed.
 
-**Path errors**: Scripts use `config.py` for paths, which resolves paths relative to the config file location. This should work regardless of where scripts are run from.
+**Path errors**: Scripts use `scripts/config.py` for paths, which resolves paths relative to the config file location. This should work regardless of where scripts are run from.
 
 ## Notes
 
 - All scripts use cluster-robust standard errors to account for within-subject correlation (repeated measures design)
 - Demographic analyses always use unfiltered data (all participants)
-- Data processing can optionally filter by job field (configured in `config.py`)
+- Data processing can optionally filter by job field (configured in `scripts/config.py`)
 

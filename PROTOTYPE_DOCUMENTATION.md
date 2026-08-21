@@ -1656,7 +1656,7 @@ result scripts/
 
 **Main Entry Point:** `main.py` provides a command-line interface to run all analyses or specific components. It handles dependency checking and orchestrates the execution of individual analysis scripts.
 
-**Configuration:** `config.py` centralizes all paths, experiment settings, and constants. Paths are resolved relative to the config file location, making scripts robust to where they are executed from. Key configuration includes:
+**Configuration:** `scripts/config.py` centralizes all paths, experiment settings, and constants. Paths are resolved relative to the config file location, making scripts robust to where they are executed from. Key configuration includes:
 - Data file paths (four input files)
 - Experiment parameters (number of trials, ground truth labels, AI predictions, faithfulness labels)
 - Output directories for plots and CSV files

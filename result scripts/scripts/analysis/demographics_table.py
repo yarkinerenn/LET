@@ -1,100 +1,125 @@
+"""
+Demographics table
+==================
+
+Prints the participant demographics of the analyzed sample, first as raw
+counts per question and then as the complete LaTeX table used in the paper.
+"""
+
 import pandas as pd
-import sys
-from pathlib import Path
 
-# Add parent directory to path to import config
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-import config
+from .. import config
 
-# Load the data
-df = pd.read_excel(str(config.PROCESSED_DATA_FILE))
+AGE_COLUMN = config.DEMOGRAPHIC_COLUMNS["age"]
+GENDER_COLUMN = config.DEMOGRAPHIC_COLUMNS["gender"]
+EDUCATION_COLUMN = config.DEMOGRAPHIC_COLUMNS["education"]
+JOB_COLUMN = config.DEMOGRAPHIC_COLUMNS["job"]
+NLP_COLUMN = config.DEMOGRAPHIC_COLUMNS["nlp_experience"]
 
-# Total number of participants
-N = len(df)
+# Row order used in the LaTeX table (missing categories are printed as zero)
+AGE_ORDER = ["18-24", "25-34", "35-44", "45-54", "55-64", "65+"]
+GENDER_ORDER = ["Female", "Male", "Prefer not to say"]
+EDUCATION_ORDER = ["High school degree", "Bachelor's degree", "Master's degree", "PhD or equivalent"]
+FIELD_ORDER = [
+    "Computer Science / AI / ML",
+    "Healthcare",
+    "Finance",
+    "Marketing",
+    "Education",
+    "Other / Unspecified",
+]
 
-# Field categorization function (defined early for reuse)
+# Free-text field of work/study mapped onto the table's categories
+FIELD_KEYWORDS = [
+    ("Computer Science / AI / ML", ["computer science", "ai", "machine learning", "ml", "artificial intelligence"]),
+    ("Healthcare", ["healthcare", "medicine", "medical", "health", "genetic", "biology"]),
+    ("Finance", ["finance", "banking", "economics"]),
+    ("Marketing", ["marketing", "advertising"]),
+    ("Education", ["education", "teaching", "pedagogy"]),
+]
+OTHER_FIELD = "Other / Unspecified"
+
+# Free-text education answers mapped onto EDUCATION_ORDER
+EDUCATION_KEYWORDS = [
+    ("PhD or equivalent", ["phd", "doctorate"]),
+    ("Master's degree", ["master"]),
+    ("Bachelor's degree", ["bachelor"]),
+    ("High school degree", ["high school"]),
+]
+
+
 def categorize_field(field):
+    """Map a free-text field of work/study onto one of the table categories."""
     if pd.isna(field):
-        return 'Other / Unspecified'
-    
+        return OTHER_FIELD
+
     field_lower = str(field).lower()
-    
-    # Computer Science / AI / ML
-    if any(keyword in field_lower for keyword in ['computer science', 'ai', 'machine learning', 'ml', 'artificial intelligence']):
-        return 'Computer Science / AI / ML'
-    
-    # Healthcare
-    if any(keyword in field_lower for keyword in ['healthcare', 'medicine', 'medical', 'health', 'genetic', 'biology']):
-        return 'Healthcare'
-    
-    # Finance
-    if any(keyword in field_lower for keyword in ['finance', 'banking', 'economics']):
-        return 'Finance'
-    
-    # Marketing
-    if any(keyword in field_lower for keyword in ['marketing', 'advertising']):
-        return 'Marketing'
-    
-    # Education
-    if any(keyword in field_lower for keyword in ['education', 'teaching', 'pedagogy']):
-        return 'Education'
-    
-    # Otherwise, it's Other
-    return 'Other / Unspecified'
+    for category, keywords in FIELD_KEYWORDS:
+        if any(keyword in field_lower for keyword in keywords):
+            return category
+    return OTHER_FIELD
 
-print(f"Total Participants (N): {N}")
-print("\n" + "="*80)
-print("DEMOGRAPHICS TABLE - LaTeX FORMAT")
-print("="*80 + "\n")
 
-# Age distribution
-print("AGE:")
-age_counts = df['What is your age?'].value_counts().sort_index()
-for age_group in age_counts.index:
-    count = age_counts[age_group]
-    percent = (count / N) * 100
-    print(f"\\quad {age_group:<10} & {count:2d} & {percent:4.1f}\\% \\\\")
+def normalize_education_counts(edu_counts):
+    """Collapse free-text education answers onto the canonical levels."""
+    normalized = {}
+    for edu, count in edu_counts.items():
+        edu_lower = str(edu).lower()
+        level = next(
+            (name for name, keywords in EDUCATION_KEYWORDS
+             if any(keyword in edu_lower for keyword in keywords)),
+            edu,
+        )
+        normalized[level] = normalized.get(level, 0) + count
+    return normalized
 
-print("\nGENDER:")
-gender_counts = df['What is your gender?'].value_counts()
-for gender in gender_counts.index:
-    count = gender_counts[gender]
-    percent = (count / N) * 100
-    print(f"\\quad {gender:<20} & {count:2d} & {percent:4.1f}\\% \\\\")
 
-print("\nHIGHEST ACHIEVED EDUCATION:")
-edu_counts = df['What is your highest achieved level of education?'].value_counts()
-for edu in edu_counts.index:
-    count = edu_counts[edu]
-    percent = (count / N) * 100
-    print(f"\\quad {edu:<21} & {count:2d} & {percent:4.1f}\\% \\\\")
+def print_raw_counts(df, n_total, counts):
+    """Print the per-question counts that back the LaTeX table."""
+    print(f"Total Participants (N): {n_total}")
+    print("\n" + "=" * 80)
+    print("DEMOGRAPHICS TABLE - LaTeX FORMAT")
+    print("=" * 80 + "\n")
 
-print("\nFIELD OF WORK OR STUDY (Raw Data):")
-field_counts = df['What is your field of work/study ?'].value_counts()
-for field in field_counts.index:
-    count = field_counts[field]
-    percent = (count / N) * 100
-    print(f"  {field:<40} -> {count:2d} ({percent:4.1f}%)")
+    print("AGE:")
+    for age_group, count in counts["age"].items():
+        print(f"\\quad {age_group:<10} & {count:2d} & {count / n_total * 100:4.1f}\\% \\\\")
 
-print("\nFIELD OF WORK OR STUDY (Categorized for LaTeX table):")
-# Show categorized version
-for field in df['What is your field of work/study ?'].unique():
-    category = categorize_field(field)
-    print(f"  '{field}' -> {category}")
+    print("\nGENDER:")
+    for gender, count in counts["gender"].items():
+        print(f"\\quad {gender:<20} & {count:2d} & {count / n_total * 100:4.1f}\\% \\\\")
 
-print("\nEXPERIENCE WITH NLP (Self-Rating, 1-5):")
-nlp_exp_counts = df['Please rate your experience with NLP'].value_counts().sort_index()
-for rating in nlp_exp_counts.index:
-    count = nlp_exp_counts[rating]
-    percent = (count / N) * 100
-    print(f"\\quad ({int(rating)}) & {count:2d} & {percent:4.1f}\\% \\\\")
+    print("\nHIGHEST ACHIEVED EDUCATION:")
+    for edu, count in counts["education"].items():
+        print(f"\\quad {edu:<21} & {count:2d} & {count / n_total * 100:4.1f}\\% \\\\")
 
-print("\n" + "="*80)
-print("COMPLETE LaTeX TABLE:")
-print("="*80 + "\n")
+    print("\nFIELD OF WORK OR STUDY (Raw Data):")
+    for field, count in counts["field"].items():
+        print(f"  {field:<40} -> {count:2d} ({count / n_total * 100:4.1f}%)")
 
-# Now generate the complete formatted table
-print(r"""\begin{table*}[t]
+    print("\nFIELD OF WORK OR STUDY (Categorized for LaTeX table):")
+    for field in df[JOB_COLUMN].unique():
+        print(f"  '{field}' -> {categorize_field(field)}")
+
+    print("\nEXPERIENCE WITH NLP (Self-Rating, 1-5):")
+    for rating, count in counts["nlp"].items():
+        print(f"\\quad ({int(rating)}) & {count:2d} & {count / n_total * 100:4.1f}\\% \\\\")
+
+
+def _print_rows(labels, counts, n_total, width):
+    """Print one table block: every label in order, zero-filled when absent."""
+    for label in labels:
+        count = counts.get(label, 0)
+        print(f"\\quad {label:<{width}} & {count:2d} & {count / n_total * 100:4.1f}\\% \\\\")
+
+
+def print_latex_table(df, n_total, counts):
+    """Print the complete LaTeX table."""
+    print("\n" + "=" * 80)
+    print("COMPLETE LaTeX TABLE:")
+    print("=" * 80 + "\n")
+
+    print(r"""\begin{table*}[t]
 \centering
 \small
 \setlength{\tabcolsep}{8pt}
@@ -103,92 +128,55 @@ print(r"""\begin{table*}[t]
 \textbf{Characteristic} & \textbf{Count} & \textbf{Percent} \\
 \midrule
 \multicolumn{3}{l}{\textit{Age}} \\""")
+    _print_rows(AGE_ORDER, counts["age"], n_total, width=8)
 
-# Age - in the order specified in the template
-age_order = ['18-24', '25-34', '35-44', '45-54', '55-64', '65+']
-for age_group in age_order:
-    if age_group in age_counts.index:
-        count = age_counts[age_group]
-        percent = (count / N) * 100
-        print(f"\\quad {age_group:<8} & {count:2d} & {percent:4.1f}\\% \\\\")
-    else:
-        print(f"\\quad {age_group:<8} & {0:2d} & {0:4.1f}\\% \\\\")
-
-print(r"""\addlinespace
+    print(r"""\addlinespace
 \multicolumn{3}{l}{\textit{Gender}} \\""")
+    _print_rows(GENDER_ORDER, counts["gender"], n_total, width=19)
 
-# Gender - in specified order
-gender_order = ['Female', 'Male', 'Prefer not to say']
-for gender in gender_order:
-    if gender in gender_counts.index:
-        count = gender_counts[gender]
-        percent = (count / N) * 100
-        print(f"\\quad {gender:<19} & {count:2d} & {percent:4.1f}\\% \\\\")
-    else:
-        print(f"\\quad {gender:<19} & {0:2d} & {0:4.1f}\\% \\\\")
-
-print(r"""\addlinespace
+    print(r"""\addlinespace
 \multicolumn{3}{l}{\textit{Highest Achieved Education}} \\""")
+    education = normalize_education_counts(counts["education"])
+    _print_rows(EDUCATION_ORDER, education, n_total, width=21)
 
-# Education - in specified order (case-insensitive matching)
-edu_order = ['High school degree', "Bachelor's degree", "Master's degree", 'PhD or equivalent']
-edu_counts_normalized = {}
-for edu, count in edu_counts.items():
-    edu_lower = str(edu).lower()
-    if 'phd' in edu_lower or 'doctorate' in edu_lower:
-        edu_counts_normalized['PhD or equivalent'] = edu_counts_normalized.get('PhD or equivalent', 0) + count
-    elif 'master' in edu_lower:
-        edu_counts_normalized["Master's degree"] = edu_counts_normalized.get("Master's degree", 0) + count
-    elif 'bachelor' in edu_lower:
-        edu_counts_normalized["Bachelor's degree"] = edu_counts_normalized.get("Bachelor's degree", 0) + count
-    elif 'high school' in edu_lower:
-        edu_counts_normalized['High school degree'] = edu_counts_normalized.get('High school degree', 0) + count
-    else:
-        edu_counts_normalized[edu] = count
-
-for edu in edu_order:
-    count = edu_counts_normalized.get(edu, 0)
-    percent = (count / N) * 100
-    print(f"\\quad {edu:<21} & {count:2d} & {percent:4.1f}\\% \\\\")
-
-print(r"""\addlinespace
+    print(r"""\addlinespace
 \multicolumn{3}{l}{\textit{Field of Work or Study}} \\""")
+    fields = df[JOB_COLUMN].apply(categorize_field).value_counts()
+    _print_rows(FIELD_ORDER, fields, n_total, width=28)
 
-# Create categorized counts (using function defined at top of file)
-field_categories = {}
-for field in df['What is your field of work/study ?']:
-    category = categorize_field(field)
-    field_categories[category] = field_categories.get(category, 0) + 1
-
-field_order = ['Computer Science / AI / ML', 'Healthcare', 'Finance', 'Marketing', 'Education', 'Other / Unspecified']
-for field in field_order:
-    count = field_categories.get(field, 0)
-    percent = (count / N) * 100
-    print(f"\\quad {field:<28} & {count:2d} & {percent:4.1f}\\% \\\\")
-
-print(r"""\addlinespace
+    print(r"""\addlinespace
 \multicolumn{3}{l}{\textit{Experience with NLP (Self-Rating, 1--5)}} \\""")
+    for rating in range(1, 6):
+        count = counts["nlp"].get(rating, 0)
+        print(f"\\quad ({rating}) & {count:2d} & {count / n_total * 100:4.1f}\\% \\\\")
 
-# NLP Experience - 1 to 5
-for rating in range(1, 6):
-    if rating in nlp_exp_counts.index:
-        count = nlp_exp_counts[rating]
-        percent = (count / N) * 100
-        print(f"\\quad ({rating}) & {count:2d} & {percent:4.1f}\\% \\\\")
-    else:
-        print(f"\\quad ({rating}) & {0:2d} & {0:4.1f}\\% \\\\")
-
-print(r"""\bottomrule
+    print(r"""\bottomrule
 \end{tabular}""")
-print(f"\\caption{{Participant demographics for the analyzed sample ($N={N}$). Percentages are relative to the final analyzed $N$. Minor totals may not sum to 100\\% due to rounding or missing responses.}}")
-print(r"""\label{tab:demographics}
+    print(
+        f"\\caption{{Participant demographics for the analyzed sample ($N={n_total}$). "
+        f"Percentages are relative to the final analyzed $N$. Minor totals may not sum "
+        f"to 100\\% due to rounding or missing responses.}}"
+    )
+    print(r"""\label{tab:demographics}
 \end{table*}""")
 
+
 def main():
-    """Main function for demographics table generation."""
-    # The script logic is already executed at module level
-    pass
+    """Print the demographics of the processed sample."""
+    df = pd.read_excel(str(config.PROCESSED_DATA_FILE))
+    n_total = len(df)
+
+    counts = {
+        "age": df[AGE_COLUMN].value_counts().sort_index(),
+        "gender": df[GENDER_COLUMN].value_counts(),
+        "education": df[EDUCATION_COLUMN].value_counts(),
+        "field": df[JOB_COLUMN].value_counts(),
+        "nlp": df[NLP_COLUMN].value_counts().sort_index(),
+    }
+
+    print_raw_counts(df, n_total, counts)
+    print_latex_table(df, n_total, counts)
+
 
 if __name__ == "__main__":
     main()
-

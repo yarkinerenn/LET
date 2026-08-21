@@ -2,7 +2,11 @@ node_modules
 __pycache__/
 *.py[cod]
 *.DS_Store
-backend/result\ scripts/plots/
+result scripts/plots/
+result scripts/data/*.csv
+result scripts/data/*.tex
+result scripts/data/experiment_results_with_metrics*.xlsx
+~$*.xlsx
 **/references.csv
 
 # Virtual environments

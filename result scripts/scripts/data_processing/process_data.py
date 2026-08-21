@@ -1,11 +1,7 @@
 import pandas as pd
 import math
-import sys
-from pathlib import Path
 
-# Add parent directory to path to import config
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-import config
+from .. import config
 
 def normalize_series_DT(series: pd.Series) -> pd.Series:
     return (series.astype(str)
@@ -122,6 +118,8 @@ def compute_rair_global(df_trials: pd.DataFrame, n_trials: int = 16) -> tuple[pd
         "corrected": corrected,
         "not_corrected": not_corrected
     }
+
+
 def build_full_with_deltas_and_labels():
     # === Config from config.py ===
     file_paths = config.FILE_FORM_MAPPING
@@ -145,9 +143,7 @@ def build_full_with_deltas_and_labels():
     df_orig = None
     for i, (file_path, form) in enumerate(file_paths):
         try:
-            # Convert Path object to string for pandas
-            file_path_str = str(file_path) if isinstance(file_path, Path) else file_path
-            df_temp = pd.read_excel(file_path_str, sheet_name=sheet)
+            df_temp = pd.read_excel(str(file_path), sheet_name=sheet)
             # Add Form column based on the tuple
             df_temp["Form"] = form
             
@@ -352,7 +348,6 @@ def build_full_with_deltas_and_labels():
     # Return DataFrame along with filter configuration
     return df_trials, FILTER_BY_JOB, FILTER_MODE
 
-import math
 
 def compute_initial_accuracy_per_user(df_trials: pd.DataFrame, n_trials: int = 16) -> tuple[pd.DataFrame, float, dict]:
     """

@@ -43,18 +43,11 @@ Significance levels: * p<.05, ** p<.01, *** p<.001
 
 import pandas as pd
 import numpy as np
-import statsmodels.api as sm
 import statsmodels.formula.api as smf
 from scipy import stats
-from scipy.stats import shapiro, mannwhitneyu, ttest_ind
-import sys
-from pathlib import Path
-
-# Add parent directories to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-import config
-sys.path.insert(0, str(Path(__file__).parent.parent / "utils"))
-from plots import (
+from scipy.stats import shapiro, ttest_rel, wilcoxon
+from .. import config
+from ..utils.plots import (
     plot_mean_rair_rsr_by_faith,
     plot_mean_conf_change_by_faith,
     plot_mean_final_accuracy_by_faith,
@@ -95,14 +88,35 @@ from plots import (
 # clustered covariance estimate collapses, and the SE comes out as exactly 0.0000.
 # Those three hypotheses use the individual rating `plaus` as the outcome.
 MEAN_PLAUSIBILITY_COLUMN = "mean_plausibility"
+
+# THE PREDICTOR FOR H13/H14/H15 (final decision -- do not change again without
+# updating the paper's Table \ref{tab:all-hypotheses} and Section on plausibility).
+#
+# plaus_loo = leave-one-out item-mean plausibility:
+#   for each trial, the mean plausibility rating that this explanation received
+#   from all OTHER participants who saw it (own rating excluded).
+#
+# Why: each participant rates plausibility AFTER their revised decision, so their
+# own rating cannot be used to predict their own decision without circularity.
+# The leave-one-out mean measures how plausible the explanation is to everyone
+# else, which is a property of the explanation, not of this participant's choice.
+# With 102 raters per item, plaus_loo differs from the plain item mean by at most
+# 0.032 on the 1-5 scale (r = .9995); results are similar under either, and the
+# LOO version is the one reported in the paper.
+LOO_PLAUSIBILITY_COLUMN = "plaus_loo"
 INDIVIDUAL_PLAUSIBILITY_COLUMN = "plaus"
 
-# Leave-one-out item mean: for each trial, the mean rating that item received from
-# every OTHER participant. This is what H13/H14/H15 actually use as the predictor.
-# It answers the objection "your predictor still contains the participant's own
-# rating" outright, rather than conceding a 1-in-102 contamination. Numerically it
-# is within a few percent of MEAN_PLAUSIBILITY_COLUMN and changes no conclusion.
-LOO_PLAUSIBILITY_COLUMN = "plaus_loo"
+# H13/H14/H15 use MEAN_PLAUSIBILITY_COLUMN: the mean rating each question received
+# across all participants who saw it. This is deliberately an ITEM-level predictor --
+# it asks "do explanations that people generally find plausible produce more reliance",
+# and it keeps the participant's own rating out of the predictor for their own trial.
+#
+# Note for interpretation (see Limitations): because the predictor is fixed per
+# question, these models rest on 16 questions -- 8 for H13/H14, since the AI is
+# correct on exactly 8 items by design. That is the same footing as H1/H2/H9/H10,
+# where faithfulness is likewise fixed per question. Item-level effects should be
+# read with that in mind, and the two-way clustered table reports SEs that account
+# for question-level correlation.
 
 # ============================================================================
 # CONFIGURATION
@@ -119,14 +133,6 @@ BONFERRONI_ALPHA = ALPHA / N_HYPOTHESES
 RECRUITMENT_COLUMN = None      # e.g. "Recruitment Source" or "source"
 PROLIFIC_LABEL = "Prolific"    # value in that column marking panel participants
 
-
-def logit(formula, data):
-    model = smf.logit(formula, data=data.dropna()).fit(disp=False)
-    return model
-
-def ols(formula, data):
-    model = smf.ols(formula, data=data.dropna()).fit()
-    return model
 
 def _cluster_groups(clean_data, cluster_var):
     """
@@ -167,16 +173,6 @@ def ols_clustered(formula, data, cluster_var='participant'):
     result = model.fit(cov_type='cluster',
                       cov_kwds={'groups': _cluster_groups(clean_data, cluster_var)})
     return result
-
-def logit_robust(formula, data):
-    """Logistic regression with robust standard errors (HC3) - DEPRECATED, use logit_clustered"""
-    model = smf.logit(formula, data=data.dropna()).fit(disp=False, cov_type='HC3')
-    return model
-
-def ols_robust(formula, data):
-    """OLS with robust standard errors (HC3) - DEPRECATED, use ols_clustered"""
-    model = smf.ols(formula, data=data.dropna()).fit(cov_type='HC3')
-    return model
 
 def summarize(model):
     """
@@ -261,90 +257,69 @@ def descriptive_stats_by_group(long_df, variable, group_var='faith'):
     groups.columns = [group_var, 'mean', 'std', 'n']
     return groups
 
+def _condition_metrics(condition_data):
+    """
+    RAIR, RSR, mean confidence change and mean plausibility for one
+    participant within one condition, plus the two eligibility counts.
+    """
+    rair_eligible = condition_data[(condition_data['ai_correct'] == 1)
+                                   & (condition_data['human_pre_correct'] == 0)]
+    rsr_eligible = condition_data[(condition_data['ai_correct'] == 0)
+                                  & (condition_data['human_pre_correct'] == 1)]
+
+    metrics = {
+        'RAIR': rair_eligible['changed_to_correct'].mean() if len(rair_eligible) > 0 else np.nan,
+        'RSR': rsr_eligible['stayed_correct'].mean() if len(rsr_eligible) > 0 else np.nan,
+        'mean_delta_conf': condition_data['delta_conf'].mean(),
+        'mean_plaus': condition_data[INDIVIDUAL_PLAUSIBILITY_COLUMN].mean(),
+    }
+    counts = {
+        'n_trials': len(condition_data),
+        'n_rair_eligible': len(rair_eligible),
+        'n_rsr_eligible': len(rsr_eligible),
+    }
+    return metrics, counts
+
+
+def _accuracy_metrics(condition_data):
+    """Pre/post/AI accuracy, recorded for the faithfulness rows only."""
+    post_correct = (condition_data['post'] == condition_data['gt']).astype(int)
+    return {
+        'human_pre_accuracy': condition_data['human_pre_correct'].mean(),
+        'post_accuracy': post_correct.mean(),
+        'ai_accuracy': condition_data['ai_correct'].mean(),
+    }
+
+
 def compute_participant_aggregates(long_df):
     """
-    Compute participant-level aggregates for WITHIN-SUBJECTS design.
-    Each participant sees both faithful and unfaithful trials, so we compute
-    metrics separately for each condition WITHIN each participant.
+    Compute participant-level aggregates for the WITHIN-SUBJECTS design.
+
+    Each participant sees both faithful and unfaithful trials (and both model
+    sizes), so the metrics are computed per condition WITHIN each participant.
+    That gives up to four rows per participant: one per faithfulness level and
+    one per model size.
     """
     participant_stats = []
 
     for participant_id in long_df['participant'].unique():
         p_data = long_df[long_df['participant'] == participant_id]
 
-        # For within-subjects design, compute metrics for each condition
-        for faith_val in [0, 1]:
-            faith_data = p_data[p_data['faith'] == faith_val]
+        for condition_var in ['faith', 'model_size']:
+            for value in [0, 1]:
+                condition_data = p_data[p_data[condition_var] == value]
+                if len(condition_data) == 0:
+                    continue
 
-            if len(faith_data) == 0:
-                continue
-
-            # RAIR: proportion of changed_to_correct among RAIR-eligible trials
-            rair_eligible = faith_data[(faith_data['ai_correct']==1) & (faith_data['human_pre_correct']==0)]
-            rair = rair_eligible['changed_to_correct'].mean() if len(rair_eligible) > 0 else np.nan
-
-            # RSR: proportion of stayed_correct among RSR-eligible trials
-            rsr_eligible = faith_data[(faith_data['ai_correct']==0) & (faith_data['human_pre_correct']==1)]
-            rsr = rsr_eligible['stayed_correct'].mean() if len(rsr_eligible) > 0 else np.nan
-
-            # Mean confidence change
-            mean_delta_conf = faith_data['delta_conf'].mean()
-
-            # Mean plausibility across the questions in this condition.
-            mean_plaus = faith_data[INDIVIDUAL_PLAUSIBILITY_COLUMN].mean()
-
-            # Accuracy metrics
-            human_pre_accuracy = faith_data['human_pre_correct'].mean()
-            faith_data_with_post = faith_data.copy()
-            faith_data_with_post['post_correct'] = (faith_data_with_post['post'] == faith_data_with_post['gt']).astype(int)
-            post_accuracy = faith_data_with_post['post_correct'].mean()
-            ai_accuracy = faith_data['ai_correct'].mean()
-
-            participant_stats.append({
-                'participant': participant_id,
-                'faith': faith_val,
-                'RAIR': rair,
-                'RSR': rsr,
-                'mean_delta_conf': mean_delta_conf,
-                'mean_plaus': mean_plaus,
-                'human_pre_accuracy': human_pre_accuracy,
-                'post_accuracy': post_accuracy,
-                'ai_accuracy': ai_accuracy,
-                'n_trials': len(faith_data),
-                'n_rair_eligible': len(rair_eligible),
-                'n_rsr_eligible': len(rsr_eligible)
-            })
-
-        # Also compute for model size
-        for size_val in [0, 1]:
-            size_data = p_data[p_data['model_size'] == size_val]
-
-            if len(size_data) == 0:
-                continue
-
-            # Store model size metrics separately
-            rair_eligible = size_data[(size_data['ai_correct']==1) & (size_data['human_pre_correct']==0)]
-            rair = rair_eligible['changed_to_correct'].mean() if len(rair_eligible) > 0 else np.nan
-
-            rsr_eligible = size_data[(size_data['ai_correct']==0) & (size_data['human_pre_correct']==1)]
-            rsr = rsr_eligible['stayed_correct'].mean() if len(rsr_eligible) > 0 else np.nan
-
-            mean_delta_conf = size_data['delta_conf'].mean()
-            mean_plaus = size_data[INDIVIDUAL_PLAUSIBILITY_COLUMN].mean()
-
-            participant_stats.append({
-                'participant': participant_id,
-                'model_size': size_val,
-                'RAIR': rair,
-                'RSR': rsr,
-                'mean_delta_conf': mean_delta_conf,
-                'mean_plaus': mean_plaus,
-                'n_trials': len(size_data),
-                'n_rair_eligible': len(rair_eligible),
-                'n_rsr_eligible': len(rsr_eligible)
-            })
+                metrics, counts = _condition_metrics(condition_data)
+                row = {'participant': participant_id, condition_var: value, **metrics}
+                if condition_var == 'faith':
+                    row.update(_accuracy_metrics(condition_data))
+                row.update(counts)
+                participant_stats.append(row)
 
     return pd.DataFrame(participant_stats)
+
 
 def within_subjects_test(data, variable, group_var='faith', alpha=0.05):
     """
@@ -353,8 +328,6 @@ def within_subjects_test(data, variable, group_var='faith', alpha=0.05):
     2. Use paired t-test if normal, Wilcoxon signed-rank if not normal
     Returns test results with effect size
     """
-    from scipy.stats import wilcoxon, ttest_rel
-
     # Pivot data to get paired observations
     pivot_data = data.pivot_table(index='participant', columns=group_var, values=variable, aggfunc='mean')
 
@@ -430,70 +403,6 @@ def within_subjects_test(data, variable, group_var='faith', alpha=0.05):
         'normality': {'differences': norm_diff, 'normal': is_normal}
     }
 
-def between_group_test(data, variable, group_var='faith', alpha=0.05):
-    """
-    Perform between-group comparison:
-    1. Check normality for each group
-    2. Use t-test if normal, Mann-Whitney U if not normal
-    Returns test results with effect size
-    """
-    groups = data[group_var].unique()
-    groups = sorted([g for g in groups if not pd.isna(g)])
-
-    if len(groups) != 2:
-        return {"error": f"Expected 2 groups, found {len(groups)}"}
-
-    group0_data = data[data[group_var] == groups[0]][variable].dropna()
-    group1_data = data[data[group_var] == groups[1]][variable].dropna()
-
-    if len(group0_data) < 3 or len(group1_data) < 3:
-        return {"error": "Insufficient data in one or more groups"}
-
-    # Check normality for each group
-    norm0 = check_normality(group0_data, f"{variable}_group{groups[0]}")
-    norm1 = check_normality(group1_data, f"{variable}_group{groups[1]}")
-
-    both_normal = norm0.get('normal', False) and norm1.get('normal', False)
-
-    # Compute descriptive stats
-    mean0, std0 = group0_data.mean(), group0_data.std()
-    mean1, std1 = group1_data.mean(), group1_data.std()
-
-    # Choose test based on normality
-    if both_normal:
-        # Use independent t-test
-        t_stat, p_value = ttest_ind(group0_data, group1_data)
-        test_name = "Independent t-test"
-        test_stat = t_stat
-        # Cohen's d effect size
-        pooled_std = np.sqrt(((len(group0_data)-1)*std0**2 + (len(group1_data)-1)*std1**2) /
-                             (len(group0_data) + len(group1_data) - 2))
-        effect_size = (mean1 - mean0) / pooled_std if pooled_std > 0 else np.nan
-        effect_size_name = "Cohen's d"
-    else:
-        # Use Mann-Whitney U test (non-parametric)
-        u_stat, p_value = mannwhitneyu(group0_data, group1_data, alternative='two-sided')
-        test_name = "Mann-Whitney U test"
-        test_stat = u_stat
-        # Rank-biserial correlation as effect size
-        n0, n1 = len(group0_data), len(group1_data)
-        effect_size = 1 - (2*u_stat) / (n0 * n1)
-        effect_size_name = "Rank-biserial correlation"
-
-    return {
-        'variable': variable,
-        'group_var': group_var,
-        'test': test_name,
-        'groups': {groups[0]: {'mean': mean0, 'std': std0, 'n': len(group0_data)},
-                   groups[1]: {'mean': mean1, 'std': std1, 'n': len(group1_data)}},
-        'statistic': test_stat,
-        'p_value': p_value,
-        'effect_size': effect_size,
-        'effect_size_name': effect_size_name,
-        'difference': mean1 - mean0,
-        'normality': {'group0': norm0, 'group1': norm1, 'both_normal': both_normal}
-    }
-
 def make_long(df_trials, n_trials=16):
     """
     Build long per-trial DataFrame with:
@@ -557,177 +466,157 @@ def make_long(df_trials, n_trials=16):
     assert long_df[MEAN_PLAUSIBILITY_COLUMN].nunique() == long_df["Q"].nunique(), \
         "mean_plausibility must have one value per question"
 
-    # Leave-one-out item mean: (sum of this item's ratings - own rating) / (n - 1).
-    # Grouped by Q like the column above, but the focal participant's own rating is
-    # removed, so it cannot restate their own decision. Unlike mean_plausibility it
-    # deliberately varies within an item -- that is the whole point.
+    # Leave-one-out item mean: (sum of the item's ratings - own rating) / (n - 1).
+    # Grouped by Q and nothing else. See LOO_PLAUSIBILITY_COLUMN above for why.
     grp = long_df.groupby("Q")["plaus"]
     n_ratings = grp.transform("count")
     total = grp.transform("sum")
     long_df[LOO_PLAUSIBILITY_COLUMN] = (total - long_df["plaus"]) / (n_ratings - 1)
-    assert long_df.groupby("Q")[LOO_PLAUSIBILITY_COLUMN].nunique().gt(1).any(), \
-        "plaus_loo must vary within a question; the subtraction did not take effect"
+    # Sanity: LOO must deviate from the item mean by only a sliver (own rating is
+    # 1 of ~102), and must never be grouped by a predictor (which would give ~2
+    # distinct values instead of ~65).
+    assert (long_df[LOO_PLAUSIBILITY_COLUMN] - long_df[MEAN_PLAUSIBILITY_COLUMN]).abs().max() < 0.1, \
+        "plaus_loo strayed too far from the item mean; check the groupby key"
+    assert long_df[LOO_PLAUSIBILITY_COLUMN].nunique() > long_df["Q"].nunique(), \
+        "plaus_loo must vary within items (leave-one-out did not take effect)"
     return long_df
 
-# H1: Faithfulness -> RAIR (among AI-correct & human initially wrong)
-def test_H1(long_df, normality_results=None):
-    df = long_df[(long_df["ai_correct"]==1) & (long_df["human_pre_correct"]==0)].copy()
-    # DV: changed_to_correct (binary), IV: faith
-    # Use cluster-robust SEs to account for repeated measures
-    m = logit_clustered("changed_to_correct ~ faith", df, cluster_var='participant')
-    result = summarize(m)
-    result['test_type'] = 'Logistic Regression (Cluster-Robust SEs)'
-    result['n_clusters'] = len(df['participant'].unique())
-    return result
+# ============================================================================
+# THE SIXTEEN HYPOTHESES
+# ============================================================================
 
-# H2: Faithfulness -> RSR (among AI-wrong & human initially correct)
-def test_H2(long_df, normality_results=None):
-    df = long_df[(long_df["ai_correct"]==0) & (long_df["human_pre_correct"]==1)].copy()
-    m = logit_clustered("stayed_correct ~ faith", df, cluster_var='participant')
-    result = summarize(m)
-    result['test_type'] = 'Logistic Regression (Cluster-Robust SEs)'
-    result['n_clusters'] = len(df['participant'].unique())
-    return result
+# Every hypothesis is the same shape: take a subset of the trials, fit one
+# model on it with participant-clustered SEs, report the single predictor.
+# Declaring them as data keeps the main table, the two-way clustered
+# robustness pass and the summary table's labels from drifting apart.
 
-# H3: Faithfulness -> confidence calibration (participants' confidence better aligns with correctness)
-def test_H3(long_df, normality_results=None):
-    df = long_df.copy()
-    # Use cluster-robust SEs to account for repeated measures
-    m = ols_clustered("delta_conf ~ faith", df, cluster_var='participant')
-    result = summarize(m)
-    result['test_type'] = 'OLS (Cluster-Robust SEs)'
-    result['n_clusters'] = len(df['participant'].unique())
-    if normality_results and 'delta_conf' in normality_results:
-        result['normality'] = normality_results['delta_conf']
-    return result
+def _subset_all(long_df):
+    return long_df.copy()
 
-# H4: Faithfulness affects final task accuracy (complementary team performance)
-def test_H4(long_df, normality_results=None):
+
+def _subset_rair(long_df):
+    """Trials where the AI was right and the participant was initially wrong."""
+    return long_df[(long_df["ai_correct"] == 1) & (long_df["human_pre_correct"] == 0)].copy()
+
+
+def _subset_rsr(long_df):
+    """Trials where the AI was wrong and the participant was initially right."""
+    return long_df[(long_df["ai_correct"] == 0) & (long_df["human_pre_correct"] == 1)].copy()
+
+
+def _subset_post(long_df):
+    """All trials, with the final-accuracy outcome added."""
     df = long_df.copy()
     df["post_correct"] = (df["post"] == df["gt"]).astype(int)
-    m = logit_clustered("post_correct ~ faith", df, cluster_var='participant')
-    result = summarize(m)
-    result['test_type'] = 'Logistic Regression (Cluster-Robust SEs)'
-    result['n_clusters'] = len(df['participant'].unique())
-    return result
+    return df
 
-# H5: Faithfulness increases perceived plausibility
-def test_H5(long_df, normality_results=None):
-    df = long_df.copy()
-    m = ols_clustered(f"{INDIVIDUAL_PLAUSIBILITY_COLUMN} ~ faith", df, cluster_var='participant')
-    result = summarize(m)
-    result['test_type'] = 'OLS (Cluster-Robust SEs)'
-    result['n_clusters'] = len(df['participant'].unique())
-    if normality_results and INDIVIDUAL_PLAUSIBILITY_COLUMN in normality_results:
-        result['normality'] = normality_results[INDIVIDUAL_PLAUSIBILITY_COLUMN]
-    return result
 
-# H6: Larger confidence changes predict higher RAIR (participants more often switch from wrong to correct)
-def test_H6(long_df, normality_results=None):
-    df = long_df[(long_df["ai_correct"]==1) & (long_df["human_pre_correct"]==0)].copy()
-    m = logit_clustered("changed_to_correct ~ delta_conf", df, cluster_var='participant')
-    result = summarize(m)
-    result['test_type'] = 'Logistic Regression (Cluster-Robust SEs)'
-    result['n_clusters'] = len(df['participant'].unique())
-    return result
-
-# H7: Smaller or negative confidence changes predict higher RSR (participants resist incorrect AI advice)
-def test_H7(long_df, normality_results=None):
-    df = long_df[(long_df["ai_correct"]==0) & (long_df["human_pre_correct"]==1)].copy()
-    m = logit_clustered("stayed_correct ~ delta_conf", df, cluster_var='participant')
-    result = summarize(m)
-    result['test_type'] = 'Logistic Regression (Cluster-Robust SEs)'
-    result['n_clusters'] = len(df['participant'].unique())
-    return result
-
-# H8: Larger LLMs produce more plausible explanations  (model_size: 1=large, 0=small)
-def test_H8(long_df, normality_results=None):
-    m = ols_clustered(f"{INDIVIDUAL_PLAUSIBILITY_COLUMN} ~ model_size", long_df, cluster_var='participant')
-    result = summarize(m)
-    result['test_type'] = 'OLS (Cluster-Robust SEs)'
-    result['n_clusters'] = len(long_df['participant'].unique())
-    if normality_results and INDIVIDUAL_PLAUSIBILITY_COLUMN in normality_results:
-        result['normality'] = normality_results[INDIVIDUAL_PLAUSIBILITY_COLUMN]
-    return result
-
-# H9: Larger LLMs produce higher RAIR (on RAIR-eligible subset)
-def test_H9(long_df, normality_results=None):
-    df = long_df[(long_df["ai_correct"]==1) & (long_df["human_pre_correct"]==0)].copy()
-    m = logit_clustered("changed_to_correct ~ model_size", df, cluster_var='participant')
-    result = summarize(m)
-    result['test_type'] = 'Logistic Regression (Cluster-Robust SEs)'
-    result['n_clusters'] = len(df['participant'].unique())
-    return result
-
-# H10: Larger LLMs produce higher RSR (on RSR-eligible subset)
-def test_H10(long_df, normality_results=None):
-    df = long_df[(long_df["ai_correct"]==0) & (long_df["human_pre_correct"]==1)].copy()
-    m = logit_clustered("stayed_correct ~ model_size", df, cluster_var='participant')
-    result = summarize(m)
-    result['test_type'] = 'Logistic Regression (Cluster-Robust SEs)'
-    result['n_clusters'] = len(df['participant'].unique())
-    return result
-
-# H11: Larger LLMs produce bigger confidence changes
-def test_H11(long_df, normality_results=None):
-    m = ols_clustered("delta_conf ~ model_size", long_df, cluster_var='participant')
-    result = summarize(m)
-    result['test_type'] = 'OLS (Cluster-Robust SEs)'
-    result['n_clusters'] = len(long_df['participant'].unique())
-    if normality_results and 'delta_conf' in normality_results:
-        result['normality'] = normality_results['delta_conf']
-    return result
-
-# H12: Larger LLMs lead to higher final task accuracy (complementary team performance)
-def test_H12(long_df, normality_results=None):
-    df = long_df.copy()
-    df["post_correct"] = (df["post"] == df["gt"]).astype(int)
-    m = logit_clustered("post_correct ~ model_size", df, cluster_var='participant')
-    result = summarize(m)
-    result['test_type'] = 'Logistic Regression (Cluster-Robust SEs)'
-    result['n_clusters'] = len(df['participant'].unique())
-    return result
-
-# H13: Higher perceived plausibility is associated with higher RAIR
-def test_H13(long_df, normality_results=None):
-    df = long_df[(long_df["ai_correct"]==1) & (long_df["human_pre_correct"]==0)].copy()
-    m = logit_clustered(f"changed_to_correct ~ {LOO_PLAUSIBILITY_COLUMN}", df, cluster_var='participant')
-    result = summarize(m)
-    result['test_type'] = 'Logistic Regression (Cluster-Robust SEs)'
-    result['n_clusters'] = len(df['participant'].unique())
-    return result
-
-# H14: Higher perceived plausibility is associated with lower RSR (people are less resistant to incorrect AI advice when it's plausible)
-def test_H14(long_df, normality_results=None):
-    df = long_df[(long_df["ai_correct"]==0) & (long_df["human_pre_correct"]==1)].copy()
-    m = logit_clustered(f"stayed_correct ~ {LOO_PLAUSIBILITY_COLUMN}", df, cluster_var='participant')
-    result = summarize(m)
-    result['test_type'] = 'Logistic Regression (Cluster-Robust SEs)'
-    result['n_clusters'] = len(df['participant'].unique())
-    return result
-
-# H15: Higher perceived plausibility is associated with larger confidence changes
-def test_H15(long_df, normality_results=None):
-    df = long_df.dropna(subset=['delta_conf', LOO_PLAUSIBILITY_COLUMN]).copy()
-    m = ols_clustered(f"delta_conf ~ {LOO_PLAUSIBILITY_COLUMN}", df, cluster_var='participant')
-    result = summarize(m)
-    result['test_type'] = 'OLS (Cluster-Robust SEs)'
-    result['n_clusters'] = len(df['participant'].unique())
-    if normality_results and 'delta_conf' in normality_results:
-        result['normality'] = normality_results['delta_conf']
-    return result
-
-# H16: Explanations are rated as more plausible when human and AI initially agree
-def test_H16(long_df, normality_results=None):
-    df = long_df.dropna(subset=[INDIVIDUAL_PLAUSIBILITY_COLUMN, 'pre', 'ai']).copy()
-    # Create agreement variable: 1 if human and AI agree initially, 0 if they disagree
+def _subset_agreement(long_df):
+    """All rated trials, with the human/AI initial-agreement predictor added."""
+    df = long_df.dropna(subset=[INDIVIDUAL_PLAUSIBILITY_COLUMN, "pre", "ai"]).copy()
     df["agreement"] = (df["pre"] == df["ai"]).astype(int)
-    m = ols_clustered(f"{INDIVIDUAL_PLAUSIBILITY_COLUMN} ~ agreement", df, cluster_var='participant')
-    result = summarize(m)
-    result['test_type'] = 'OLS (Cluster-Robust SEs)'
-    result['n_clusters'] = len(df['participant'].unique())
-    if normality_results and INDIVIDUAL_PLAUSIBILITY_COLUMN in normality_results:
-        result['normality'] = normality_results[INDIVIDUAL_PLAUSIBILITY_COLUMN]
+    return df
+
+
+SUBSETS = {
+    "all": _subset_all,
+    "rair": _subset_rair,
+    "rsr": _subset_rsr,
+    "post": _subset_post,
+    "agreement": _subset_agreement,
+}
+
+TEST_TYPES = {
+    "logit": "Logistic Regression (Cluster-Robust SEs)",
+    "ols": "OLS (Cluster-Robust SEs)",
+}
+
+
+class Hypothesis:
+    """One hypothesis: which trials, which model, and how to label it."""
+
+    def __init__(self, key, description, formula, estimator, subset="all",
+                 dropna=(), normality_var=None):
+        self.key = key
+        self.description = description
+        self.formula = formula
+        self.estimator = estimator
+        self.subset = subset
+        self.dropna = dropna
+        self.normality_var = normality_var
+
+    @property
+    def outcome(self):
+        return self.formula.split("~")[0].strip()
+
+    @property
+    def predictor(self):
+        return self.formula.split("~")[1].strip()
+
+    def data(self, long_df):
+        """The trials this hypothesis is estimated on."""
+        df = SUBSETS[self.subset](long_df)
+        return df.dropna(subset=list(self.dropna)) if self.dropna else df
+
+
+_PLAUS = INDIVIDUAL_PLAUSIBILITY_COLUMN
+_LOO = LOO_PLAUSIBILITY_COLUMN
+
+HYPOTHESES = [
+    Hypothesis("H1", "Faithfulness → RAIR",
+               "changed_to_correct ~ faith", "logit", subset="rair"),
+    Hypothesis("H2", "Faithfulness → RSR",
+               "stayed_correct ~ faith", "logit", subset="rsr"),
+    Hypothesis("H3", "Faithfulness → Δ-Confidence",
+               "delta_conf ~ faith", "ols", normality_var="delta_conf"),
+    Hypothesis("H4", "Faithfulness → Final Accuracy",
+               "post_correct ~ faith", "logit", subset="post"),
+    Hypothesis("H5", "Faithfulness → Plausibility",
+               f"{_PLAUS} ~ faith", "ols", normality_var=_PLAUS),
+    Hypothesis("H6", "Δ-Confidence → RAIR",
+               "changed_to_correct ~ delta_conf", "logit", subset="rair"),
+    Hypothesis("H7", "Δ-Confidence → RSR",
+               "stayed_correct ~ delta_conf", "logit", subset="rsr"),
+    Hypothesis("H8", "Model Size → Plausibility",
+               f"{_PLAUS} ~ model_size", "ols", normality_var=_PLAUS),
+    Hypothesis("H9", "Model Size → RAIR",
+               "changed_to_correct ~ model_size", "logit", subset="rair"),
+    Hypothesis("H10", "Model Size → RSR",
+               "stayed_correct ~ model_size", "logit", subset="rsr"),
+    Hypothesis("H11", "Model Size → Δ-Confidence",
+               "delta_conf ~ model_size", "ols", normality_var="delta_conf"),
+    Hypothesis("H12", "Model Size → Final Accuracy",
+               "post_correct ~ model_size", "logit", subset="post"),
+    # H13-H15 use the leave-one-out item mean, never the participant's own
+    # rating -- see LOO_PLAUSIBILITY_COLUMN at the top of this file.
+    Hypothesis("H13", "Plausibility → RAIR",
+               f"changed_to_correct ~ {_LOO}", "logit", subset="rair"),
+    Hypothesis("H14", "Plausibility → RSR",
+               f"stayed_correct ~ {_LOO}", "logit", subset="rsr"),
+    Hypothesis("H15", "Plausibility → Δ-Confidence",
+               f"delta_conf ~ {_LOO}", "ols", dropna=("delta_conf", _LOO),
+               normality_var="delta_conf"),
+    Hypothesis("H16", "Agreement (Human=AI) → Plausibility",
+               f"{_PLAUS} ~ agreement", "ols", subset="agreement", normality_var=_PLAUS),
+]
+
+
+def fit_clustered(estimator, formula, data, cluster_var="participant"):
+    """Fit `formula` on `data` with cluster-robust SEs, logit or OLS."""
+    fitter = logit_clustered if estimator == "logit" else ols_clustered
+    return fitter(formula, data, cluster_var=cluster_var)
+
+
+def run_hypothesis(hypothesis, long_df, normality_results=None):
+    """Estimate one hypothesis and return its summarize() dict."""
+    df = hypothesis.data(long_df)
+    model = fit_clustered(hypothesis.estimator, hypothesis.formula, df)
+
+    result = summarize(model)
+    result["test_type"] = TEST_TYPES[hypothesis.estimator]
+    result["n_clusters"] = len(df["participant"].unique())
+    if normality_results and hypothesis.normality_var in normality_results:
+        result["normality"] = normality_results[hypothesis.normality_var]
     return result
 
 
@@ -925,7 +814,7 @@ def run_recruitment_robustness(df_trials, long_df, recruitment_col=None,
     if rows:
         out = pd.DataFrame(rows)
         try:
-            out_path = Path(str(config.OUTPUT_CSV_FILES['hypothesis_summary'])).parent / "recruitment_robustness.csv"
+            out_path = config.DATA_DIR / "recruitment_robustness.csv"
             out.to_csv(str(out_path), index=False)
             print(f"\n  Saved to: {out_path}")
         except Exception as e:
@@ -1053,24 +942,7 @@ def create_hypothesis_summary_table(results):
     """
     summary_rows = []
 
-    hypothesis_descriptions = {
-        "H1": "Faithfulness → RAIR",
-        "H2": "Faithfulness → RSR",
-        "H3": "Faithfulness → Δ-Confidence",
-        "H4": "Faithfulness → Final Accuracy",
-        "H5": "Faithfulness → Plausibility",
-        "H6": "Δ-Confidence → RAIR",
-        "H7": "Δ-Confidence → RSR",
-        "H8": "Model Size → Plausibility",
-        "H9": "Model Size → RAIR",
-        "H10": "Model Size → RSR",
-        "H11": "Model Size → Δ-Confidence",
-        "H12": "Model Size → Final Accuracy",
-        "H13": "Plausibility → RAIR",
-        "H14": "Plausibility → RSR",
-        "H15": "Plausibility → Δ-Confidence",
-        "H16": "Agreement (Human=AI) → Plausibility"
-    }
+    descriptions = {h.key: h.description for h in HYPOTHESES}
 
     for h_key, res in results.items():
         if 'error' not in res:
@@ -1092,7 +964,7 @@ def create_hypothesis_summary_table(results):
 
                 row = {
                     'Hypothesis': h_key,
-                    'Relationship': hypothesis_descriptions.get(h_key, h_key),
+                    'Relationship': descriptions.get(h_key, h_key),
                     'Test': res.get('test_type', 'N/A'),
                     'β': coef,
                     'SE': se,
@@ -1158,65 +1030,27 @@ def create_latex_hypothesis_table(summary_table):
         )
     return "\n".join(lines)
 
-# Model specification for every hypothesis, used by the two-way clustered
-# robustness pass below. Kept in one place so it cannot drift from test_H1..H16.
-TWOWAY_SPECS = [
-    ("H1",  "changed_to_correct ~ faith",       "rair",  "logit"),
-    ("H2",  "stayed_correct ~ faith",           "rsr",   "logit"),
-    ("H3",  "delta_conf ~ faith",               "all",   "ols"),
-    ("H4",  "post_correct ~ faith",             "post",  "logit"),
-    ("H5",  "plaus ~ faith",                    "all",   "ols"),
-    ("H6",  "changed_to_correct ~ delta_conf",  "rair",  "logit"),
-    ("H7",  "stayed_correct ~ delta_conf",      "rsr",   "logit"),
-    ("H8",  "plaus ~ model_size",               "all",   "ols"),
-    ("H9",  "changed_to_correct ~ model_size",  "rair",  "logit"),
-    ("H10", "stayed_correct ~ model_size",      "rsr",   "logit"),
-    ("H11", "delta_conf ~ model_size",          "all",   "ols"),
-    ("H12", "post_correct ~ model_size",        "post",  "logit"),
-    ("H13", "changed_to_correct ~ plaus_loo",   "rair",  "logit"),
-    ("H14", "stayed_correct ~ plaus_loo",       "rsr",   "logit"),
-    ("H15", "delta_conf ~ plaus_loo",           "all",   "ols"),
-    ("H16", "plaus ~ agreement",                "agree", "ols"),
-]
-
-
-def _twoway_subset(long_df, kind):
-    if kind == "rair":
-        return long_df[(long_df["ai_correct"] == 1) & (long_df["human_pre_correct"] == 0)].copy()
-    if kind == "rsr":
-        return long_df[(long_df["ai_correct"] == 0) & (long_df["human_pre_correct"] == 1)].copy()
-    if kind == "post":
-        d = long_df.copy()
-        d["post_correct"] = (d["post"] == d["gt"]).astype(int)
-        return d
-    if kind == "agree":
-        d = long_df.dropna(subset=[INDIVIDUAL_PLAUSIBILITY_COLUMN, "pre", "ai"]).copy()
-        d["agreement"] = (d["pre"] == d["ai"]).astype(int)
-        return d
-    return long_df.copy()
-
-
 def run_twoway_robustness(long_df):
     """
     Re-fit all sixteen hypotheses clustering on participant AND question.
 
-    Why: `faith` is fixed per item (odd Q = faithful), and plaus_loo takes
+    Why: `faith` is fixed per item (odd Q = faithful), and mean_plausibility takes
     essentially 16 distinct values. Clustering on participant alone treats those
     16 explanations as if they were 1632 independent observations, which
     understates the uncertainty of any item-level contrast. The point estimates are
     identical to the main table by construction -- only the SEs and p-values move.
     """
     rows = []
-    for name, formula, subset_kind, kind in TWOWAY_SPECS:
-        df = _twoway_subset(long_df, subset_kind)
-        predictor = formula.split("~")[1].strip()
-        df = df.dropna(subset=[formula.split("~")[0].strip(), predictor, "participant", "Q"])
+    for hypothesis in HYPOTHESES:
+        formula, predictor = hypothesis.formula, hypothesis.predictor
+        df = SUBSETS[hypothesis.subset](long_df).dropna(
+            subset=[hypothesis.outcome, predictor, "participant", "Q"])
         try:
-            fit = (logit_clustered if kind == "logit" else ols_clustered)(
-                formula, df, cluster_var=["participant", "Q"])
+            fit = fit_clustered(hypothesis.estimator, formula, df,
+                                cluster_var=["participant", "Q"])
             ci = fit.conf_int().loc[predictor]
             rows.append({
-                "Hypothesis": name,
+                "Hypothesis": hypothesis.key,
                 "Model": formula,
                 "beta": fit.params[predictor],
                 "SE_2way": fit.bse[predictor],
@@ -1227,7 +1061,7 @@ def run_twoway_robustness(long_df):
                 "N": int(fit.nobs),
             })
         except Exception as e:
-            rows.append({"Hypothesis": name, "Model": formula, "beta": np.nan,
+            rows.append({"Hypothesis": hypothesis.key, "Model": formula, "beta": np.nan,
                          "SE_2way": np.nan, "p_2way": np.nan, "CI_95_2way": "",
                          "Sig_2way": f"failed: {e}", "Survives_Bonferroni_2way": False,
                          "N": 0})
@@ -1257,25 +1091,8 @@ def run_all_hypotheses(df_trials, n_trials=16):
     print(f"Note: {N_HYPOTHESES} tests -> Bonferroni alpha = {BONFERRONI_ALPHA:.5f}")
     print("="*60 + "\n")
 
-    # Run hypothesis tests with robust methods
-    results = {
-        "H1":  test_H1(long_df, normality_results),
-        "H2":  test_H2(long_df, normality_results),
-        "H3":  test_H3(long_df, normality_results),
-        "H4":  test_H4(long_df, normality_results),
-        "H5":  test_H5(long_df, normality_results),
-        "H6":  test_H6(long_df, normality_results),
-        "H7":  test_H7(long_df, normality_results),
-        "H8":  test_H8(long_df, normality_results),
-        "H9":  test_H9(long_df, normality_results),
-        "H10": test_H10(long_df, normality_results),
-        "H11": test_H11(long_df, normality_results),
-        "H12": test_H12(long_df, normality_results),
-        "H13": test_H13(long_df, normality_results),
-        "H14": test_H14(long_df, normality_results),
-        "H15": test_H15(long_df, normality_results),
-        "H16": test_H16(long_df, normality_results),
-    }
+    results = {h.key: run_hypothesis(h, long_df, normality_results) for h in HYPOTHESES}
+
     # Two-way (participant x question) clustered robustness pass.
     print("\n" + "=" * 60)
     print("ROBUSTNESS: TWO-WAY CLUSTERED SEs (participant x question)")
@@ -1284,11 +1101,129 @@ def run_all_hypotheses(df_trials, n_trials=16):
     twoway = run_twoway_robustness(long_df)
     print(twoway[["Hypothesis", "beta", "SE_2way", "CI_95_2way", "p_2way",
                   "Sig_2way", "Survives_Bonferroni_2way", "N"]].to_string(index=False))
-    twoway_path = Path(str(config.OUTPUT_CSV_FILES["hypothesis_summary"])).parent / "hypothesis_twoway_clustered.csv"
+    twoway_path = config.DATA_DIR / "hypothesis_twoway_clustered.csv"
     twoway.to_csv(str(twoway_path), index=False)
     print(f"\n\u2713 Two-way clustered table saved to: {twoway_path}")
 
     return results, long_df, normality_results
+
+# The plots written to plots/general/, in the order they are generated.
+GENERAL_PLOTS = [
+    (plot_mean_rair_rsr_by_faith, "mean_rair_rsr_by_faith.png"),
+    (plot_mean_conf_change_by_faith, "mean_conf_change_by_faith.png"),
+    (plot_mean_final_accuracy_by_faith, "mean_final_accuracy_by_faith.png"),
+    (plot_plausibility_violin_by_faith, "plausibility_violin_by_faith.png"),
+    (plot_per_question_accuracy, "per_question_accuracy.png"),
+    (plot_per_question_accuracy_by_modelsize, "per_question_accuracy_by_modelsize.png"),
+    (plot_per_question_accuracy_by_faithfulness, "per_question_accuracy_by_faithfulness.png"),
+    (plot_rair_rsr_per_question, "rair_rsr_per_question.png"),
+    (plot_human_accuracy_before_after, "human_accuracy_before_after.png"),
+    # the only plot drawn from the wide trials frame rather than the long one
+    (plot_confidence_plausibility_distribution, "confidence_plausibility_distribution.png"),
+    (plot_aor_scatter_by_faith, "aor_by_faith_scatter.png"),
+    (plot_aor_scatter_by_modelsize, "aor_by_modelsize_scatter.png"),
+    (plot_plausibility_vs_accuracy, "plausibility_vs_accuracy.png"),
+    (plot_plausibility_vs_conf_change, "plausibility_vs_conf_change.png"),
+    (plot_plausibility_by_agreement, "plausibility_by_agreement.png"),
+    (plot_conf_change_by_agreement, "conf_change_by_agreement.png"),
+    (plot_conf_vs_rair_scatter, "conf_vs_rair_scatter.png"),
+    (plot_conf_vs_rsr_scatter, "conf_vs_rsr_scatter.png"),
+    (plot_rair_rsr_by_modelsize, "rair_rsr_by_modelsize.png"),
+    (plot_conf_change_by_modelsize, "conf_change_by_modelsize.png"),
+    (plot_accuracy_by_modelsize, "accuracy_by_modelsize.png"),
+    (plot_plaus_vs_rair_rsr, "plaus_vs_rair_rsr.png"),
+    (plot_plausibility_by_modelsize, "plausibility_by_modelsize.png"),
+]
+
+
+# Paired comparisons run at participant level, once per condition.
+# (group_var, header, low/high labels, CSV column prefixes, output file key)
+WITHIN_SUBJECT_VARIABLES = ['RAIR', 'RSR', 'mean_delta_conf', 'mean_plaus',
+                            'human_pre_accuracy', 'post_accuracy']
+
+WITHIN_SUBJECT_COMPARISONS = [
+    {
+        'group_var': 'faith',
+        'header': 'FAITHFULNESS',
+        'labels': {0: 'Unfaithful', 1: 'Faithful'},
+        'columns': ('Unfaithful', 'Faithful'),
+        'output_key': 'within_subjects_faithfulness',
+        'saved_as': 'Faithfulness comparisons',
+        'error_note': None,
+    },
+    {
+        'group_var': 'model_size',
+        'header': 'MODEL SIZE',
+        'labels': {0: 'Small LLM', 1: 'Large LLM'},
+        'columns': ('Small_LLM', 'Large_LLM'),
+        'output_key': 'within_subjects_modelsize',
+        'saved_as': 'Model size comparisons',
+        'error_note': ("  (Expected: compute_participant_aggregates() does not record these\n"
+                       "   two fields in the model_size rows, only in the faith rows.)"),
+        'error_note_variables': ('human_pre_accuracy', 'post_accuracy'),
+    },
+]
+
+
+def run_within_subjects_comparisons(participant_df, spec):
+    """
+    Paired tests of every participant-level metric across the two levels of one
+    condition, printed and exported to the CSV named by the spec.
+    """
+    group_var = spec['group_var']
+    low_col, high_col = spec['columns']
+
+    print(f"\n--- Comparisons by {spec['header']} (Paired Tests) ---")
+
+    condition_df = participant_df[participant_df[group_var].notna()].copy()
+    comparisons = []
+
+    for var in WITHIN_SUBJECT_VARIABLES:
+        result = within_subjects_test(condition_df, var, group_var)
+
+        if 'error' in result:
+            print(f"\n{var}: {result['error']}")
+            if spec.get('error_note') and var in spec.get('error_note_variables', ()):
+                print(spec['error_note'])
+            continue
+
+        print(f"\n{var}:")
+        print(f"  Test: {result['test']} (N pairs = {result['n_paired']})")
+        for group_value, group_stats in result['groups'].items():
+            print(f"  {spec['labels'][group_value]:12} | "
+                  f"M={group_stats['mean']:.4f}, SD={group_stats['std']:.4f}")
+        print(f"  Statistic={result['statistic']:.4f}, p={result['p_value']:.4f} "
+              f"{sig_stars(result['p_value'])}")
+        lo, hi = result.get('difference_ci', (np.nan, np.nan))
+        print(f"  Mean Difference={result['difference']:.4f}, 95% CI {format_ci(lo, hi)}")
+        print(f"  {result['effect_size_name']}={result['effect_size']:.4f}")
+
+        low_stats, high_stats = list(result['groups'].values())
+        comparisons.append({
+            'Variable': var,
+            'Test': result['test'],
+            'N_Pairs': result['n_paired'],
+            f'{low_col}_Mean': low_stats['mean'],
+            f'{low_col}_SD': low_stats['std'],
+            f'{high_col}_Mean': high_stats['mean'],
+            f'{high_col}_SD': high_stats['std'],
+            'Mean_Difference': result['difference'],
+            'Diff_CI_lower': lo,
+            'Diff_CI_upper': hi,
+            'Statistic': result['statistic'],
+            'p_value': result['p_value'],
+            'Effect_Size': result['effect_size'],
+            'Effect_Size_Type': result['effect_size_name'],
+            'Significant': 'Yes' if result['p_value'] < ALPHA else 'No',
+        })
+
+    if comparisons:
+        output_path = config.OUTPUT_CSV_FILES[spec['output_key']]
+        pd.DataFrame(comparisons).to_csv(str(output_path), index=False)
+        print(f"\n\u2713 {spec['saved_as']} saved to: {output_path}")
+
+    return comparisons
+
 
 def main():
     df_trials = pd.read_excel(str(config.PROCESSED_DATA_FILE))
@@ -1322,7 +1257,7 @@ def main():
     # Emit LaTeX rows for the manuscript table
     try:
         latex_rows = create_latex_hypothesis_table(summary_table)
-        latex_path = Path(str(config.OUTPUT_CSV_FILES['hypothesis_summary'])).parent / "hypothesis_table.tex"
+        latex_path = config.DATA_DIR / "hypothesis_table.tex"
         with open(str(latex_path), 'w') as f:
             f.write(latex_rows)
         print(f"✓ LaTeX table rows saved to: {latex_path}")
@@ -1472,135 +1407,19 @@ def main():
     print("WITHIN-SUBJECTS COMPARISONS (Paired/Repeated Measures)")
     print("="*60)
 
-    # Test by faithfulness
-    variables_to_test = ['RAIR', 'RSR', 'mean_delta_conf', 'mean_plaus',
-                         'human_pre_accuracy', 'post_accuracy']
-
-    print("\n--- Comparisons by FAITHFULNESS (Paired Tests) ---")
-    faith_comparisons = []
-
-    # Filter to only faith-related rows
-    faith_df = participant_df[participant_df['faith'].notna()].copy()
-
-    for var in variables_to_test:
-        result = within_subjects_test(faith_df, var, 'faith')
-        if 'error' in result:
-            print(f"\n{var}: {result['error']}")
-        else:
-            print(f"\n{var}:")
-            print(f"  Test: {result['test']} (N pairs = {result['n_paired']})")
-            for g, stats_d in result['groups'].items():
-                label = "Faithful" if g == 1 else "Unfaithful"
-                print(f"  {label:12} | M={stats_d['mean']:.4f}, SD={stats_d['std']:.4f}")
-            sig = sig_stars(result['p_value'])
-            print(f"  Statistic={result['statistic']:.4f}, p={result['p_value']:.4f} {sig}")
-            lo, hi = result.get('difference_ci', (np.nan, np.nan))
-            print(f"  Mean Difference={result['difference']:.4f}, 95% CI {format_ci(lo, hi)}")
-            print(f"  {result['effect_size_name']}={result['effect_size']:.4f}")
-
-            # Store for CSV export
-            faith_comparisons.append({
-                'Variable': var,
-                'Test': result['test'],
-                'N_Pairs': result['n_paired'],
-                'Unfaithful_Mean': list(result['groups'].values())[0]['mean'],
-                'Unfaithful_SD': list(result['groups'].values())[0]['std'],
-                'Faithful_Mean': list(result['groups'].values())[1]['mean'],
-                'Faithful_SD': list(result['groups'].values())[1]['std'],
-                'Mean_Difference': result['difference'],
-                'Diff_CI_lower': lo,
-                'Diff_CI_upper': hi,
-                'Statistic': result['statistic'],
-                'p_value': result['p_value'],
-                'Effect_Size': result['effect_size'],
-                'Effect_Size_Type': result['effect_size_name'],
-                'Significant': 'Yes' if result['p_value'] < ALPHA else 'No'
-            })
-
-    # Export within-subjects comparisons
-    if faith_comparisons:
-        faith_df_export = pd.DataFrame(faith_comparisons)
-        faith_df_export.to_csv(str(config.OUTPUT_CSV_FILES["within_subjects_faithfulness"]), index=False)
-        print(f"\n✓ Faithfulness comparisons saved to: {config.OUTPUT_CSV_FILES['within_subjects_faithfulness']}")
-
-    print("\n\n--- Comparisons by MODEL SIZE (Paired Tests) ---")
-    model_size_comparisons = []
-
-    # Filter to only model_size-related rows
-    size_df = participant_df[participant_df['model_size'].notna()].copy()
-
-    for var in variables_to_test:
-        result = within_subjects_test(size_df, var, 'model_size')
-        if 'error' in result:
-            print(f"\n{var}: {result['error']}")
-            if var in ('human_pre_accuracy', 'post_accuracy'):
-                print("  (Expected: compute_participant_aggregates() does not record these")
-                print("   two fields in the model_size rows, only in the faith rows.)")
-        else:
-            print(f"\n{var}:")
-            print(f"  Test: {result['test']} (N pairs = {result['n_paired']})")
-            for g, stats_d in result['groups'].items():
-                label = "Large LLM" if g == 1 else "Small LLM"
-                print(f"  {label:12} | M={stats_d['mean']:.4f}, SD={stats_d['std']:.4f}")
-            sig = sig_stars(result['p_value'])
-            print(f"  Statistic={result['statistic']:.4f}, p={result['p_value']:.4f} {sig}")
-            lo, hi = result.get('difference_ci', (np.nan, np.nan))
-            print(f"  Mean Difference={result['difference']:.4f}, 95% CI {format_ci(lo, hi)}")
-            print(f"  {result['effect_size_name']}={result['effect_size']:.4f}")
-
-            # Store for CSV export
-            model_size_comparisons.append({
-                'Variable': var,
-                'Test': result['test'],
-                'N_Pairs': result['n_paired'],
-                'Small_LLM_Mean': list(result['groups'].values())[0]['mean'],
-                'Small_LLM_SD': list(result['groups'].values())[0]['std'],
-                'Large_LLM_Mean': list(result['groups'].values())[1]['mean'],
-                'Large_LLM_SD': list(result['groups'].values())[1]['std'],
-                'Mean_Difference': result['difference'],
-                'Diff_CI_lower': lo,
-                'Diff_CI_upper': hi,
-                'Statistic': result['statistic'],
-                'p_value': result['p_value'],
-                'Effect_Size': result['effect_size'],
-                'Effect_Size_Type': result['effect_size_name'],
-                'Significant': 'Yes' if result['p_value'] < ALPHA else 'No'
-            })
-
-    # Export within-subjects comparisons
-    if model_size_comparisons:
-        model_size_df_export = pd.DataFrame(model_size_comparisons)
-        model_size_df_export.to_csv(str(config.OUTPUT_CSV_FILES["within_subjects_modelsize"]), index=False)
-        print(f"\n✓ Model size comparisons saved to: {config.OUTPUT_CSV_FILES['within_subjects_modelsize']}")
+    for index, spec in enumerate(WITHIN_SUBJECT_COMPARISONS):
+        if index:
+            print()
+        run_within_subjects_comparisons(participant_df, spec)
 
     # Plots
     print("\n" + "="*60)
     print("GENERATING VISUALIZATIONS")
     print("="*60)
     general_plots_dir = config.PLOT_DIRS["general"]
-    plot_mean_rair_rsr_by_faith(long_df, out_path=str(general_plots_dir / "mean_rair_rsr_by_faith.png"))
-    plot_mean_conf_change_by_faith(long_df, out_path=str(general_plots_dir / "mean_conf_change_by_faith.png"))
-    plot_mean_final_accuracy_by_faith(long_df, out_path=str(general_plots_dir / "mean_final_accuracy_by_faith.png"))
-    plot_plausibility_violin_by_faith(long_df, out_path=str(general_plots_dir / "plausibility_violin_by_faith.png"))
-    plot_per_question_accuracy(long_df, out_path=str(general_plots_dir / "per_question_accuracy.png"))
-    plot_per_question_accuracy_by_modelsize(long_df, out_path=str(general_plots_dir / "per_question_accuracy_by_modelsize.png"))
-    plot_per_question_accuracy_by_faithfulness(long_df, out_path=str(general_plots_dir / "per_question_accuracy_by_faithfulness.png"))
-    plot_rair_rsr_per_question(long_df, out_path=str(general_plots_dir / "rair_rsr_per_question.png"))
-    plot_human_accuracy_before_after(long_df, out_path=str(general_plots_dir / "human_accuracy_before_after.png"))
-    plot_confidence_plausibility_distribution(df_trials, out_path=str(general_plots_dir / "confidence_plausibility_distribution.png"))
-    plot_aor_scatter_by_faith(long_df, out_path=str(general_plots_dir / "aor_by_faith_scatter.png"))
-    plot_aor_scatter_by_modelsize(long_df, out_path=str(general_plots_dir / "aor_by_modelsize_scatter.png"))
-    plot_plausibility_vs_accuracy(long_df, out_path=str(general_plots_dir / "plausibility_vs_accuracy.png"))
-    plot_plausibility_vs_conf_change(long_df, out_path=str(general_plots_dir / "plausibility_vs_conf_change.png"))
-    plot_plausibility_by_agreement(long_df, out_path=str(general_plots_dir / "plausibility_by_agreement.png"))
-    plot_conf_change_by_agreement(long_df, out_path=str(general_plots_dir / "conf_change_by_agreement.png"))
-    plot_conf_vs_rair_scatter(long_df, out_path=str(general_plots_dir / "conf_vs_rair_scatter.png"))
-    plot_conf_vs_rsr_scatter(long_df, out_path=str(general_plots_dir / "conf_vs_rsr_scatter.png"))
-    plot_rair_rsr_by_modelsize(long_df, out_path=str(general_plots_dir / "rair_rsr_by_modelsize.png"))
-    plot_conf_change_by_modelsize(long_df, out_path=str(general_plots_dir / "conf_change_by_modelsize.png"))
-    plot_accuracy_by_modelsize(long_df, out_path=str(general_plots_dir / "accuracy_by_modelsize.png"))
-    plot_plaus_vs_rair_rsr(long_df, out_path=str(general_plots_dir / "plaus_vs_rair_rsr.png"))
-    plot_plausibility_by_modelsize(long_df, out_path=str(general_plots_dir / "plausibility_by_modelsize.png"))
+    for plot_fn, filename in GENERAL_PLOTS:
+        source = df_trials if plot_fn is plot_confidence_plausibility_distribution else long_df
+        plot_fn(source, out_path=str(general_plots_dir / filename))
     print("✓ All visualizations generated")
 
     # Final summary
